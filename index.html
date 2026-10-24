@@ -845,7 +845,7 @@ details.hint p { margin: 8px 0 0; color: var(--ink-2); }
         const name = svgEl('text', { x: 44, y: 29, class: 'node-name' }, g); name.textContent = TYPES[n.type].name;
       } else {
         drawIcon(n.type, g, 12, 18);
-        const name = svgEl('text', { x: 52, y: 26, class: 'node-name' }, g); name.textContent = TYPES[n.type].name;
+        const name = svgEl('text', { x: 52, y: 26, class: 'node-name' }, g); name.textContent = TYPES[n.type].name + ' ';
         const subEl = svgEl('text', { x: 52, y: 43, class: 'node-sub' + (n.type === 'db' && !n.kind ? ' todo' : '') }, g); subEl.textContent = sub;
       }
       const ubg = svgEl('rect', { x: 12, y: NH - 7, width: NW - 24, height: 3, rx: 1.5, class: 'ubar-bg', visibility: 'hidden' }, g);
@@ -1187,9 +1187,9 @@ details.hint p { margin: 8px 0 0; color: var(--ink-2); }
       const seg = el('div', 'seg');
       for (const k of Object.keys(SIZES)) {
         const b = el('button'); b.type = 'button'; b.setAttribute('aria-pressed', n.size === k ? 'true' : 'false');
-        b.innerHTML = `<b>${k}</b><span>${fmt(SIZES[k].cap)}/s</span><br><span>$${SIZES[k].cost}</span>`;
+        b.innerHTML = `<b>${k}</b> <span>${fmt(SIZES[k].cap)}/s</span><br><span>$${SIZES[k].cost}</span>`;
         b.title = `${SIZES[k].cpu} vCPU · ${fmt(SIZES[k].cap)} requests/s · $${SIZES[k].cost}/month`;
-        b.setAttribute('aria-label', `Size ${k}: ${fmt(SIZES[k].cap)} per second, $${SIZES[k].cost} a month`);
+        b.setAttribute('aria-label', `${k} ${fmt(SIZES[k].cap)}/s, $${SIZES[k].cost} a month`);
         b.onclick = () => { n.size = k; afterDesignChange(); };
         seg.appendChild(b);
       }
