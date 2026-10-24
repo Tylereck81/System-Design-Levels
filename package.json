@@ -1,0 +1,17 @@
+{
+  "name": "system-design-levels",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A drag-and-drop game for learning system design interviews, where you build architectures and watch simulated traffic.",
+  "type": "module",
+  "scripts": {
+    "start": "serve -l 4173 .",
+    "test": "playwright test",
+    "test:ui": "playwright test --ui"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.10.2",
+    "@playwright/test": "1.63.0",
+    "serve": "14.2.4"
+  }
+}

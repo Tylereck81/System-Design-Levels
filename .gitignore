@@ -1,0 +1,11 @@
+# Dependencies and test output
+node_modules/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
