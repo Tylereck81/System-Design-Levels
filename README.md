@@ -24,11 +24,13 @@ npm test
 
 | Path | What it is |
 |---|---|
-| `index.html` | The page structure (currently Level 1) |
-| `js/main.js` | Boot, tab routing and re-rendering after a change (the page's ES module entry point) |
+| `index.html` | The app shell: header with level picker, tabs, build area |
+| `js/boot.js` | Entry point: loads the level named in the URL, then starts the game |
+| `js/main.js` | Start-up, tab routing and re-rendering after a change |
 | `js/state.js` | Game state and saved progress |
 | `js/engine/` | Simulation model, canvas, dragging and connecting, request dots, simulation loop |
 | `js/ui/` | Dashboard, inspector, mission panel, controls, log, lesson diagrams, quiz |
-| `levels/level-01.js` | Everything specific to Level 1: components, rules, missions, quiz and text |
+| `levels/index.js` | The list of playable levels |
+| `levels/level-01.js` | Everything specific to Level 1: lesson, components, rules, missions, quiz and text |
 | `css/styles.css` | All styles: design tokens, light and dark themes, layout |
 | `tests/` | Playwright tests (also run on GitHub on every push) |

@@ -1,5 +1,5 @@
 // Adding, dragging, connecting and removing components.
-import level from '../../levels/level-01.js';
+import { level } from '../level.js';
 import { $, svgEl } from '../dom.js';
 import { TYPES, PALETTE, LIMIT_MSG, OK_PAIRS, BAD_PAIRS, pairKey, S, sel, connectFrom, save, byId, setSel, setConnectFrom, setRefocus } from '../state.js';
 import { drawIcon } from './icons.js';

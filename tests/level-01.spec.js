@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import {
   QUIZ_KEY_L1, freshPage, fastForward, state, nodeIds, model, logText,
-  tap, dragBetween, unlockMissions, buildBasic, trackErrors,
+  tap, dragBetween, unlockMissions, buildBasic, trackErrors, reloadGame,
 } from './helpers.js';
 
 test.describe('Level 1 · full playthrough', () => {
@@ -68,7 +68,7 @@ test.describe('Level 1 · full playthrough', () => {
     await page.click('#spikeBtn');
     expect(await state(page, () => window.__sdl.S.done)).toEqual([true, true, true]);
 
-    await page.reload();
+    await reloadGame(page);
     expect(await state(page, () => window.__sdl.S.done)).toEqual([true, true, true]);
     expect(errors).toEqual([]);
   });
@@ -143,7 +143,7 @@ test.describe('Level 1 · robustness', () => {
     await tap(page, `[data-handle="${web}"] .hv`);
     await expect(page.locator('#banner')).toBeVisible();
     await page.keyboard.press('Delete');
-    await page.reload();
+    await reloadGame(page);
     expect((await nodeIds(page)).web).toBeUndefined();
     await expect(page.locator('#banner')).toBeHidden();
     expect(errors).toEqual([]);
@@ -159,7 +159,7 @@ test.describe('Level 1 · robustness', () => {
       '{"nodes":[{"id":"u","type":"users","x":1,"y":1}],"edges":[{"from":"u","to":"zz"}],"mission":0}',
     ]) {
       await page.evaluate((v) => localStorage.setItem('sdl-level1-v1', v), bad);
-      await page.reload();
+      await reloadGame(page);
       await expect(page.locator('#tab-lesson')).toBeVisible();
     }
     // a v1 save keeps missions but drops quiz answers whose options were reordered
@@ -167,7 +167,7 @@ test.describe('Level 1 · robustness', () => {
       nodes: [{ id: 'u', type: 'users', x: 380, y: 76 }], edges: [], mission: 1,
       done: [true, false, false], verified: [true, false, false], quiz: { 0: 1 }, tab: 'build',
     })));
-    await page.reload();
+    await reloadGame(page);
     expect(await state(page, () => window.__sdl.S.done)).toEqual([true, false, false]);
     expect(await state(page, () => window.__sdl.S.quiz)).toEqual({});
     expect(errors).toEqual([]);
