@@ -1,8 +1,7 @@
 // Adding, dragging, connecting and removing components.
 import level from '../../levels/level-01.js';
 import { $, svgEl } from '../dom.js';
-import { TYPES, PALETTE, LIMIT_MSG, OK_PAIRS, BAD_PAIRS, pairKey, S, sel, connectFrom, run, save, byId, setSel, setConnectFrom, setRefocus } from '../state.js';
-import { graph } from './model.js';
+import { TYPES, PALETTE, LIMIT_MSG, OK_PAIRS, BAD_PAIRS, pairKey, S, sel, connectFrom, save, byId, setSel, setConnectFrom, setRefocus } from '../state.js';
 import { drawIcon } from './icons.js';
 import { COMPONENTS, roleOf } from './components.js';
 import { NW, NH, cv, previewLine, nodeRefs, renderEdges, renderCanvas, clampX, clampY, freeSpot } from './canvas.js';
@@ -11,6 +10,7 @@ import { renderInspector } from '../ui/inspector.js';
 import { togglePlay } from '../ui/controls.js';
 import { log } from '../ui/log.js';
 import { afterDesignChange } from '../main.js';
+import { dropMissingCrashes } from './experiments.js';
 
 /* ---------------- Palette ---------------- */
 export const countType = (t) => S.nodes.filter(n => n.type === t).length;
@@ -206,7 +206,7 @@ export function removeSel() {
     S.nodes = S.nodes.filter(x => x.id !== n.id);
     S.edges = S.edges.filter(e => e.from !== n.id && e.to !== n.id);
     if (connectFrom === n.id) setConnectFrom(null);
-    if (run.crash && !graph().web) { run.crash = false; }
+    dropMissingCrashes();
   } else {
     S.edges = S.edges.filter(e => e.id !== sel.id);
   }

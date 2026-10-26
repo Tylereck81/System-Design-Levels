@@ -15,6 +15,7 @@ export const MISSIONS = level.missions;
 export const QUIZ = level.quiz.questions;
 export const PASS = level.quiz.passScore;
 export const TXT = level.text;
+export const EXPERIMENTS = level.experiments;
 export const HOLD = 4; // seconds the targets must hold
 
 /* ---------------- State ---------------- */
@@ -23,7 +24,7 @@ export const fresh = () => ({
   nodes: level.startNodes.map(n => ({ ...n })),
   edges: [], seq: 1, mission: 0,
   done: MISSIONS.map(() => false), verified: MISSIONS.map(() => false),
-  est: false, estVal: '', exp: { crash: false, spike: false },
+  est: false, estVal: '', exp: Object.fromEntries(EXPERIMENTS.map(e => [e.id, false])),
   quiz: {}, tab: 'lesson', v: level.saveVersion,
 });
 export let S = fresh();
@@ -31,7 +32,7 @@ export let sel = null;          // {kind:'node'|'edge', id}
 export let connectFrom = null;  // tap-to-connect source id
 export let refocus = null;      // node id to give keyboard focus after re-render
 export const qsel = {};         // quiz selection before "Check"
-export const run = { playing: false, t: 0, crash: false, spike: false, hold: 0, dnsDone: false, dnsFlying: false, spawnAcc: 0, mdl: null, uiAcc: 1, expT: { crash: 0, spike: 0 }, active: new Set(), everPlayed: false, errored: false };
+export const run = { playing: false, t: 0, on: {}, hold: 0, dnsDone: false, dnsFlying: false, spawnAcc: 0, mdl: null, uiAcc: 1, expT: {}, active: new Set(), everPlayed: false, errored: false };
 
 export function validState(src) {
   if (!src || typeof src !== 'object' || !Array.isArray(src.nodes) || !Array.isArray(src.edges)) return false;
@@ -51,7 +52,7 @@ export function load(data) {
   S = Object.assign(f, src);
   const bools = (a) => MISSIONS.map((_, i) => !!(Array.isArray(a) && a[i]));
   S.done = bools(src.done); S.verified = bools(src.verified);
-  S.exp = { crash: !!(src.exp && src.exp.crash), spike: !!(src.exp && src.exp.spike) };
+  S.exp = Object.fromEntries(EXPERIMENTS.map(e => [e.id, !!(src.exp && src.exp[e.id])]));
   S.est = !!src.est; S.estVal = typeof src.estVal === 'string' ? src.estVal : '';
   const q = {};
   if (src.quiz && typeof src.quiz === 'object') for (const k in src.quiz) { const v = src.quiz[k]; if (Number.isInteger(v) && v >= 0 && Number.isInteger(+k) && +k >= 0 && +k < QUIZ.length && v < QUIZ[+k].o.length) q[k] = v; }

@@ -7,6 +7,7 @@ import { stopRun } from '../engine/sim.js';
 import { paintControls } from './controls.js';
 import { log } from './log.js';
 import { setTab, afterChange } from '../main.js';
+import { anyOn } from '../engine/experiments.js';
 
 export const unlocked = (i) => i === 0 || S.done[i - 1];
 export function renderMissionTabs() {
@@ -57,7 +58,7 @@ export function renderMission() {
     d.appendChild(el('p', null, M.hint));
     box.appendChild(d);
   }
-  $('expGroup').hidden = !M.gate;
+  $('expGroup').hidden = !M.goals.some(x => x.type === 'exp');
   paintControls();
 }
 
@@ -94,7 +95,7 @@ export const ICONS = {
   todo: '<svg class="gi" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="var(--ink-3)" stroke-width="1.4"/></svg>',
 };
 export const STATUS_TXT = { pass: 'met', fail: 'not met', todo: 'not tested yet' };
-export const liveMetrics = () => run.everPlayed && !run.crash && !run.spike;
+export const liveMetrics = () => run.everPlayed && !anyOn();
 
 export function goalStatus(goal, m, g) {
   if (goal.type === 'struct') return goal.test(g) ? 'pass' : (run.everPlayed || goal.id === 'cost' ? 'fail' : 'todo');
@@ -121,7 +122,7 @@ export function paintGoals() {
   const failingNow = liveMetrics() && M.goals.some(x => x.type === 'metric' && !x.test(m));
   if (S.done[S.mission] && failingNow) { vf.innerHTML = '<p class="verify bad">Your current design no longer meets the targets.</p>'; return; }
   if (S.verified[S.mission]) { vf.innerHTML = `<p class="verify ok">Targets held for ${HOLD} s.${M.goals.some(x => x.type === 'exp') && !S.done[S.mission] ? ' Now break it.' : ''}</p>`; return; }
-  if (run.playing && (run.crash || run.spike)) { vf.innerHTML = '<p class="verify">Experiment running: targets are paused.</p>'; return; }
+  if (run.playing && anyOn()) { vf.innerHTML = '<p class="verify">Experiment running: targets are paused.</p>'; return; }
   if (run.playing && run.hold > 0) { vf.innerHTML = `<p class="verify">Holding targets… ${run.hold.toFixed(1)} / ${HOLD} s</p><div class="vbar"><i style="width:${Math.min(100, run.hold / HOLD * 100)}%"></i></div>`; return; }
   vf.innerHTML = run.everPlayed ? '' : `<p class="verify">Press Play to test your design. Targets must hold for ${HOLD} seconds.</p>`;
 }

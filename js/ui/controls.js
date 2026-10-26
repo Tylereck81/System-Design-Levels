@@ -1,6 +1,6 @@
 // Play, experiments and reset buttons.
 import { $ } from '../dom.js';
-import { MISSIONS, TXT, fresh, S, run, setS, setSel, setConnectFrom } from '../state.js';
+import { MISSIONS, EXPERIMENTS, fresh, S, run, setS, setSel, setConnectFrom } from '../state.js';
 import { graph, model } from '../engine/model.js';
 import { paintLive } from '../engine/canvas.js';
 import { stopRun } from '../engine/sim.js';
@@ -9,6 +9,7 @@ import { renderInspector } from './inspector.js';
 import { paintGoals } from './mission.js';
 import { log } from './log.js';
 import { afterChange, afterDesignChange } from '../main.js';
+import { isOn, startExp, stopExp } from '../engine/experiments.js';
 
 export function paintControls() {
   const M = MISSIONS[S.mission];
@@ -18,12 +19,12 @@ export function paintControls() {
   pb.title = blocked ? 'Estimate peak traffic first' : (run.playing ? 'Pause the simulation' : 'Start the simulation');
   $('playIcon').textContent = run.playing ? '❚❚' : '▶';
   $('playTxt').textContent = blocked ? 'Estimate first' : (run.playing ? 'Pause' : 'Play');
-  const cb = $('crashBtn'), sb = $('spikeBtn');
-  cb.disabled = blocked; sb.disabled = blocked;
-  cb.setAttribute('aria-pressed', run.crash ? 'true' : 'false');
-  sb.setAttribute('aria-pressed', run.spike ? 'true' : 'false');
-  cb.textContent = (S.exp.crash ? '✓ ' : '') + (run.crash ? TXT.crashBtnOn : TXT.crashBtn);
-  sb.textContent = (S.exp.spike ? '✓ ' : '') + (run.spike ? TXT.spikeBtnOn : TXT.spikeBtn);
+  for (const exp of EXPERIMENTS) {
+    const btn = $(exp.id + 'Btn');
+    btn.disabled = blocked;
+    btn.setAttribute('aria-pressed', isOn(exp.id) ? 'true' : 'false');
+    btn.textContent = (S.exp[exp.id] ? '✓ ' : '') + (isOn(exp.id) ? exp.labelOn : exp.label);
+  }
 }
 export function togglePlay() {
   const M = MISSIONS[S.mission];
@@ -35,20 +36,20 @@ export function togglePlay() {
 }
 $('playBtn').onclick = togglePlay;
 export const designReady = () => graph().ready;
-$('crashBtn').onclick = () => {
-  if (!run.crash && !designReady()) { log(TXT.crashNeedsDesign, 'warn'); return; }
-  run.crash = !run.crash; run.hold = 0;
-  if (run.crash) { log(TXT.crashOn, 'bad'); if (!run.playing) togglePlay(); }
-  else log(TXT.crashOff, 'ok');
-  run.mdl = model(); paintControls(); paintGoals(); renderInspector(); paintLive();
-};
-$('spikeBtn').onclick = () => {
-  if (!run.spike && !designReady()) { log(TXT.spikeNeedsDesign, 'warn'); return; }
-  run.spike = !run.spike; run.hold = 0;
-  if (run.spike) { log(TXT.spikeOn(MISSIONS[S.mission].qps * 10), 'warn'); if (!run.playing) togglePlay(); }
-  else log(TXT.spikeOff, 'ok');
-  run.mdl = model(); paintControls(); paintGoals(); renderInspector(); renderHUD();
-};
+// One toggle button per experiment, in the Break it group.
+for (const exp of EXPERIMENTS) {
+  const btn = document.createElement('button');
+  btn.className = 'btn toggle'; btn.id = exp.id + 'Btn'; btn.setAttribute('aria-pressed', 'false'); btn.textContent = exp.label;
+  $('expGroup').appendChild(btn);
+  btn.onclick = () => {
+    if (!isOn(exp.id) && !designReady()) { log(exp.needsDesign, 'warn'); return; }
+    if (isOn(exp.id)) stopExp(exp); else startExp(exp, graph());
+    run.hold = 0;
+    if (isOn(exp.id)) { log(typeof exp.on === 'function' ? exp.on(MISSIONS[S.mission].qps * exp.factor) : exp.on, exp.onTone); if (!run.playing) togglePlay(); }
+    else log(exp.off, 'ok');
+    run.mdl = model(); paintControls(); paintGoals(); renderInspector(); paintLive(); renderHUD();
+  };
+}
 export function armButton(btn, label, armedLabel, action) {
   let armed = false, timer = null;
   btn.onclick = () => {
