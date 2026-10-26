@@ -68,8 +68,10 @@ export function afterChange(forceFit) {
   save();
 }
 export function afterDesignChange() {
+  // The design is shared by every mission, so a change invalidates every unfinished mission's check.
   const i = S.mission;
-  if (!S.done[i] && S.verified[i]) { S.verified[i] = false; log('Design changed. Run it again to check the targets.', ''); }
+  if (!S.done[i] && S.verified[i]) log('Design changed. Run it again to check the targets.', '');
+  S.verified = S.verified.map((v, k) => v && S.done[k]);
   run.hold = 0;
   afterChange(true);
 }
