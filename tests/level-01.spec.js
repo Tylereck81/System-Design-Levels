@@ -160,6 +160,25 @@ test.describe('Level 1 · robustness', () => {
     expect(errors).toEqual([]);
   });
 
+  test('only one Break-it experiment runs at a time, so both cannot count together', async ({ page }) => {
+    await freshPage(page, '#build');
+    await unlockMissions(page, 2);
+    await buildBasic(page);
+    await page.fill('#estIn', '463');
+    await page.click('#estBtn');
+    await page.evaluate(() => { for (const n of window.__sdl.S.nodes) { if (n.size) n.size = 'L'; if (n.type === 'db') n.kind = 'sql'; } window.__sdl.afterDesignChange(); });
+    await page.click('#playBtn');
+    await fastForward(page, 5);
+    await page.click('#crashBtn');
+    await page.click('#spikeBtn'); // starting the spike ends the crash
+    await expect(page.locator('#crashBtn')).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.locator('#spikeBtn')).toHaveAttribute('aria-pressed', 'true');
+    expect(await logText(page)).toContain('Web server restarted.');
+    await fastForward(page, 2);
+    expect(await state(page, () => window.__sdl.S.exp)).toEqual({ crash: false, spike: true });
+    expect(await state(page, () => window.__sdl.S.done[2])).toBe(false);
+  });
+
   test('Delete and Backspace remove a component only when focus is on the canvas or the page', async ({ page }) => {
     await freshPage(page, '#build');
     const ids = await buildBasic(page);
