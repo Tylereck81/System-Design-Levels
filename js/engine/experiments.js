@@ -35,3 +35,9 @@ export function dropMissingCrashes() {
 
 /** Dashboard label for the running spike (e.g. "10× spike"), if any. */
 export const spikeHud = () => (activeExps().find(e => e.kind === 'spike') || {}).hud;
+
+/** A message can be fixed text or a function of the model's result, so it can describe what actually happened. */
+export const textOf = (msg, m) => (typeof msg === 'function' ? msg(m) : msg);
+
+/** True when the experiment has no required outcome, or the outcome holds in model result `m`. */
+export const expectMet = (exp, m) => !exp.expect || !!exp.expect(m);

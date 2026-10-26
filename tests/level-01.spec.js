@@ -58,14 +58,14 @@ test.describe('Level 1 · full playthrough', () => {
     expect(m3.cost).toBe(405);
     await page.click('#playBtn');
     await fastForward(page, 5);
-    await page.click('#crashBtn');
+    await page.click('#exp-crash');
     await fastForward(page, 2);
     await expect(page.locator('.node.down')).toHaveCount(1);
-    await page.click('#crashBtn');
-    await page.click('#spikeBtn');
+    await page.click('#exp-crash');
+    await page.click('#exp-spike');
     await fastForward(page, 2);
     expect(await logText(page)).toContain('hard limit');
-    await page.click('#spikeBtn');
+    await page.click('#exp-spike');
     expect(await state(page, () => window.__sdl.S.done)).toEqual([true, true, true]);
 
     await reloadGame(page);
@@ -131,8 +131,8 @@ test.describe('Level 1 · robustness', () => {
     // Back on Mission 3, running both experiments must not complete it.
     await page.evaluate(() => window.__sdl.switchMission(2));
     await page.click('#playBtn');
-    await page.click('#crashBtn'); await fastForward(page, 2); await page.click('#crashBtn');
-    await page.click('#spikeBtn'); await fastForward(page, 2); await page.click('#spikeBtn');
+    await page.click('#exp-crash'); await fastForward(page, 2); await page.click('#exp-crash');
+    await page.click('#exp-spike'); await fastForward(page, 2); await page.click('#exp-spike');
     expect(await state(page, () => window.__sdl.S.done[2])).toBe(false);
   });
 
@@ -142,7 +142,7 @@ test.describe('Level 1 · robustness', () => {
     await unlockMissions(page, 2);
     await page.fill('#estIn', '463');
     await page.click('#estBtn');
-    await page.click('#crashBtn');
+    await page.click('#exp-crash');
     await fastForward(page, 2);
     expect(await state(page, () => window.__sdl.S.exp.crash)).toBe(false);
     expect(await logText(page)).toContain('Build the design first');
@@ -152,7 +152,7 @@ test.describe('Level 1 · robustness', () => {
     await page.waitForTimeout(800);
     expect(await state(page, () => window.__sdl.run.t)).toBeGreaterThan(t0);
     // crash, then delete the crashed server
-    await page.click('#crashBtn');
+    await page.click('#exp-crash');
     const ids = await nodeIds(page);
     await tap(page, `[data-node="${ids.web}"] .node-box`);
     await page.keyboard.press('Delete');
@@ -169,10 +169,10 @@ test.describe('Level 1 · robustness', () => {
     await page.evaluate(() => { for (const n of window.__sdl.S.nodes) { if (n.size) n.size = 'L'; if (n.type === 'db') n.kind = 'sql'; } window.__sdl.afterDesignChange(); });
     await page.click('#playBtn');
     await fastForward(page, 5);
-    await page.click('#crashBtn');
-    await page.click('#spikeBtn'); // starting the spike ends the crash
-    await expect(page.locator('#crashBtn')).toHaveAttribute('aria-pressed', 'false');
-    await expect(page.locator('#spikeBtn')).toHaveAttribute('aria-pressed', 'true');
+    await page.click('#exp-crash');
+    await page.click('#exp-spike'); // starting the spike ends the crash
+    await expect(page.locator('#exp-crash')).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.locator('#exp-spike')).toHaveAttribute('aria-pressed', 'true');
     expect(await logText(page)).toContain('Web server restarted.');
     await fastForward(page, 2);
     expect(await state(page, () => window.__sdl.S.exp)).toEqual({ crash: false, spike: true });
@@ -445,8 +445,8 @@ test.describe('Level 1 · accessibility', () => {
       await press('#insp .seg:not(.two) button:nth-child(3)', 'size-L');
     }
     await press('#playBtn', 'playBtn');
-    await press('#crashBtn', 'crashBtn');
-    await press('#crashBtn', 'crashBtn');
+    await press('#exp-crash', 'exp-crash');
+    await press('#exp-crash', 'exp-crash');
     await press(`[data-node="${ids.dns}"]`, ids.dns);
     await page.locator('#insp').getByRole('button', { name: 'Remove DNS' }).focus();
     await page.keyboard.press('Enter');
