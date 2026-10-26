@@ -18,6 +18,13 @@ export function childGroups(n) {
   return [...groups.values()];
 }
 
+/** Servers reachable downstream from `start` (following connections to servers only). */
+function serversFrom(start) {
+  const seen = new Map(), stack = [...start];
+  while (stack.length) { const n = stack.pop(); if (seen.has(n.id)) continue; seen.set(n.id, n); stack.push(...outs(n.id).filter(isServer)); }
+  return [...seen.values()];
+}
+
 export function graph() {
   const users = S.nodes.find(n => roleOf(n) === 'client');
   const uo = users ? outs(users.id) : [];
@@ -29,7 +36,16 @@ export function graph() {
   const db = web ? (outs(web.id).find(n => n.type === 'db') || null) : null;
   const cost = S.nodes.reduce((s, n) => s + costOf(n), 0);
   const ready = entry.length > 0 && (!needsDns || !!dns);
-  return { users, dns, hasDNS: !!dns, entry, needsDns, ready, web, db, cost };
+  // Goal helpers. They only count servers on the request path, i.e. reachable from Users.
+  const path = serversFrom(entry);
+  const onPath = (type) => path.filter(n => n.type === type);
+  const count = (type) => onPath(type).length;
+  /** Every server of type `from` on the path reaches a server of type `to` (false when there are none). */
+  const everyReaches = (from, to) => {
+    const fs = onPath(from);
+    return fs.length > 0 && fs.every(n => serversFrom(outs(n.id).filter(isServer)).some(c => c.type === to));
+  };
+  return { users, dns, hasDNS: !!dns, entry, needsDns, ready, web, db, cost, onPath, count, everyReaches };
 }
 export const qmul = (u) => (u >= 0.96 ? 25 : 1 / (1 - u));
 
