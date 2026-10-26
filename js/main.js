@@ -1,3 +1,6 @@
+import level from '../levels/level-01.js';
+import { fmt } from './format.js';
+
 (() => {
   'use strict';
   document.documentElement.lang = 'en';
@@ -9,7 +12,6 @@
     if (parent) parent.appendChild(e);
     return e;
   };
-  const fmt = (n) => Math.round(n).toLocaleString('en-US');
 
   /* ---------------- Game data ---------------- */
   const SIZES = {
@@ -21,84 +23,29 @@
   const T = { rtt: 40, web: 20, db: 10, dc: 0.5, dns: 5, nosqlLookup: 3, nosqlLookups: 3 };
   const VW = 760, VH = 520;
   let NW = 188, NH = 60, compact = false, curView = null;
-  const TARGET_MS = 150;
+  const TARGET_MS = level.targets.latencyMs;
+  const TARGET_SERVED = level.targets.servedPct;
 
-  const TYPES = {
-    users: { name: 'Users', desc: 'Your visitors. Browsers load www.example.com and the mobile app calls api.example.com. Both send HTTP requests.' },
-    dns: { name: 'DNS', short: 'Domain → IP address', desc: 'Turns example.com into an IP address. Usually a paid third-party service, not hosted on your servers. Costs $5/month in this game.' },
-    web: { name: 'Web server', short: 'Your back-end code', desc: 'Runs your back-end code. Returns HTML pages to browsers and JSON to the mobile app.' },
-    db: { name: 'Database', short: 'Stores data on disk', desc: 'Keeps your data on disk so it survives restarts. On its own server, it becomes the data tier.' },
-  };
-  const PALETTE = ['dns', 'web', 'db'];
-  const LIMIT_MSG = {
-    dns: 'You only need one DNS service for example.com. To replace it, remove the current one first.',
-    web: 'One web server is the limit here. Running several needs a load balancer, which arrives in Level 2.',
-    db: 'One database is enough here. Extra copies (replicas) arrive in Level 3.',
-  };
-
-  const OK_PAIRS = {
-    'dns|users': { from: 'users', to: 'dns', label: 'DNS lookup' },
-    'users|web': { from: 'users', to: 'web', label: 'HTTP requests' },
-    'db|web': { from: 'web', to: 'db', label: 'queries' },
-  };
-  const BAD_PAIRS = {
-    'db|users': 'Users never talk to the database directly. Requests go through the web server, which runs your logic and checks permissions.',
-    'dns|web': 'DNS does not forward traffic. It only answers "what is the IP of example.com?", then the device connects to the web server itself.',
-    'db|dns': 'The database does not need DNS here. DNS is used by your users\' devices to find your web server.',
-  };
+  const TYPES = level.components;
+  const PALETTE = level.palette;
+  const LIMIT_MSG = level.limitMsg;
+  const OK_PAIRS = level.connections.ok;
+  const BAD_PAIRS = level.connections.bad;
   const pairKey = (a, b) => [a, b].sort().join('|');
-
-  const servedGoal = { id: 'served', type: 'metric', text: 'Serve at least 99% of requests', test: (m) => m.servedPct >= 99, val: (m) => m.servedPct.toFixed(1) + '%' };
-  const latGoal = { id: 'lat', type: 'metric', text: 'Response time under 150 ms', test: (m) => m.latency != null && m.latency < TARGET_MS, val: (m) => m.latency == null ? '—' : fmt(m.latency) + ' ms' };
-  const MISSIONS = [
-    {
-      title: 'Hello, example.com', ref: 'Single server', qps: 50, budget: null,
-      story: 'You just launched example.com and about 100,000 people use it each day. Everything runs on one server: your code and your data.',
-      goals: [
-        { id: 'dns', type: 'struct', text: 'Users can look up example.com in DNS', test: (g) => g.hasDNS },
-        { id: 'web', type: 'struct', text: 'Requests reach a web server', test: (g) => !!g.web },
-        servedGoal, latGoal,
-      ],
-      hint: 'Drag DNS and a Web server onto the canvas. Then drag from the + under Users onto each of them (or select Users and use Connections in the inspector), and press Play.',
-      takeaway: 'One server ran everything. DNS returned the IP once, then HTTP requests went straight to your server.',
-    },
-    {
-      title: 'Separate the data tier', ref: 'Two tiers', qps: 150, budget: 150,
-      story: 'Traffic tripled: about 300,000 people a day, 150 requests per second at peak. Your one server runs both the code and the database, so they compete for the same CPU. The app stores users, products and orders, and every order links a user to products.',
-      goals: [
-        { id: 'tier', type: 'struct', text: 'Data lives on its own database server', test: (g) => !!g.db },
-        { id: 'kind', type: 'struct', text: 'Pick the right database type for this data', test: (g) => !!g.db && g.db.kind === 'sql' },
-        servedGoal, latGoal,
-        { id: 'cost', type: 'struct', text: 'Spend at most $150 per month', test: (g) => g.cost <= 150, val: (m, g) => '$' + g.cost },
-      ],
-      hint: 'Add a Database, connect Web server → Database, and choose its type. If the response time is still too slow, read the log: a server at 75% busy makes each request take 4× longer. The web server\'s work (20 ms) is slower than a query (10 ms), so its waiting costs you more. Spend where it helps most.',
-      takeaway: 'Separate tiers scale independently. You also saw that a busy server gets slow long before it fails.',
-    },
-    {
-      title: 'Launch day', ref: 'Estimation', qps: 463, budget: 500,
-      gate: { lo: 370, hi: 560 },
-      story: 'Marketing expects 1,000,000 daily active users after the launch. Each user makes about 20 requests a day, and peak traffic is about twice the average. Scale your servers up to survive it.',
-      goals: [
-        { id: 'est', type: 'gate', text: 'Estimate the peak traffic' },
-        servedGoal, latGoal,
-        { id: 'cost', type: 'struct', text: 'Spend at most $500 per month', test: (g) => g.cost <= 500, val: (m, g) => '$' + g.cost },
-        { id: 'crash', type: 'exp', text: 'Break it: crash the web server' },
-        { id: 'spike', type: 'exp', text: 'Break it: send 10× traffic' },
-      ],
-      hint: 'Each tier must carry the full peak, and a server slows down sharply as it fills up. Find the cheapest sizes that keep both tiers well below 100% busy. After the targets pass, use the Break it buttons while the simulation runs.',
-      takeaway: 'Vertical scaling got you through launch day, but you saw its two limits: when the server crashed the whole site went down (no failover), and at 10× traffic no size was big enough (hard limit). Level 2 fixes both with a load balancer and more servers.',
-    },
-  ];
+  const MISSIONS = level.missions;
+  const QUIZ = level.quiz.questions;
+  const PASS = level.quiz.passScore;
+  const TXT = level.text;
   const HOLD = 4; // seconds the targets must hold
 
   /* ---------------- State ---------------- */
-  const LS_KEY = 'sdl-level1-v1';
+  const LS_KEY = level.saveKey;
   const fresh = () => ({
-    nodes: [{ id: 'u', type: 'users', x: 380, y: 76 }],
+    nodes: level.startNodes.map(n => ({ ...n })),
     edges: [], seq: 1, mission: 0,
-    done: [false, false, false], verified: [false, false, false],
+    done: MISSIONS.map(() => false), verified: MISSIONS.map(() => false),
     est: false, estVal: '', exp: { crash: false, spike: false },
-    quiz: {}, tab: 'lesson', v: 2,
+    quiz: {}, tab: 'lesson', v: level.saveVersion,
   });
   let S = fresh();
   let sel = null;          // {kind:'node'|'edge', id}
@@ -125,14 +72,14 @@
     if (!validState(src)) return;
     const f = fresh();
     S = Object.assign(f, src);
-    const bools = (a) => [0, 1, 2].map(i => !!(Array.isArray(a) && a[i]));
+    const bools = (a) => MISSIONS.map((_, i) => !!(Array.isArray(a) && a[i]));
     S.done = bools(src.done); S.verified = bools(src.verified);
     S.exp = { crash: !!(src.exp && src.exp.crash), spike: !!(src.exp && src.exp.spike) };
     S.est = !!src.est; S.estVal = typeof src.estVal === 'string' ? src.estVal : '';
     const q = {};
-    if (src.quiz && typeof src.quiz === 'object') for (const k in src.quiz) { const v = src.quiz[k]; if (Number.isInteger(v) && v >= 0 && v <= 3 && +k >= 0 && +k < 10) q[k] = v; }
-    S.quiz = src.v === 2 ? q : {}; // quiz options were reordered in v2, so older saved answers no longer line up
-    S.v = 2;
+    if (src.quiz && typeof src.quiz === 'object') for (const k in src.quiz) { const v = src.quiz[k]; if (Number.isInteger(v) && v >= 0 && Number.isInteger(+k) && +k >= 0 && +k < QUIZ.length && v < QUIZ[+k].o.length) q[k] = v; }
+    S.quiz = src.v === level.saveVersion ? q : {}; // saved answers from another quiz version no longer line up
+    S.v = level.saveVersion;
     if (!['lesson', 'build', 'quiz'].includes(S.tab)) S.tab = 'lesson';
     for (const n of S.nodes) { if ((n.type === 'web' || n.type === 'db') && !n.size) n.size = 'S'; if (n.type === 'db' && !['sql', 'nosql'].includes(n.kind)) n.kind = null; }
     const maxId = Math.max(0, ...S.nodes.concat(S.edges).map(x => parseInt(String(x.id).replace(/\D/g, ''), 10) || 0));
@@ -161,11 +108,11 @@
     const base = M.qps * (run.spike ? 10 : 1);
     const qps = base * (1 + 0.02 * Math.sin(run.t * 1.7) + 0.01 * Math.sin(run.t * 4.1));
     const r = { qps, base, servedPct: 0, latency: null, cost: g.cost, spof: 0, node: {}, issue: null, g, dropW: 1, dropD: 0 };
-    if (!g.web) { r.issue = 'Users have nowhere to send requests. Connect Users to a web server.'; return r; }
-    if (!g.hasDNS) { r.issue = 'Browsers cannot find example.com. Connect Users to DNS so the name resolves to your server\'s IP.'; return r; }
+    if (!g.web) { r.issue = TXT.noWeb; return r; }
+    if (!g.hasDNS) { r.issue = TXT.noDns; return r; }
     r.spof = g.db ? 2 : 1;
     if (run.crash) {
-      r.issue = 'The web server is down. With only one server, every request fails.';
+      r.issue = TXT.webDown;
       r.node[g.web.id] = { down: true, util: 0, load: qps, cap: 0, ms: 0, mult: 1 };
       return r;
     }
@@ -221,10 +168,9 @@
   const nodeRefs = {};
 
   function nodeSub(n) {
-    if (n.type === 'users') return 'Web + mobile app';
-    if (n.type === 'dns') return 'Third-party · $5';
+    if (n.type === 'users' || n.type === 'dns') return TYPES[n.type].sub;
     if (n.type === 'web') return webHasDb(n) ? `${n.size} · ${fmt(SIZES[n.size].cap)} req/s` : `${n.size} · ${fmt(SIZES[n.size].cap / 2)} req/s (½)`;
-    if (n.type === 'db') return n.kind ? `${n.kind === 'sql' ? 'SQL' : 'NoSQL'} · ${n.size} ${fmt(SIZES[n.size].cap)}/s` : 'Pick SQL or NoSQL';
+    if (n.type === 'db') return n.kind ? `${TYPES.db.kinds.find(k => k.id === n.kind).short} · ${n.size} ${fmt(SIZES[n.size].cap)}/s` : TYPES.db.unsetSub;
     return '';
   }
 
@@ -333,10 +279,11 @@
 
   /* ---------------- Palette ---------------- */
   const countType = (t) => S.nodes.filter(n => n.type === t).length;
+  const atLimit = (t) => countType(t) >= (level.limits[t] ?? Infinity);
   function renderPalette() {
     const list = $('palList'); list.textContent = '';
     for (const t of PALETTE) {
-      const full = countType(t) >= 1;
+      const full = atLimit(t);
       const b = document.createElement('button');
       b.className = 'pal-item'; b.type = 'button'; b.dataset.type = t;
       b.setAttribute('aria-disabled', full ? 'true' : 'false');
@@ -351,7 +298,7 @@
     }
   }
 
-  const SLOTS = { dns: { x: 650, y: 76 }, web: { x: 380, y: 262 }, db: { x: 380, y: 436 } };
+  const SLOTS = level.slots;
   const clampX = (x) => Math.max(NW / 2 + 4, Math.min(VW - NW / 2 - 4, x));
   const clampY = (y) => Math.max(NH / 2 + 30, Math.min(VH - NH / 2 - 22, y));
   const overlaps = (x, y, id) => S.nodes.some(n => n.id !== id && Math.abs(n.x - x) < NW + 14 && Math.abs(n.y - y) < NH + 14);
@@ -367,7 +314,7 @@
     return { x, y };
   }
   function addNode(type, x, y) {
-    if (countType(type) >= 1) { log(LIMIT_MSG[type], 'warn'); return; }
+    if (atLimit(type)) { log(LIMIT_MSG[type], 'warn'); return; }
     const p = (x == null) ? SLOTS[type] : { x, y };
     const spot = freeSpot(clampX(p.x), clampY(p.y), null);
     const n = { id: 'n' + (S.seq++), type, x: spot.x, y: spot.y };
@@ -577,7 +524,7 @@
       const e = S.edges.find(x => x.id === sel.id);
       const a = byId(e.from), b = byId(e.to), info = OK_PAIRS[pairKey(a.type, b.type)];
       box.appendChild(el('h2', null, `${TYPES[a.type].name} → ${TYPES[b.type].name}`));
-      box.appendChild(el('p', 'desc', { 'DNS lookup': 'The device asks DNS for the IP address of example.com. It happens once, then the answer is cached.', 'HTTP requests': 'Users send HTTP requests straight to the web server\'s IP address.', 'queries': 'The web server reads and writes data in the database inside the same data center (about 0.5 ms round trip).' }[info.label]));
+      box.appendChild(el('p', 'desc', info.desc));
       const rm = el('button', 'btn danger', 'Remove connection'); rm.type = 'button'; rm.onclick = removeSel;
       box.appendChild(rm); return;
     }
@@ -585,16 +532,17 @@
     box.appendChild(el('h2', null, TYPES[n.type].name));
     box.appendChild(el('p', 'desc', TYPES[n.type].desc));
     if (n.type === 'db') {
-      box.appendChild(el('p', 'label', 'Database type'));
+      box.appendChild(el('p', 'label', TYPES.db.kindsLabel));
       const seg = el('div', 'seg two');
-      for (const [k, nm, sub] of [['sql', 'Relational', 'SQL · joins'], ['nosql', 'NoSQL', 'no joins']]) {
-        const b = el('button'); b.type = 'button'; b.setAttribute('aria-pressed', n.kind === k ? 'true' : 'false');
-        b.innerHTML = `<b>${nm}</b><span>${sub}</span>`;
-        b.onclick = () => { n.kind = k; afterDesignChange(); log(k === 'sql' ? 'Database set to relational (SQL): tables, rows and joins. One query fetches an order with its user and products.' : 'Database set to NoSQL. It cannot join, so each request needs 3 lookups to gather a user, an order and its products.', k === 'sql' ? 'ok' : 'warn'); };
+      for (const kind of TYPES.db.kinds) {
+        const b = el('button'); b.type = 'button'; b.setAttribute('aria-pressed', n.kind === kind.id ? 'true' : 'false');
+        b.innerHTML = `<b>${kind.name}</b><span>${kind.sub}</span>`;
+        b.onclick = () => { n.kind = kind.id; afterDesignChange(); log(kind.log, kind.tone); };
         seg.appendChild(b);
       }
       box.appendChild(seg);
-      box.appendChild(el('p', 'kind-note', n.kind ? (n.kind === 'sql' ? 'Relational: tables and rows, joins with SQL. The safe default for most apps. One query per request here.' : 'NoSQL: key-value, graph, column or document stores. Fast per lookup, but no joins: 3 lookups per request for this relational data.') : 'Not chosen yet. Read the mission brief, then pick.'));
+      const chosen = TYPES.db.kinds.find(k => k.id === n.kind);
+      box.appendChild(el('p', 'kind-note', chosen ? chosen.note : TYPES.db.unsetNote));
     }
     if (n.type === 'web' || n.type === 'db') {
       box.appendChild(el('p', 'label', 'Server size (scale up)'));
@@ -608,14 +556,14 @@
         seg.appendChild(b);
       }
       box.appendChild(seg);
-      if (n.type === 'web' && !webHasDb(n)) box.appendChild(el('p', 'kind-note', 'No database server yet, so this machine also runs the database and handles half its capacity.'));
+      if (n.type === 'web' && !webHasDb(n)) box.appendChild(el('p', 'kind-note', TYPES.web.noDbNote));
       const live = el('div', 'live'); live.id = 'inspLive'; box.appendChild(live);
       paintInspectorLive();
     }
     if (n.type === 'users') {
       const M0 = MISSIONS[S.mission], hid = M0.gate && !S.est;
       const live = el('div', 'live');
-      live.innerHTML = `<div><b>${hid ? '?' : fmt(M0.qps * (run.spike ? 10 : 1))}</b><span>req/s at peak</span></div><div><b>40 ms</b><span>internet round trip</span></div>`;
+      live.innerHTML = `<div><b>${hid ? '?' : fmt(M0.qps * (run.spike ? 10 : 1))}</b><span>req/s at peak</span></div><div><b>${T.rtt} ms</b><span>internet round trip</span></div>`;
       box.appendChild(live);
     }
     // connections (keyboard- and touch-friendly alternative to dragging)
@@ -659,8 +607,8 @@
     const hidden = M.gate && !S.est;
     const cells = [
       { l: 'Traffic', v: hidden ? '?' : fmt(m.base), u: 'req/s', t: hidden ? 'estimate first' : (run.spike ? '10× spike' : 'at peak'), s: '' },
-      { l: 'Served', v: played ? m.servedPct.toFixed(1) : '—', u: played ? '%' : '', t: 'goal ≥ 99%', s: played ? (m.servedPct >= 99 ? 'pass' : 'fail') : '' },
-      { l: 'Response', v: played && m.latency != null ? fmt(m.latency) : '—', u: played && m.latency != null ? 'ms' : '', t: 'goal < 150 ms', s: played ? (m.latency != null && m.latency < TARGET_MS ? 'pass' : 'fail') : '' },
+      { l: 'Served', v: played ? m.servedPct.toFixed(1) : '—', u: played ? '%' : '', t: `goal ≥ ${TARGET_SERVED}%`, s: played ? (m.servedPct >= TARGET_SERVED ? 'pass' : 'fail') : '' },
+      { l: 'Response', v: played && m.latency != null ? fmt(m.latency) : '—', u: played && m.latency != null ? 'ms' : '', t: `goal < ${TARGET_MS} ms`, s: played ? (m.latency != null && m.latency < TARGET_MS ? 'pass' : 'fail') : '' },
       { l: 'Cost', v: '$' + fmt(m.cost), u: '/mo', t: M.budget ? 'budget $' + M.budget : 'no budget', s: M.budget ? (m.cost <= M.budget ? 'pass' : 'fail') : '' },
       { l: 'SPOFs', v: String(m.spof), u: '', t: 'no redundancy', s: '' },
     ];
@@ -693,12 +641,12 @@
     renderMissionTabs();
     const M = MISSIONS[S.mission], i = S.mission;
     const box = $('mission'); box.textContent = '';
-    box.appendChild(el('p', 'label', `Mission ${i + 1} of 3 · ${M.ref}`));
+    box.appendChild(el('p', 'label', `Mission ${i + 1} of ${MISSIONS.length} · ${M.ref}`));
     box.appendChild(el('h2', null, M.title));
     box.appendChild(el('p', 'story', M.story));
     const facts = el('div', 'facts');
     const trafficTxt = M.gate && !S.est ? '?' : fmt(M.qps);
-    facts.innerHTML = `<div><b>${trafficTxt}</b><span>req/s at peak</span></div><div><b>${M.budget ? '$' + M.budget : '—'}</b><span>monthly budget</span></div><div><b>&lt;150 ms</b><span>response</span></div>`;
+    facts.innerHTML = `<div><b>${trafficTxt}</b><span>req/s at peak</span></div><div><b>${M.budget ? '$' + M.budget : '—'}</b><span>monthly budget</span></div><div><b>&lt;${TARGET_MS} ms</b><span>response</span></div>`;
     box.appendChild(facts);
     if (M.gate) box.appendChild(renderGate(M));
     const ul = el('ul', 'goals'); ul.id = 'goals'; box.appendChild(ul);
@@ -724,24 +672,23 @@
   function renderGate(M) {
     const g = el('div', 'gate' + (S.est ? ' passed' : ''));
     if (S.est) {
-      g.innerHTML = `<p><b>Estimate accepted.</b></p><div class="calc">1,000,000 DAU × 20 req ÷ 86,400 s ≈ 231 req/s average<br>Peak ≈ 2 × 231 ≈ 463 req/s</div>`;
+      g.innerHTML = M.gate.acceptedHtml;
       return g;
     }
-    g.innerHTML = `<p><b>Step 1: estimate before you build.</b> Peak QPS = DAU × requests per user per day ÷ 86,400, then × 2 for peak.</p>
-      <div class="row"><label for="estIn" class="label">Peak req/s</label><input id="estIn" inputmode="numeric" autocomplete="off" placeholder="e.g. 500"><button class="btn primary" id="estBtn" type="button">Check</button></div>
+    g.innerHTML = `<p>${M.gate.prompt}</p>
+      <div class="row"><label for="estIn" class="label">${M.gate.label}</label><input id="estIn" inputmode="numeric" autocomplete="off" placeholder="${M.gate.placeholder}"><button class="btn primary" id="estBtn" type="button">Check</button></div>
       <div class="fb" id="estFb" aria-live="polite"></div>`;
     const inp = g.querySelector('#estIn'), btn = g.querySelector('#estBtn'), fb = g.querySelector('#estFb');
     inp.value = S.estVal || '';
     const check = () => {
       S.estVal = inp.value;
       const m = (inp.value || '').replace(/,/g, '').match(/\d+(\.\d+)?/);
-      if (!m) { fb.className = 'fb bad'; fb.textContent = 'Type the estimate as a number, for example 500.'; return; }
+      if (!m) { fb.className = 'fb bad'; fb.textContent = M.gate.notNumber; return; }
       const v = parseFloat(m[0]);
-      if (v >= M.gate.lo && v <= M.gate.hi) { S.est = true; log('Estimate accepted: about 463 req/s at peak. Play is unlocked.', 'ok'); afterChange(); return; }
+      if (v >= M.gate.lo && v <= M.gate.hi) { S.est = true; log(M.gate.acceptedLog, 'ok'); afterChange(); return; }
       fb.className = 'fb bad';
-      if (v >= 180 && v <= 280) fb.textContent = 'That is the average. Peak traffic is about twice the average.';
-      else if (v > 9000) fb.textContent = 'Too high. Did you forget to divide by 86,400 seconds in a day?';
-      else fb.textContent = 'Not quite. Work it out: 1,000,000 × 20 ÷ 86,400, then double it for peak. Rounded answers are fine.';
+      const hint = M.gate.hints.find(h => h.test(v));
+      fb.textContent = hint ? hint.text : M.gate.fallback;
     };
     btn.onclick = check;
     inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') check(); });
@@ -801,8 +748,8 @@
     cb.disabled = blocked; sb.disabled = blocked;
     cb.setAttribute('aria-pressed', run.crash ? 'true' : 'false');
     sb.setAttribute('aria-pressed', run.spike ? 'true' : 'false');
-    cb.textContent = (S.exp.crash ? '✓ ' : '') + (run.crash ? 'Restart web server' : 'Crash web server');
-    sb.textContent = (S.exp.spike ? '✓ ' : '') + (run.spike ? 'Back to normal traffic' : '10× traffic');
+    cb.textContent = (S.exp.crash ? '✓ ' : '') + (run.crash ? TXT.crashBtnOn : TXT.crashBtn);
+    sb.textContent = (S.exp.spike ? '✓ ' : '') + (run.spike ? TXT.spikeBtnOn : TXT.spikeBtn);
   }
   function togglePlay() {
     const M = MISSIONS[S.mission];
@@ -815,17 +762,17 @@
   $('playBtn').onclick = togglePlay;
   const designReady = () => { const g = graph(); return !!(g.web && g.hasDNS); };
   $('crashBtn').onclick = () => {
-    if (!run.crash && !designReady()) { log('Build the design first: connect Users to DNS and to a web server, then crash it.', 'warn'); return; }
+    if (!run.crash && !designReady()) { log(TXT.crashNeedsDesign, 'warn'); return; }
     run.crash = !run.crash; run.hold = 0;
-    if (run.crash) { log('You pulled the plug on the web server.', 'bad'); if (!run.playing) togglePlay(); }
-    else log('Web server restarted.', 'ok');
+    if (run.crash) { log(TXT.crashOn, 'bad'); if (!run.playing) togglePlay(); }
+    else log(TXT.crashOff, 'ok');
     run.mdl = model(); paintControls(); paintGoals(); renderInspector(); paintLive();
   };
   $('spikeBtn').onclick = () => {
-    if (!run.spike && !designReady()) { log('Build the design first: connect Users to DNS and to a web server, then send the spike.', 'warn'); return; }
+    if (!run.spike && !designReady()) { log(TXT.spikeNeedsDesign, 'warn'); return; }
     run.spike = !run.spike; run.hold = 0;
-    if (run.spike) { log(`Traffic spike: ${fmt(MISSIONS[S.mission].qps * 10)} req/s.`, 'warn'); if (!run.playing) togglePlay(); }
-    else log('Traffic back to normal.', 'ok');
+    if (run.spike) { log(TXT.spikeOn(MISSIONS[S.mission].qps * 10), 'warn'); if (!run.playing) togglePlay(); }
+    else log(TXT.spikeOff, 'ok');
     run.mdl = model(); paintControls(); paintGoals(); renderInspector(); renderHUD();
   };
   function armButton(btn, label, armedLabel, action) {
@@ -872,8 +819,8 @@
       if (st.load > st.cap * 1.005) {
         overloaded = true;
         const lost = Math.max(1, Math.round((1 - st.cap / st.load) * 100));
-        let extra = st.combined ? ' It runs code and data on one machine, so it only gets half its capacity.' : '';
-        if (st.nosql) extra = ' NoSQL cannot join, so each request costs 3 lookups.';
+        let extra = st.combined ? TXT.combinedOver : '';
+        if (st.nosql) extra = TXT.nosqlOver;
         keys.set('over' + id, [`${nm} is over capacity: ${fmt(st.load)} ${st.unit} arriving, ${fmt(st.cap)} max. About ${lost}% of requests fail.${extra}`, 'bad']);
       } else if (st.util >= 0.7) {
         keys.set('busy' + id, [`${nm} is ${Math.min(100, Math.round(st.util * 100))}% busy. Requests wait in line, so each one takes ${st.mult.toFixed(1)}× its normal time.`, 'warn']);
@@ -883,9 +830,9 @@
       const parts = [`${T.rtt} ms network`];
       for (const id in m.node) { const st = m.node[id], n = byId(id); if (n && !st.down) parts.push(`${TYPES[n.type].name.toLowerCase()} ${fmt(st.ms)} ms (${Math.round(st.util * 100)}% busy)`); }
       const sig = S.nodes.map(n => (n.size || '') + (n.kind || '')).join('');
-      keys.set('slow' + sig, [`Response time ${fmt(m.latency)} ms misses the 150 ms goal: ${parts.join(' + ')}. Busy servers make requests wait; give the slowest one more capacity.`, 'warn']);
+      keys.set('slow' + sig, [`Response time ${fmt(m.latency)} ms misses the ${TARGET_MS} ms goal: ${parts.join(' + ')}. Busy servers make requests wait; give the slowest one more capacity.`, 'warn']);
     }
-    if (run.spike && m.g.web && !run.crash) keys.set('spikeNote', [`At ${fmt(m.base)} req/s, even the largest size (XL, 1,600 req/s) is not enough. One machine can only grow so far: that is the hard limit of scaling up.`, 'bad']);
+    if (run.spike && m.g.web && !run.crash) keys.set('spikeNote', [TXT.spikeNote(m.base), 'bad']);
     for (const [k, [msg, tone]] of keys) if (!run.active.has(k)) log(msg, tone);
     const hadProblems = run.active.size > 0;
     run.active = new Set(keys.keys());
@@ -919,7 +866,7 @@
     tagsG.textContent = '';
     const g = svgEl('g', { class: 'ip-tag', transform: `translate(${n.x - NW / 2} ${n.y - NH / 2 - 26})` }, tagsG);
     svgEl('rect', { x: 0, y: 0, width: 168, height: 20, rx: 5 }, g);
-    const t = svgEl('text', { x: 8, y: 14 }, g); t.textContent = 'IP 203.0.113.42 cached';
+    const t = svgEl('text', { x: 8, y: 14 }, g); t.textContent = TXT.ipTag;
     setTimeout(() => { if (g.parentNode) g.remove(); }, 2600);
   }
 
@@ -930,7 +877,7 @@
     if (g.hasDNS && g.web && !run.dnsDone && !run.dnsFlying && !run.crash) {
       run.dnsFlying = true;
       const d = spawn([g.users.id, g.dns.id, g.users.id], 'dns', -1);
-      d.onDone = () => { run.dnsDone = true; run.dnsFlying = false; showIpTag(g.users); log('DNS answered: example.com is at 203.0.113.42. The device caches it.', ''); };
+      d.onDone = () => { run.dnsDone = true; run.dnsFlying = false; showIpTag(g.users); log(TXT.dnsAnswered, ''); };
     }
     if (!g.hasDNS) run.dnsDone = false;
 
@@ -965,7 +912,7 @@
         run.expT[k] += dt;
         if (run.expT[k] >= 1.5) {
           S.exp[k] = true;
-          log(k === 'crash' ? 'Observed: one server down means the whole site is down. No failover, no redundancy.' : 'Observed: no single machine can absorb 10× traffic. Scaling up has a hard limit.', 'ok');
+          log(k === 'crash' ? TXT.crashObserved : TXT.spikeObserved, 'ok');
           checkDone(); save(); renderMission();
         }
       }
@@ -978,7 +925,7 @@
     const expsOk = M.goals.filter(x => x.type === 'exp').every(x => S.exp[x.id]);
     if (S.verified[i] && expsOk && (!M.gate || S.est)) {
       S.done[i] = true;
-      log(i === MISSIONS.length - 1 ? 'Level 1 complete. Take the quiz.' : `Mission ${i + 1} complete.`, 'ok');
+      log(i === MISSIONS.length - 1 ? TXT.levelComplete : `Mission ${i + 1} complete.`, 'ok');
       renderTabs();
     }
   }
@@ -1049,10 +996,10 @@
       $('view-' + t).hidden = S.tab !== t;
     }
     const nd = S.done.filter(Boolean).length;
-    const bm = $('buildMeta'); bm.textContent = nd + '/3'; bm.classList.toggle('done', nd === 3);
+    const bm = $('buildMeta'); bm.textContent = nd + '/' + MISSIONS.length; bm.classList.toggle('done', nd === MISSIONS.length);
     const qa = quizScore(), qm = $('quizMeta');
-    if (qa.answered < QUIZ.length) { qm.textContent = qa.answered + '/10'; qm.title = 'Questions answered'; qm.classList.remove('done'); }
-    else { const pass = qa.correct >= 8; qm.textContent = (pass ? '✓ ' : '') + qa.correct + '/10'; qm.title = `Score: ${qa.correct} correct${pass ? ', passed' : ''}`; qm.classList.toggle('done', pass); }
+    if (qa.answered < QUIZ.length) { qm.textContent = qa.answered + '/' + QUIZ.length; qm.title = 'Questions answered'; qm.classList.remove('done'); }
+    else { const pass = qa.correct >= PASS; qm.textContent = (pass ? '✓ ' : '') + qa.correct + '/' + QUIZ.length; qm.title = `Score: ${qa.correct} correct${pass ? ', passed' : ''}`; qm.classList.toggle('done', pass); }
   }
   function setTab(t, focusTab) {
     if (!TABS.includes(t)) return;
@@ -1110,64 +1057,9 @@
     const mk = svgEl('marker', { id: 'figArr', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, defs);
     svgEl('path', { d: 'M0 0L10 5L0 10z', class: 'arrowhead' }, mk);
   }
-  function drawFigures() {
-    const f1 = $('figFlow'); f1.textContent = ''; figDefs(f1);
-    figNode(f1, 'users', 150, 52, 'User', 'Browser + app');
-    figNode(f1, 'dns', 500, 52, 'DNS', 'Third-party');
-    figNode(f1, 'web', 150, 205, 'Web server', '203.0.113.42');
-    figArrow(f1, 246, 42, 404, 42, 'api.example.com?', '1', 272, 34);
-    figArrow(f1, 404, 64, 246, 64, '203.0.113.42', '2', 272, 84);
-    figArrow(f1, 130, 84, 130, 173, 'HTTP request', '3', 40, 132);
-    figArrow(f1, 172, 173, 172, 84, 'HTML / JSON', '4', 202, 132);
-
-    const f2 = $('figTiers'); f2.textContent = ''; figDefs(f2);
-    svgEl('rect', { x: 40, y: 138, width: 210, height: 112, rx: 12, class: 'tier-box' }, f2);
-    svgEl('rect', { x: 390, y: 138, width: 210, height: 112, rx: 12, class: 'tier-box' }, f2);
-    let t = svgEl('text', { x: 54, y: 157, class: 'tier-label' }, f2); t.textContent = 'Web tier';
-    t = svgEl('text', { x: 404, y: 157, class: 'tier-label' }, f2); t.textContent = 'Data tier';
-    figNode(f2, 'users', 145, 50, 'User', 'Browser + app');
-    figNode(f2, 'web', 145, 200, 'Web server', 'Scale on its own');
-    figNode(f2, 'db', 495, 200, 'Database', 'Scale on its own');
-    figArrow(f2, 145, 82, 145, 168, 'HTTP', null, 156, 128);
-    figArrow(f2, 241, 190, 399, 190, 'read/write/update', null, 320, 180, 'middle');
-    figArrow(f2, 399, 212, 241, 212, 'return data', null, 320, 230, 'middle');
-
-    const f3 = $('figQueue'); f3.textContent = '';
-    const X = (u) => 56 + u * 540, Y = (m) => 210 - (Math.min(m, 20) / 20) * 180;
-    for (const m of [5, 10, 15, 20]) {
-      svgEl('line', { x1: X(0), y1: Y(m), x2: X(1), y2: Y(m), class: 'ch-grid' }, f3);
-      const tt = svgEl('text', { x: X(0) - 8, y: Y(m) + 4, class: 'ch-t', 'text-anchor': 'end' }, f3); tt.textContent = m + '×';
-    }
-    svgEl('rect', { x: X(0.95), y: Y(20), width: X(1) - X(0.95), height: Y(0) - Y(20), class: 'ch-fail' }, f3);
-    const pts = [];
-    for (let u = 0; u <= 0.9501; u += 0.005) pts.push([X(u), Y(1 / (1 - u))]);
-    svgEl('path', { d: `M${X(0)} ${Y(0)} L` + pts.map(p => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' L') + ` L${X(0.95)} ${Y(0)}Z`, class: 'ch-area' }, f3);
-    svgEl('path', { d: 'M' + pts.map(p => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' L'), class: 'ch-curve' }, f3);
-    svgEl('line', { x1: X(0), y1: Y(0), x2: X(1), y2: Y(0), class: 'ch-axis' }, f3);
-    for (const u of [0, 0.25, 0.5, 0.75, 1]) {
-      const tt = svgEl('text', { x: X(u), y: Y(0) + 18, class: 'ch-t', 'text-anchor': 'middle' }, f3); tt.textContent = Math.round(u * 100) + '%';
-    }
-    const ft = svgEl('text', { x: X(0.975), y: Y(20) + 14, class: 'ch-fail-t', 'text-anchor': 'middle' }, f3); ft.textContent = 'fail';
-    for (const [u, lab] of [[0.5, '2× at 50%'], [0.75, '4× at 75%'], [0.9, '10× at 90%']]) {
-      svgEl('circle', { cx: X(u), cy: Y(1 / (1 - u)), r: 4.5, class: 'ch-pt' }, f3);
-      const tt = svgEl('text', { x: X(u) - 10, y: Y(1 / (1 - u)) - 10, class: 'ch-pt-t', 'text-anchor': 'end' }, f3); tt.textContent = lab;
-    }
-    const xl = svgEl('text', { x: X(0.5), y: 246, class: 'ch-t', 'text-anchor': 'middle' }, f3); xl.textContent = 'utilization (load ÷ capacity)';
-  }
+  const drawFigures = () => level.drawFigures({ $, svgEl, figNode, figArrow, figDefs });
 
   /* ---------------- Quiz ---------------- */
-  const QUIZ = [
-    { q: 'A user types api.example.com. What does DNS send back?', o: ['The HTML page for the site', 'A JSON response from the API', 'The IP address of the server', 'A cached copy of the data'], a: 2, e: 'DNS turns a domain name into an IP address, for example 203.0.113.42. The device then sends HTTP requests straight to that IP. DNS never carries the page itself.', r: 'DNS · RFC 1034' },
-    { q: 'The mobile app calls GET /products/42. What does the server usually return?', o: ['A JSON object', 'An HTML page', 'A SQL table', 'An image file'], a: 0, e: 'Mobile apps talk to the server over HTTP, and JSON is the common API response format because it is simple. Browsers usually receive HTML pages.', r: 'HTTP APIs and JSON' },
-    { q: 'Why move the database onto its own server?', o: ['So it can run a different OS', 'To remove every single point of failure', 'So every query returns instantly', 'So each tier can scale independently'], a: 3, e: 'Separating web traffic (web tier) from the database (data tier) lets you scale each one on its own. You still have single points of failure: now there are two.', r: 'Two-tier architecture' },
-    { q: 'Which of these is a reason to stay with a relational database?', o: ['The app needs very low latency', 'You need joins across many tables', 'The data is unstructured', 'You must store huge volumes of data'], a: 1, e: 'Joins are what relational databases do best, and most NoSQL databases do not offer them. Very low latency, data with no fixed shape and huge volume are all reasons to look at NoSQL.', r: 'Choosing a database' },
-    { q: 'NoSQL databases fall into four categories. Which list is right?', o: ['Tables, rows, indexes and views', 'Cache, queue, blob and log stores', 'Key-value, graph, column and document', 'Primary, replica, shard and backup stores'], a: 2, e: 'NoSQL databases are usually grouped into four families: key-value (Redis), document (MongoDB), wide-column (Cassandra) and graph (Neo4j).', r: 'Choosing a database' },
-    { q: 'Your only server is at its CPU limit, so you move to a bigger machine. What did you do, and what problem remains?', o: ['Vertical scaling; a size ceiling and no failover', 'Horizontal scaling; nothing remains', 'Sharding; joins across shards get harder', 'Vertical scaling; queries can no longer use SQL'], a: 0, e: 'Adding CPU and RAM to one server is vertical scaling (scale up). It is simple, but one machine can only get so big, and when it stops, the whole site stops.', r: 'Scaling up vs scaling out' },
-    { q: 'A music app has 30 million daily users, each making about 15 requests a day. Roughly what is the peak QPS?', o: ['~5,200', '~10,400', '~1,000', '~52,000'], a: 1, e: '30M × 15 ÷ 86,400 s ≈ 5,200 requests per second on average. Peak is about 2 × the average, so ≈ 10,400. Picking ~5,200 means you stopped at the average.', r: 'Estimating QPS' },
-    { q: 'Which of these takes the longest?', o: ['Main memory reference', 'Round trip within the same data center', 'Reading 1 MB sequentially from memory', 'Disk seek'], a: 3, e: 'Roughly: memory reference 100 ns, 1 MB from memory 250 µs, data-center round trip 500 µs, disk seek 10 ms. Memory is fast and disk is slow, so avoid disk seeks.', r: 'Latency · Dean 2009' },
-    { q: 'A provider promises 99.9% availability. About how much downtime is that per year?', o: ['3.65 days', '52.6 minutes', '8.77 hours', '5.26 minutes'], a: 2, e: '99.9% allows 1.44 minutes a day, which is 8.77 hours a year. 99% is 3.65 days, 99.99% is 52.6 minutes and 99.999% is 5.26 minutes.', r: 'Availability arithmetic' },
-    { q: 'The interviewer says "Design a news feed." What should you do first?', o: ['Ask about features, users and scale', 'Draw the complete architecture', 'Choose the database technology', 'Estimate five years of storage needs'], a: 0, e: 'Step 1 is to scope it (about 5–8 minutes). Designing before you know the features and the scale is a red flag, however good the design is.', r: 'Interview loop · Scope it' },
-  ];
   function quizScore() {
     let answered = 0, correct = 0;
     QUIZ.forEach((q, i) => { if (S.quiz[i] != null) { answered++; if (S.quiz[i] === q.a) correct++; } });
@@ -1213,13 +1105,13 @@
     });
     const sc = quizScore();
     $('qScoreTxt').textContent = `${sc.answered} answered · ${sc.correct} correct`;
-    $('qBar').style.width = (sc.answered * 10) + '%';
+    $('qBar').style.width = (sc.answered / QUIZ.length * 100) + '%';
     const res = $('qResult'); res.textContent = '';
     if (sc.answered === QUIZ.length) {
-      const pass = sc.correct >= 8;
+      const pass = sc.correct >= PASS;
       const box = el('div', 'result');
-      box.appendChild(el('h2', null, `${sc.correct} / 10${pass ? ': passed' : ''}`));
-      box.appendChild(el('p', null, pass ? 'Level 1 is done. Level 2, Load balancer and horizontal scaling, is next. It isn\'t built yet: it comes after your review of Level 1.' : 'You need 8 to pass. Reread the lesson sections behind the questions you missed, then try again.'));
+      box.appendChild(el('h2', null, `${sc.correct} / ${QUIZ.length}${pass ? ': passed' : ''}`));
+      box.appendChild(el('p', null, pass ? level.quiz.passText : level.quiz.failText(PASS)));
       const row = el('div', 'row');
       const retry = el('button', 'btn', 'Retake the quiz'); retry.type = 'button';
       retry.onclick = () => { S.quiz = {}; for (const k in qsel) delete qsel[k]; save(); renderQuiz(); renderTabs(); window.scrollTo({ top: 0 }); };
