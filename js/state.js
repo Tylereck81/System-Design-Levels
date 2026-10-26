@@ -22,7 +22,7 @@ export const HOLD = 4; // seconds the targets must hold
 export const LS_KEY = level.saveKey;
 export const fresh = () => ({
   nodes: level.startNodes.map(n => ({ ...n })),
-  edges: [], seq: 1, mission: 0,
+  edges: (level.startEdges || []).map(e => ({ ...e })), seq: 1, mission: 0,
   done: MISSIONS.map(() => false), verified: MISSIONS.map(() => false),
   est: false, estVal: '', exp: Object.fromEntries(EXPERIMENTS.map(e => [e.id, false])),
   quiz: {}, tab: 'lesson', v: level.saveVersion,

@@ -2,7 +2,7 @@
 import { fmt } from '../format.js';
 import { $, el, keepFocus } from '../dom.js';
 import { TYPES, OK_PAIRS, pairKey, MISSIONS, S, sel, run, byId, setSel } from '../state.js';
-import { SIZES, T, COMPONENTS, roleOf, runsAlone } from '../engine/components.js';
+import { SIZES, T, COMPONENTS, roleOf, runsAlone, serverSpec } from '../engine/components.js';
 import { tryConnect, disconnect, removeSel } from '../engine/interaction.js';
 import { log } from './log.js';
 import { afterDesignChange } from '../main.js';
@@ -57,6 +57,8 @@ function buildInspector() {
     }
     box.appendChild(seg);
     if (runsAlone(n)) box.appendChild(el('p', 'kind-note', TYPES[n.type].noDbNote));
+  }
+  if (roleOf(n) === 'server') {
     const live = el('div', 'live'); live.id = 'inspLive'; box.appendChild(live);
     paintInspectorLive();
   }
@@ -90,9 +92,10 @@ function buildInspector() {
 }
 export function paintInspectorLive() {
   const live = $('inspLive'); if (!live || !sel || sel.kind !== 'node') return;
-  const n = byId(sel.id); if (!n || !n.size) return;
+  const n = byId(sel.id); if (!n || roleOf(n) !== 'server') return;
   const st = run.mdl && run.everPlayed ? run.mdl.node[n.id] : null;
-  if (!st) { live.innerHTML = `<div><b>${fmt(SIZES[n.size].cap * (runsAlone(n) ? COMPONENTS[n.type].alone.capFactor : 1))}</b><span>capacity, per second</span></div><div><b>—</b><span>press Play for load</span></div>`; return; }
+  if (!st) { live.innerHTML = `<div><b>${fmt(serverSpec(n).cap)}</b><span>capacity, per second</span></div><div><b>—</b><span>press Play for load</span></div>`; return; }
+  if (st.standby) { live.innerHTML = `<div><b>standby</b><span>takes no traffic</span></div><div><b>${fmt(st.cap)}</b><span>capacity, ready to take over</span></div>`; return; }
   if (st.down) { live.innerHTML = `<div><b style="color:var(--bad)">down</b><span>serving nothing</span></div><div><b>0</b><span>req/s served</span></div>`; return; }
   const pct = Math.round(st.util * 100);
   const col = st.load > st.cap * 1.005 ? 'var(--bad)' : st.util >= 0.8 ? 'var(--warn)' : 'var(--ok)';

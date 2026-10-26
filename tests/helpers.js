@@ -7,8 +7,9 @@ export const QUIZ_KEY_L1 = [2, 0, 3, 1, 2, 0, 1, 3, 2, 0];
 export async function freshPage(page, hash = '') {
   await page.goto('/');
   await page.evaluate(() => localStorage.clear());
+  // Leave the page first: changing only the hash to another level would make the game reload itself.
+  await page.goto('about:blank');
   await page.goto('/' + hash);
-  await page.reload();
   await page.waitForFunction(() => !!window.__sdl);
 }
 
