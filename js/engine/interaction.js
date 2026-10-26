@@ -1,6 +1,6 @@
 // Adding, dragging, connecting and removing components.
 import { level } from '../level.js';
-import { $, svgEl } from '../dom.js';
+import { $, svgEl, keepFocus } from '../dom.js';
 import { TYPES, PALETTE, LIMIT_MSG, OK_PAIRS, BAD_PAIRS, pairKey, S, sel, connectFrom, save, byId, setSel, setConnectFrom, setRefocus } from '../state.js';
 import { drawIcon } from './icons.js';
 import { COMPONENTS, roleOf } from './components.js';
@@ -15,12 +15,13 @@ import { dropMissingCrashes } from './experiments.js';
 /* ---------------- Palette ---------------- */
 export const countType = (t) => S.nodes.filter(n => n.type === t).length;
 export const atLimit = (t) => countType(t) >= (level.limits[t] ?? Infinity);
-export function renderPalette() {
+export function renderPalette() { keepFocus($('palList'), buildPalette); }
+function buildPalette() {
   const list = $('palList'); list.textContent = '';
   for (const t of PALETTE) {
     const full = atLimit(t);
     const b = document.createElement('button');
-    b.className = 'pal-item'; b.type = 'button'; b.dataset.type = t;
+    b.className = 'pal-item'; b.type = 'button'; b.dataset.type = t; b.dataset.focusKey = 'pal-' + t;
     b.setAttribute('aria-disabled', full ? 'true' : 'false');
     b.title = full ? LIMIT_MSG[t] : 'Drag onto the canvas, or tap to add';
     const ic = svgEl('svg', { viewBox: '-3 -3 36 30', 'aria-hidden': 'true' });

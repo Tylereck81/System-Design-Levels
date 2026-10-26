@@ -353,6 +353,57 @@ test.describe('Level 1 · accessibility', () => {
     await expect(page.locator('#view-quiz')).toBeVisible();
   });
 
+  test('keyboard only: Missions 2 and 3 keep focus on a control after every action', async ({ page }) => {
+    await freshPage(page, '#build');
+    await unlockMissions(page, 1);
+    const ids = await buildBasic(page, { db: false });
+    const focused = () => page.evaluate(() => {
+      const a = document.activeElement;
+      return !a || a === document.body ? 'body' : (a.dataset.focusKey || a.id || a.getAttribute('data-node') || a.textContent.trim().slice(0, 30));
+    });
+    const press = async (selector, expected) => {
+      await page.focus(selector);
+      await page.keyboard.press('Enter');
+      const f = await focused();
+      expect(f, `focus after Enter on ${selector}`).not.toBe('body');
+      if (expected) expect(f).toBe(expected);
+    };
+
+    // Mission 2: add a database, connect it, make it SQL, scale the web server to M.
+    await press('.pal-item[data-type="db"]', 'pal-db');
+    const db = (await state(page, () => window.__sdl.S.nodes.find((n) => n.type === 'db'))).id;
+    await press(`[data-node="${ids.web}"]`, ids.web);
+    await page.locator('#insp .conn').getByRole('button', { name: 'Connect', exact: true }).first().focus();
+    await page.keyboard.press('Enter');
+    expect(await focused()).toBe(`conn-${db}`);
+    await press('#insp .seg:not(.two) button:nth-child(2)', 'size-M');
+    await press(`[data-node="${db}"]`, db);
+    await press('#insp .seg.two button:first-child', 'kind-sql');
+    await press('#playBtn', 'playBtn');
+    await fastForward(page, 5);
+    expect(await state(page, () => window.__sdl.S.done[1])).toBe(true);
+    await press('#mission .complete button');
+
+    // Mission 3: estimate, scale up, run both experiments, then remove a component and switch missions.
+    await page.focus('#estIn');
+    await page.keyboard.type('463');
+    await page.keyboard.press('Enter');
+    expect(await focused()).not.toBe('body');
+    for (const id of [ids.web, db]) {
+      await press(`[data-node="${id}"]`, id);
+      await press('#insp .seg:not(.two) button:nth-child(3)', 'size-L');
+    }
+    await press('#playBtn', 'playBtn');
+    await press('#crashBtn', 'crashBtn');
+    await press('#crashBtn', 'crashBtn');
+    await press(`[data-node="${ids.dns}"]`, ids.dns);
+    await page.locator('#insp').getByRole('button', { name: 'Remove DNS' }).focus();
+    await page.keyboard.press('Enter');
+    expect(await state(page, () => window.__sdl.S.nodes.some((n) => n.type === 'dns'))).toBe(false);
+    expect(await focused()).toBe('insp'); // the button is gone, so the inspector itself takes focus
+    await press('#mtabs button:first-child', 'mtab-0');
+  });
+
   for (const colorScheme of ['light', 'dark']) {
     test.describe(`axe (${colorScheme})`, () => {
       test.use({ colorScheme });
