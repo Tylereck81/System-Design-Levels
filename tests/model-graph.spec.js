@@ -104,6 +104,35 @@ test.describe('Simulation model · any graph', () => {
     expect(routes.every((r) => r.route.join('>') === 'u>w2>b>w2>u')).toBe(true);
   });
 
+  test('goal helpers count servers on the request path and check what they reach', async ({ page }) => {
+    const g = (extra = '') => page.evaluate((src) => {
+      const S = window.__sdl.S; new Function('S', src)(S); // eslint-disable-line no-new-func
+      const g = window.__sdl.model().g;
+      return { webs: g.count('web'), dbs: g.count('db'), entry: g.entry.map((n) => n.id), reach: g.everyReaches('web', 'db'), dbReach: g.everyReaches('db', 'web') };
+    }, extra);
+    await design(page, { mission: 1, webs: { w1: 'S', w2: 'S' }, dbs: { b: 'M' }, links: [['w1', 'b'], ['w2', 'b']] });
+    expect(await g()).toEqual({ webs: 2, dbs: 1, entry: ['w1', 'w2'], reach: true, dbReach: false });
+    // w2 loses its database: not every web server reaches one any more.
+    expect((await g("S.edges = S.edges.filter((e) => !(e.from === 'w2' && e.to === 'b'));")).reach).toBe(false);
+    // A web server on the canvas but not connected to Users is not on the request path.
+    expect((await g("S.nodes.push({ id: 'w3', type: 'web', x: 0, y: 0, size: 'S' });")).webs).toBe(2); // still w1 and w2
+    // With no web servers at all, "every web server reaches a database" is false, not vacuously true.
+    expect((await g("S.edges = S.edges.filter((e) => e.from !== 'u' || e.to === 'd');")).reach).toBe(false);
+  });
+
+  test('the SPOF caption says "no redundancy" only when there is a SPOF', async ({ page }) => {
+    const caption = () => page.locator('#hud .metric').nth(4).locator('.mt');
+    await page.evaluate(() => window.__sdl.setTab('build'));
+    await expect(caption()).toHaveText('—'); // nothing built yet
+    await design(page, { mission: 1, webs: { w: 'S' }, dbs: { b: 'M' }, links: [['w', 'b']] });
+    await page.evaluate(() => window.__sdl.afterChange());
+    await expect(caption()).toHaveText('no redundancy');
+    await design(page, { mission: 1, webs: { w1: 'S', w2: 'S' }, dbs: { b1: 'M', b2: 'M' }, links: [['w1', 'b1'], ['w1', 'b2'], ['w2', 'b1'], ['w2', 'b2']] });
+    await page.evaluate(() => window.__sdl.afterChange());
+    await expect(page.locator('#hud .metric').nth(4).locator('.mv')).toHaveText('0');
+    await expect(caption()).toHaveText('redundant');
+  });
+
   test('a loop in the design does not hang the simulation', async ({ page }) => {
     await design(page, { mission: 1, webs: { w: 'S' }, dbs: { b: 'M' }, links: [['w', 'b']], extraEdges: [['b', 'w']] });
     const r = await measure(page);

@@ -15,7 +15,7 @@ export function renderHUD() {
     { l: 'Served', v: played ? m.servedPct.toFixed(1) : '—', u: played ? '%' : '', t: `goal ≥ ${TARGET_SERVED}%`, s: played ? (m.servedPct >= TARGET_SERVED ? 'pass' : 'fail') : '' },
     { l: 'Response', v: played && m.latency != null ? fmt(m.latency) : '—', u: played && m.latency != null ? 'ms' : '', t: `goal < ${TARGET_MS} ms`, s: played ? (m.latency != null && m.latency < TARGET_MS ? 'pass' : 'fail') : '' },
     { l: 'Cost', v: '$' + fmt(m.cost), u: '/mo', t: M.budget ? 'budget $' + M.budget : 'no budget', s: M.budget ? (m.cost <= M.budget ? 'pass' : 'fail') : '' },
-    { l: 'SPOFs', v: String(m.spof), u: '', t: 'no redundancy', s: '' },
+    { l: 'SPOFs', v: String(m.spof), u: '', t: m.spof > 0 ? 'no redundancy' : (m.g.ready ? 'redundant' : '—'), s: '' },
   ];
   $('hud').innerHTML = cells.map(c => `<div class="metric ${c.s}"><p class="label">${c.l}</p><div class="mv">${c.v}<small>${c.u}</small></div><div class="mt" title="${c.t}">${c.t}</div></div>`).join('');
 }
