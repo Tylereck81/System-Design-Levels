@@ -160,6 +160,29 @@ test.describe('Level 1 · robustness', () => {
     expect(errors).toEqual([]);
   });
 
+  test('Delete and Backspace remove a component only when focus is on the canvas or the page', async ({ page }) => {
+    await freshPage(page, '#build');
+    const ids = await buildBasic(page);
+    const has = (type) => page.evaluate((t) => window.__sdl.S.nodes.some((n) => n.type === t), type);
+    // Keyboard: select the web server, move to a mission tab, press Backspace: nothing is deleted.
+    await page.focus(`[data-node="${ids.web}"]`);
+    await page.keyboard.press('Enter');
+    await page.focus('#mtabs button:first-child');
+    await page.keyboard.press('Backspace');
+    await page.keyboard.press('Delete');
+    expect(await has('web')).toBe(true);
+    // Back on the canvas node, Delete removes it.
+    await page.focus(`[data-node="${ids.web}"]`);
+    await page.keyboard.press('Delete');
+    expect(await has('web')).toBe(false);
+    // Mouse: use an inspector button, then click a component on the canvas; Delete removes it.
+    await tap(page, `[data-node="${ids.db}"] .node-box`);
+    await page.click('#insp .seg:not(.two) button:nth-child(2)'); // size M: the button now has focus
+    await tap(page, `[data-node="${ids.db}"] .node-box`);
+    await page.keyboard.press('Delete');
+    expect(await has('db')).toBe(false);
+  });
+
   test('deleting a component while connecting it is saved and clears the banner', async ({ page }) => {
     const errors = trackErrors(page);
     await freshPage(page, '#build');

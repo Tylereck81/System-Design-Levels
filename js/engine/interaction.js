@@ -103,6 +103,9 @@ export function cancelConnect() { if (connectFrom) { setConnectFrom(null); setBa
 
 export let drag = null, conn = null;
 cv.addEventListener('pointerdown', (e) => {
+  // Clicking the canvas takes focus away from controls outside it, so Delete then acts on the canvas.
+  const a = document.activeElement;
+  if (a && a !== document.body && !cv.contains(a)) a.blur();
   const p = svgPt(e);
   const h = e.target.closest('[data-handle]');
   if (h) {
@@ -218,7 +221,8 @@ document.addEventListener('keydown', (e) => {
   if (S.tab !== 'build') return;
   const tag = (e.target.tagName || '').toLowerCase();
   if (tag === 'input' || tag === 'textarea') return;
-  if ((e.key === 'Delete' || e.key === 'Backspace') && sel) { e.preventDefault(); removeSel(); }
+  const onCanvas = e.target === document.body || cv.contains(e.target); // not on a button, tab or other control
+  if ((e.key === 'Delete' || e.key === 'Backspace') && sel && onCanvas) { e.preventDefault(); removeSel(); }
   if (e.key === 'Escape') { setConnectFrom(null); setBanner(); select(null); }
   if (e.key === ' ' && e.target === document.body) { e.preventDefault(); togglePlay(); }
 });
