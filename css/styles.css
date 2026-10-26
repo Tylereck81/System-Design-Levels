@@ -272,6 +272,7 @@ details.hint p { margin: 8px 0 0; color: var(--ink-2); }
 .tier-box { fill: none; stroke: var(--grid); stroke-width: 1.4; stroke-dasharray: 6 5; }
 .tier-label { font: 500 11.5px var(--f-mono); fill: var(--ink-3); }
 .d-line { stroke: var(--ink-3); stroke-width: 1.5; fill: none; }
+.d-dash { stroke-dasharray: 5 4; }
 .d-label { font: 12px var(--f-mono); fill: var(--ink-2); }
 .d-step { fill: var(--accent); }
 .d-step-t { font: 600 11px var(--f-mono); fill: var(--on-accent); }
