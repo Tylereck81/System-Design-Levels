@@ -15,6 +15,7 @@ import { quizScore, renderQuiz } from './ui/quiz.js';
 import { renderShell } from './ui/shell.js';
 import { entry } from './level.js';
 import { parseRoute, routeHash } from './route.js';
+import { LEVELS } from '../levels/index.js';
 
 document.documentElement.lang = 'en';
 
@@ -53,8 +54,11 @@ document.querySelector('.tabs').addEventListener('keydown', (e) => {
 });
 window.addEventListener('hashchange', () => {
   const r = parseRoute(location.hash);
-  if (r.level !== entry.id) { location.reload(); return; } // another level: start again with its file
-  if (TABS.includes(r.tab) && r.tab !== S.tab) setTab(r.tab);
+  const target = (LEVELS.find(l => l.id === r.level) || LEVELS[0]).id; // an unknown level means Level 1
+  if (target !== entry.id) { location.reload(); return; } // another level: start again with its file
+  const tab = TABS.includes(r.tab) ? r.tab : S.tab;
+  if (r.level !== entry.id) { try { history.replaceState(null, '', routeHash(entry.id, tab)); } catch (e) { /* ignore */ } }
+  if (tab !== S.tab) setTab(tab);
 });
 
 export function afterChange(forceFit) {
@@ -72,8 +76,9 @@ export function afterDesignChange() {
 
 function start(data) {
   try { load(data); } catch (e) { setS(fresh()); }
-  const h = parseRoute(location.hash).tab;
-  if (TABS.includes(h)) S.tab = h;
+  const route = parseRoute(location.hash);
+  if (TABS.includes(route.tab)) S.tab = route.tab;
+  if (route.level !== entry.id) { try { history.replaceState(null, '', routeHash(entry.id, S.tab)); } catch (e) { /* ignore */ } } // unknown level: show Level 1's address
   renderShell();
   drawFigures();
   run.mdl = model();

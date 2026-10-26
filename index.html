@@ -15,7 +15,14 @@
 <div class="app" id="app">
   <header class="top">
     <div class="brand">System Design Levels</div>
-    <div class="lvl"><span class="chip" id="lvlChip"></span><span class="lvl-name" id="lvlName"></span></div>
+    <div class="lvl-wrap">
+      <button class="lvl" id="lvlBtn" type="button" aria-expanded="false" aria-controls="lvlMenu"><span class="chip" id="lvlChip"></span><span class="lvl-name" id="lvlName"></span><span class="lvl-caret" aria-hidden="true">▾</span></button>
+      <div class="lvl-menu" id="lvlMenu" hidden>
+        <p class="label">Levels</p>
+        <ul id="lvlList"></ul>
+        <p class="lvl-note">More levels are on the way.</p>
+      </div>
+    </div>
     <nav class="tabs" role="tablist" aria-label="Level sections">
       <button role="tab" id="tab-lesson" data-tab="lesson" aria-controls="view-lesson">Lesson</button>
       <button role="tab" id="tab-build" data-tab="build" aria-controls="view-build">Build <span class="tab-meta" id="buildMeta" title="Missions completed">0/3</span></button>
