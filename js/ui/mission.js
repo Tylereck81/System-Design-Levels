@@ -1,6 +1,6 @@
 // Mission panel: brief, estimate box and goals.
 import { fmt } from '../format.js';
-import { $, el } from '../dom.js';
+import { $, el, keepFocus } from '../dom.js';
 import { TARGET_MS, MISSIONS, HOLD, S, run } from '../state.js';
 import { model } from '../engine/model.js';
 import { stopRun } from '../engine/sim.js';
@@ -13,7 +13,7 @@ export const unlocked = (i) => i === 0 || S.done[i - 1];
 export function renderMissionTabs() {
   const box = $('mtabs'); box.textContent = '';
   MISSIONS.forEach((M, i) => {
-    const b = el('button', S.done[i] ? 'done' : '', (S.done[i] ? '✓ ' : '') + 'Mission ' + (i + 1)); b.type = 'button';
+    const b = el('button', S.done[i] ? 'done' : '', (S.done[i] ? '✓ ' : '') + 'Mission ' + (i + 1)); b.type = 'button'; b.dataset.focusKey = 'mtab-' + i;
     b.disabled = !unlocked(i);
     b.setAttribute('aria-current', S.mission === i ? 'true' : 'false');
     b.title = unlocked(i) ? M.title : 'Finish the previous mission first';
@@ -30,7 +30,8 @@ export function switchMission(i) {
   log(`Mission ${i + 1}: ${MISSIONS[i].title}. Traffic is now ${MISSIONS[i].gate && !S.est ? 'unknown until you estimate it' : fmt(MISSIONS[i].qps) + ' req/s'}.`);
 }
 
-export function renderMission() {
+export function renderMission() { keepFocus($('missionCard'), buildMission, () => $('missionCard')); }
+function buildMission() {
   renderMissionTabs();
   const M = MISSIONS[S.mission], i = S.mission;
   const box = $('mission'); box.textContent = '';

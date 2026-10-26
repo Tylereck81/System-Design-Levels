@@ -1,6 +1,6 @@
 // Inspector panel for the selected component or connection.
 import { fmt } from '../format.js';
-import { $, el } from '../dom.js';
+import { $, el, keepFocus } from '../dom.js';
 import { TYPES, OK_PAIRS, pairKey, MISSIONS, S, sel, run, byId, setSel } from '../state.js';
 import { SIZES, T, COMPONENTS, roleOf, runsAlone } from '../engine/components.js';
 import { tryConnect, disconnect, removeSel } from '../engine/interaction.js';
@@ -9,6 +9,9 @@ import { afterDesignChange } from '../main.js';
 import { trafficFactor } from '../engine/experiments.js';
 
 export function renderInspector() {
+  keepFocus($('insp'), buildInspector, () => { const b = $('insp'); b.tabIndex = -1; return b; });
+}
+function buildInspector() {
   const box = $('insp'); box.textContent = '';
   box.appendChild(el('p', 'label', 'Inspector'));
   if (sel && sel.kind === 'node' && !byId(sel.id)) setSel(null);
@@ -22,7 +25,7 @@ export function renderInspector() {
     const a = byId(e.from), b = byId(e.to), info = OK_PAIRS[pairKey(a.type, b.type)];
     box.appendChild(el('h2', null, `${TYPES[a.type].name} → ${TYPES[b.type].name}`));
     box.appendChild(el('p', 'desc', info.desc));
-    const rm = el('button', 'btn danger', 'Remove connection'); rm.type = 'button'; rm.onclick = removeSel;
+    const rm = el('button', 'btn danger', 'Remove connection'); rm.type = 'button'; rm.dataset.focusKey = 'remove'; rm.onclick = removeSel;
     box.appendChild(rm); return;
   }
   const n = byId(sel.id);
@@ -32,7 +35,7 @@ export function renderInspector() {
     box.appendChild(el('p', 'label', TYPES[n.type].kindsLabel));
     const seg = el('div', 'seg two');
     for (const kind of TYPES[n.type].kinds) {
-      const b = el('button'); b.type = 'button'; b.setAttribute('aria-pressed', n.kind === kind.id ? 'true' : 'false');
+      const b = el('button'); b.type = 'button'; b.dataset.focusKey = 'kind-' + kind.id; b.setAttribute('aria-pressed', n.kind === kind.id ? 'true' : 'false');
       b.innerHTML = `<b>${kind.name}</b><span>${kind.sub}</span>`;
       b.onclick = () => { n.kind = kind.id; afterDesignChange(); log(kind.log, kind.tone); };
       seg.appendChild(b);
@@ -45,7 +48,7 @@ export function renderInspector() {
     box.appendChild(el('p', 'label', 'Server size (scale up)'));
     const seg = el('div', 'seg');
     for (const k of Object.keys(SIZES)) {
-      const b = el('button'); b.type = 'button'; b.setAttribute('aria-pressed', n.size === k ? 'true' : 'false');
+      const b = el('button'); b.type = 'button'; b.dataset.focusKey = 'size-' + k; b.setAttribute('aria-pressed', n.size === k ? 'true' : 'false');
       b.innerHTML = `<b>${k}</b> <span>${fmt(SIZES[k].cap)}/s</span><br><span>$${SIZES[k].cost}</span>`;
       b.title = `${SIZES[k].cpu} vCPU · ${fmt(SIZES[k].cap)} requests/s · $${SIZES[k].cost}/month`;
       b.setAttribute('aria-label', `${k} ${fmt(SIZES[k].cap)}/s, $${SIZES[k].cost} a month`);
@@ -74,14 +77,14 @@ export function renderInspector() {
       const linked = S.edges.some(e => e.from === from.id && e.to === to.id);
       const row = el('div', 'conn');
       row.appendChild(el('span', null, `${TYPES[from.type].name} → ${TYPES[to.type].name}`));
-      const b = el('button', 'btn sm' + (linked ? ' danger' : ''), linked ? 'Disconnect' : 'Connect'); b.type = 'button';
+      const b = el('button', 'btn sm' + (linked ? ' danger' : ''), linked ? 'Disconnect' : 'Connect'); b.type = 'button'; b.dataset.focusKey = 'conn-' + m.id;
       b.onclick = () => { if (linked) { disconnect(from.id, to.id); log(`Disconnected ${TYPES[from.type].name} → ${TYPES[to.type].name}.`); } else tryConnect(from.id, to.id); };
       row.appendChild(b); list.appendChild(row);
     }
     box.appendChild(list);
   }
   if (roleOf(n) !== 'client') {
-    const rm = el('button', 'btn danger', 'Remove ' + TYPES[n.type].name.toLowerCase()); rm.type = 'button'; rm.onclick = removeSel;
+    const rm = el('button', 'btn danger', 'Remove ' + TYPES[n.type].name.toLowerCase()); rm.type = 'button'; rm.dataset.focusKey = 'remove'; rm.onclick = removeSel;
     box.appendChild(rm);
   }
 }
