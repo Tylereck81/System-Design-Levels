@@ -4,6 +4,7 @@ import { $, svgEl } from '../dom.js';
 import { TYPES, PALETTE, LIMIT_MSG, OK_PAIRS, BAD_PAIRS, pairKey, S, sel, connectFrom, run, save, byId, setSel, setConnectFrom, setRefocus } from '../state.js';
 import { graph } from './model.js';
 import { drawIcon } from './icons.js';
+import { COMPONENTS, roleOf } from './components.js';
 import { NW, NH, cv, previewLine, nodeRefs, renderEdges, renderCanvas, clampX, clampY, freeSpot } from './canvas.js';
 import { setBanner } from '../ui/hud.js';
 import { renderInspector } from '../ui/inspector.js';
@@ -39,8 +40,8 @@ export function addNode(type, x, y) {
   const p = (x == null) ? SLOTS[type] : { x, y };
   const spot = freeSpot(clampX(p.x), clampY(p.y), null);
   const n = { id: 'n' + (S.seq++), type, x: spot.x, y: spot.y };
-  if (type === 'web' || type === 'db') n.size = 'S';
-  if (type === 'db') n.kind = null;
+  if (COMPONENTS[type].sized) n.size = 'S';
+  if (COMPONENTS[type].kinds) n.kind = null;
   S.nodes.push(n);
   setSel({ kind: 'node', id: n.id });
   afterDesignChange();
@@ -201,7 +202,7 @@ export function disconnect(aId, bId) {
 export function removeSel() {
   if (!sel) return;
   if (sel.kind === 'node') {
-    const n = byId(sel.id); if (!n || n.type === 'users') return;
+    const n = byId(sel.id); if (!n || roleOf(n) === 'client') return;
     S.nodes = S.nodes.filter(x => x.id !== n.id);
     S.edges = S.edges.filter(e => e.from !== n.id && e.to !== n.id);
     if (connectFrom === n.id) setConnectFrom(null);

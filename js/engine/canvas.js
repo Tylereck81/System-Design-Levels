@@ -2,7 +2,7 @@
 import { fmt } from '../format.js';
 import { $, svgEl } from '../dom.js';
 import { TYPES, OK_PAIRS, pairKey, S, sel, connectFrom, refocus, run, byId, setRefocus } from '../state.js';
-import { SIZES, webHasDb } from './model.js';
+import { SIZES, COMPONENTS, runsAlone } from './components.js';
 import { drawIcon } from './icons.js';
 
 export const VW = 760, VH = 520;
@@ -12,9 +12,10 @@ export const cv = $('cv'), nodesG = $('nodesG'), edgesG = $('edgesG'), dotsG = $
 export const nodeRefs = {};
 
 export function nodeSub(n) {
-  if (n.type === 'users' || n.type === 'dns') return TYPES[n.type].sub;
-  if (n.type === 'web') return webHasDb(n) ? `${n.size} · ${fmt(SIZES[n.size].cap)} req/s` : `${n.size} · ${fmt(SIZES[n.size].cap / 2)} req/s (½)`;
-  if (n.type === 'db') return n.kind ? `${TYPES.db.kinds.find(k => k.id === n.kind).short} · ${n.size} ${fmt(SIZES[n.size].cap)}/s` : TYPES.db.unsetSub;
+  const c = COMPONENTS[n.type];
+  if (!c.sized) return TYPES[n.type].sub;
+  if (c.kinds) return n.kind ? `${TYPES[n.type].kinds.find(k => k.id === n.kind).short} · ${n.size} ${fmt(SIZES[n.size].cap)}/s` : TYPES[n.type].unsetSub;
+  return runsAlone(n) ? `${n.size} · ${fmt(SIZES[n.size].cap * c.alone.capFactor)} req/s (½)` : `${n.size} · ${fmt(SIZES[n.size].cap)} req/s`;
   return '';
 }
 
@@ -50,7 +51,7 @@ export function renderNodes() {
     } else {
       drawIcon(n.type, g, 12, 18);
       const name = svgEl('text', { x: 52, y: 26, class: 'node-name' }, g); name.textContent = TYPES[n.type].name + ' ';
-      const subEl = svgEl('text', { x: 52, y: 43, class: 'node-sub' + (n.type === 'db' && !n.kind ? ' todo' : '') }, g); subEl.textContent = sub;
+      const subEl = svgEl('text', { x: 52, y: 43, class: 'node-sub' + (COMPONENTS[n.type].kinds && !n.kind ? ' todo' : '') }, g); subEl.textContent = sub;
     }
     const ubg = svgEl('rect', { x: 12, y: NH - 7, width: NW - 24, height: 3, rx: 1.5, class: 'ubar-bg', visibility: 'hidden' }, g);
     const ub = svgEl('rect', { x: 12, y: NH - 7, width: 0, height: 3, rx: 1.5, class: 'ubar', visibility: 'hidden' }, g);

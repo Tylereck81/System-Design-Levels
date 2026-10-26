@@ -2,7 +2,7 @@
 import { fmt } from '../format.js';
 import { $, el } from '../dom.js';
 import { TYPES, OK_PAIRS, pairKey, MISSIONS, S, sel, run, byId, setSel } from '../state.js';
-import { SIZES, T, webHasDb } from '../engine/model.js';
+import { SIZES, T, COMPONENTS, roleOf, runsAlone } from '../engine/components.js';
 import { tryConnect, disconnect, removeSel } from '../engine/interaction.js';
 import { log } from './log.js';
 import { afterDesignChange } from '../main.js';
@@ -27,20 +27,20 @@ export function renderInspector() {
   const n = byId(sel.id);
   box.appendChild(el('h2', null, TYPES[n.type].name));
   box.appendChild(el('p', 'desc', TYPES[n.type].desc));
-  if (n.type === 'db') {
-    box.appendChild(el('p', 'label', TYPES.db.kindsLabel));
+  if (COMPONENTS[n.type].kinds) {
+    box.appendChild(el('p', 'label', TYPES[n.type].kindsLabel));
     const seg = el('div', 'seg two');
-    for (const kind of TYPES.db.kinds) {
+    for (const kind of TYPES[n.type].kinds) {
       const b = el('button'); b.type = 'button'; b.setAttribute('aria-pressed', n.kind === kind.id ? 'true' : 'false');
       b.innerHTML = `<b>${kind.name}</b><span>${kind.sub}</span>`;
       b.onclick = () => { n.kind = kind.id; afterDesignChange(); log(kind.log, kind.tone); };
       seg.appendChild(b);
     }
     box.appendChild(seg);
-    const chosen = TYPES.db.kinds.find(k => k.id === n.kind);
-    box.appendChild(el('p', 'kind-note', chosen ? chosen.note : TYPES.db.unsetNote));
+    const chosen = TYPES[n.type].kinds.find(k => k.id === n.kind);
+    box.appendChild(el('p', 'kind-note', chosen ? chosen.note : TYPES[n.type].unsetNote));
   }
-  if (n.type === 'web' || n.type === 'db') {
+  if (COMPONENTS[n.type].sized) {
     box.appendChild(el('p', 'label', 'Server size (scale up)'));
     const seg = el('div', 'seg');
     for (const k of Object.keys(SIZES)) {
@@ -52,11 +52,11 @@ export function renderInspector() {
       seg.appendChild(b);
     }
     box.appendChild(seg);
-    if (n.type === 'web' && !webHasDb(n)) box.appendChild(el('p', 'kind-note', TYPES.web.noDbNote));
+    if (runsAlone(n)) box.appendChild(el('p', 'kind-note', TYPES[n.type].noDbNote));
     const live = el('div', 'live'); live.id = 'inspLive'; box.appendChild(live);
     paintInspectorLive();
   }
-  if (n.type === 'users') {
+  if (roleOf(n) === 'client') {
     const M0 = MISSIONS[S.mission], hid = M0.gate && !S.est;
     const live = el('div', 'live');
     live.innerHTML = `<div><b>${hid ? '?' : fmt(M0.qps * (run.spike ? 10 : 1))}</b><span>req/s at peak</span></div><div><b>${T.rtt} ms</b><span>internet round trip</span></div>`;
@@ -79,7 +79,7 @@ export function renderInspector() {
     }
     box.appendChild(list);
   }
-  if (n.type !== 'users') {
+  if (roleOf(n) !== 'client') {
     const rm = el('button', 'btn danger', 'Remove ' + TYPES[n.type].name.toLowerCase()); rm.type = 'button'; rm.onclick = removeSel;
     box.appendChild(rm);
   }
@@ -88,7 +88,7 @@ export function paintInspectorLive() {
   const live = $('inspLive'); if (!live || !sel || sel.kind !== 'node') return;
   const n = byId(sel.id); if (!n || !n.size) return;
   const st = run.mdl && run.everPlayed ? run.mdl.node[n.id] : null;
-  if (!st) { live.innerHTML = `<div><b>${fmt(SIZES[n.size].cap / (n.type === 'web' && !webHasDb(n) ? 2 : 1))}</b><span>capacity, per second</span></div><div><b>—</b><span>press Play for load</span></div>`; return; }
+  if (!st) { live.innerHTML = `<div><b>${fmt(SIZES[n.size].cap * (runsAlone(n) ? COMPONENTS[n.type].alone.capFactor : 1))}</b><span>capacity, per second</span></div><div><b>—</b><span>press Play for load</span></div>`; return; }
   if (st.down) { live.innerHTML = `<div><b style="color:var(--bad)">down</b><span>serving nothing</span></div><div><b>0</b><span>req/s served</span></div>`; return; }
   const pct = Math.round(st.util * 100);
   const col = st.load > st.cap * 1.005 ? 'var(--bad)' : st.util >= 0.8 ? 'var(--warn)' : 'var(--ok)';
