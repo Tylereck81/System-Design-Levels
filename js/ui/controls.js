@@ -9,7 +9,7 @@ import { renderInspector } from './inspector.js';
 import { paintGoals } from './mission.js';
 import { log } from './log.js';
 import { afterChange, afterDesignChange } from '../main.js';
-import { isOn, startExp, stopExp } from '../engine/experiments.js';
+import { isOn, activeExps, startExp, stopExp } from '../engine/experiments.js';
 
 export function paintControls() {
   const M = MISSIONS[S.mission];
@@ -43,7 +43,12 @@ for (const exp of EXPERIMENTS) {
   $('expGroup').appendChild(btn);
   btn.onclick = () => {
     if (!isOn(exp.id) && !designReady()) { log(exp.needsDesign, 'warn'); return; }
-    if (isOn(exp.id)) stopExp(exp); else startExp(exp, graph());
+    if (isOn(exp.id)) stopExp(exp);
+    else {
+      // One experiment at a time, so each one's effect is clear and only that one counts.
+      for (const other of activeExps()) { stopExp(other); log(other.off, 'ok'); }
+      startExp(exp, graph());
+    }
     run.hold = 0;
     if (isOn(exp.id)) { log(typeof exp.on === 'function' ? exp.on(MISSIONS[S.mission].qps * exp.factor) : exp.on, exp.onTone); if (!run.playing) togglePlay(); }
     else log(exp.off, 'ok');
