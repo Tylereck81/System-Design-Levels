@@ -111,6 +111,31 @@ test.describe('Level 1 · quiz', () => {
 });
 
 test.describe('Level 1 · robustness', () => {
+  test('changing the design on another mission resets an unfinished mission\'s check', async ({ page }) => {
+    await freshPage(page, '#build');
+    await unlockMissions(page, 2);
+    const ids = await buildBasic(page);
+    // Mission 3: estimate, scale both tiers to L, hold the targets.
+    await page.fill('#estIn', '463');
+    await page.click('#estBtn');
+    await page.evaluate(() => { for (const n of window.__sdl.S.nodes) { if (n.size) n.size = 'L'; if (n.type === 'db') n.kind = 'sql'; } window.__sdl.afterDesignChange(); });
+    await page.click('#playBtn');
+    await fastForward(page, 5);
+    expect(await state(page, () => window.__sdl.S.verified[2])).toBe(true);
+    // Switch to Mission 1 and break the design there: NoSQL on a small database.
+    await page.evaluate(() => window.__sdl.switchMission(0));
+    await tap(page, `[data-node="${ids.db}"] .node-box`);
+    await page.click('#insp .seg.two button:nth-child(2)'); // NoSQL
+    await page.click('#insp .seg:not(.two) button:nth-child(1)'); // S
+    expect(await state(page, () => window.__sdl.S.verified[2])).toBe(false);
+    // Back on Mission 3, running both experiments must not complete it.
+    await page.evaluate(() => window.__sdl.switchMission(2));
+    await page.click('#playBtn');
+    await page.click('#crashBtn'); await fastForward(page, 2); await page.click('#crashBtn');
+    await page.click('#spikeBtn'); await fastForward(page, 2); await page.click('#spikeBtn');
+    expect(await state(page, () => window.__sdl.S.done[2])).toBe(false);
+  });
+
   test('crashing with no web server does not freeze the simulation', async ({ page }) => {
     const errors = trackErrors(page);
     await freshPage(page, '#build');
