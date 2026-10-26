@@ -94,7 +94,7 @@ test.describe('Level 1 · quiz', () => {
 
   test('answer key is balanced and not guessable by length', async ({ page }) => {
     await freshPage(page);
-    const source = await (await page.request.get('/js/main.js')).text();
+    const source = await (await page.request.get('/levels/level-01.js')).text();
     const questions = [...source.matchAll(/o: \[(.*?)\], a: (\d)/g)];
     expect(questions).toHaveLength(10);
     const counts = [0, 0, 0, 0];

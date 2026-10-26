@@ -25,6 +25,7 @@ npm test
 | Path | What it is |
 |---|---|
 | `index.html` | The page structure (currently Level 1) |
-| `js/main.js` | The game code, loaded as an ES module |
+| `js/main.js` | The game engine and UI, loaded as an ES module |
+| `levels/level-01.js` | Everything specific to Level 1: components, rules, missions, quiz and text |
 | `css/styles.css` | All styles: design tokens, light and dark themes, layout |
 | `tests/` | Playwright tests (also run on GitHub on every push) |
