@@ -296,14 +296,12 @@ test.describe('Level 1 · teaching feedback', () => {
     await page.click('#insp .seg.two button:first-child'); // SQL
     await page.click('#playBtn');
     await fastForward(page, 2);
-    await page.waitForTimeout(600);
-    expect(await logText(page)).toContain('misses the 150 ms goal');
+    await expect(page.locator('#log')).toContainText('misses the 150 ms goal'); // written by the live display loop
     await tap(page, `[data-node="${ids.db}"] .node-box`);
     await page.click('#insp .seg.two button:nth-child(2)'); // NoSQL
     await fastForward(page, 1);
-    await page.waitForTimeout(600);
     expect((await model(page)).served).toBeLessThan(99);
-    expect(await logText(page)).toContain('lookups');
+    await expect(page.locator('#log')).toContainText('lookups');
   });
 
   test('legend, story numbers and limit messages are right', async ({ page }) => {

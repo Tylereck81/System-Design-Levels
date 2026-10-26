@@ -35,8 +35,8 @@ test.describe('Experiments', () => {
     await page.click('#exp-crash');
     await fastForward(page, 3); // the only web server is down: 0% served, so it never counts
     expect(await state(page, () => window.__sdl.S.exp.crash)).toBe(false);
-    await page.evaluate(() => window.__sdl.step(0.2)); // let the log catch up
-    expect(await logText(page)).toContain('Only 0% served.');
+    // The live display loop (real time, not simulated steps) writes this message, so wait for it.
+    await expect(page.locator('#log')).toContainText('Only 0% served.');
     await patchCrash(page, `crash.expect = () => true;`);
     await fastForward(page, 2);
     expect(await state(page, () => window.__sdl.S.exp.crash)).toBe(true);
