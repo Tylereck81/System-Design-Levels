@@ -2,7 +2,7 @@
 import { fmt } from '../format.js';
 import { $, el } from '../dom.js';
 import { TARGET_MS, TYPES, TXT, S, run, byId } from '../state.js';
-import { T } from '../engine/model.js';
+import { T } from '../engine/components.js';
 
 export let logLines = [];
 

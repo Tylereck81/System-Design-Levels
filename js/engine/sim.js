@@ -1,6 +1,6 @@
 // Simulation loop: stepping, target checks and the animation frame.
 import { MISSIONS, TXT, HOLD, S, run, save } from '../state.js';
-import { model } from './model.js';
+import { model, sampleRoute } from './model.js';
 import { tagsG, paintLive } from './canvas.js';
 import { dots, spawn, showIpTag, moveDots, setDots } from './dots.js';
 import { renderHUD, setBanner } from '../ui/hud.js';
@@ -21,23 +21,20 @@ export function step(dt) {
   run.t += dt;
   const m = model(); run.mdl = m; const g = m.g;
 
-  if (g.hasDNS && g.web && !run.dnsDone && !run.dnsFlying && !run.crash) {
+  if (g.hasDNS && g.entry.length && !run.dnsDone && !run.dnsFlying && !run.crash) {
     run.dnsFlying = true;
     const d = spawn([g.users.id, g.dns.id, g.users.id], 'dns', -1);
     d.onDone = () => { run.dnsDone = true; run.dnsFlying = false; showIpTag(g.users); log(TXT.dnsAnswered, ''); };
   }
   if (!g.hasDNS) run.dnsDone = false;
 
-  if (g.users && g.web && g.hasDNS && (!m.issue || run.crash) && (run.dnsDone || run.crash)) {
+  if (g.users && g.ready && (!m.issue || run.crash) && (run.dnsDone || run.crash || !g.needsDns)) {
     const rate = Math.max(2.5, Math.min(12, m.qps / 14));
     run.spawnAcc += dt * rate;
     while (run.spawnAcc >= 1) {
       run.spawnAcc -= 1;
       if (dots.length > 90) break;
-      const route = g.db ? [g.users.id, g.web.id, g.db.id, g.web.id, g.users.id] : [g.users.id, g.web.id, g.users.id];
-      let failAt = -1;
-      if (run.crash || Math.random() < m.dropW) failAt = 1;
-      else if (g.db && Math.random() < m.dropD) failAt = 2;
+      const { route, failAt } = sampleRoute(m);
       spawn(route, 'req', failAt);
     }
   }
@@ -53,7 +50,7 @@ export function step(dt) {
     run.hold = allOk ? run.hold + dt : 0;
     if (run.hold >= HOLD) { S.verified[i] = true; log(`Targets held for ${HOLD} seconds.`, 'ok'); checkDone(); save(); renderMission(); }
   }
-  const built = !!(g.web && g.hasDNS);
+  const built = g.ready;
   for (const k of ['crash', 'spike']) {
     if (run[k] && built && M.goals.some(x => x.id === k) && !S.exp[k]) {
       run.expT[k] += dt;

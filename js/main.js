@@ -1,7 +1,7 @@
 // Boot, tab routing and the glue that re-renders after a change.
 import { $ } from './dom.js';
 import { MISSIONS, QUIZ, PASS, fresh, S, connectFrom, run, load, save, byId, setS, setConnectFrom } from './state.js';
-import { model } from './engine/model.js';
+import { model, sampleRoute } from './engine/model.js';
 import { renderCanvas } from './engine/canvas.js';
 import { renderPalette, addNode, tryConnect } from './engine/interaction.js';
 import { step, frame } from './engine/sim.js';
@@ -75,4 +75,4 @@ function start(data) {
 }
 window.claude?.hot?.snapshot?.(() => ({ S }));
 window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
-window.__sdl = { get S() { return S; }, run, model, addNode, tryConnect, setTab, switchMission, togglePlay, step, afterChange, afterDesignChange };
+window.__sdl = { get S() { return S; }, run, model, sampleRoute, addNode, tryConnect, setTab, switchMission, togglePlay, step, afterChange, afterDesignChange };

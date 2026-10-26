@@ -34,7 +34,7 @@ export function togglePlay() {
   paintControls(); setBanner(); renderInspector(); paintGoals(); renderHUD();
 }
 $('playBtn').onclick = togglePlay;
-export const designReady = () => { const g = graph(); return !!(g.web && g.hasDNS); };
+export const designReady = () => graph().ready;
 $('crashBtn').onclick = () => {
   if (!run.crash && !designReady()) { log(TXT.crashNeedsDesign, 'warn'); return; }
   run.crash = !run.crash; run.hold = 0;

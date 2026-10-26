@@ -2,6 +2,7 @@
 import { svgEl } from '../dom.js';
 import { TXT, run, byId } from '../state.js';
 import { NW, NH, dotsG, tagsG, edgePoint } from './canvas.js';
+import { roleOf } from './components.js';
 
 export let dots = [];
 
@@ -21,7 +22,7 @@ export function segDur(d) {
 }
 export function dwellFor(id, forward) {
   const n = byId(id); if (!n) return 0;
-  if (n.type === 'dns') return 0.25;
+  if (roleOf(n) === 'resolver') return 0.25;
   if (!forward) return 0.02;
   const st = run.mdl && run.mdl.node[id];
   if (!st) return 0.05;

@@ -1,6 +1,6 @@
 // Level data, game state and saved progress.
 import level from '../levels/level-01.js';
-import { SIZES } from './engine/model.js';
+import { SIZES, COMPONENTS } from './engine/components.js';
 
 export const TARGET_MS = level.targets.latencyMs;
 export const TARGET_SERVED = level.targets.servedPct;
@@ -58,7 +58,7 @@ export function load(data) {
   S.quiz = src.v === level.saveVersion ? q : {}; // saved answers from another quiz version no longer line up
   S.v = level.saveVersion;
   if (!['lesson', 'build', 'quiz'].includes(S.tab)) S.tab = 'lesson';
-  for (const n of S.nodes) { if ((n.type === 'web' || n.type === 'db') && !n.size) n.size = 'S'; if (n.type === 'db' && !['sql', 'nosql'].includes(n.kind)) n.kind = null; }
+  for (const n of S.nodes) { const c = COMPONENTS[n.type]; if (c.sized && !n.size) n.size = 'S'; if (c.kinds && !Object.keys(c.kinds).includes(n.kind)) n.kind = null; }
   const maxId = Math.max(0, ...S.nodes.concat(S.edges).map(x => parseInt(String(x.id).replace(/\D/g, ''), 10) || 0));
   S.seq = Math.max(Number.isInteger(src.seq) ? src.seq : 1, maxId + 1);
 }
