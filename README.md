@@ -24,6 +24,7 @@ npm test
 
 | Path | What it is |
 |---|---|
-| `index.html` | The game: page structure and script (currently Level 1) |
+| `index.html` | The page structure (currently Level 1) |
+| `js/main.js` | The game code, loaded as an ES module |
 | `css/styles.css` | All styles: design tokens, light and dark themes, layout |
 | `tests/` | Playwright tests (also run on GitHub on every push) |
