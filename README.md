@@ -24,5 +24,6 @@ npm test
 
 | Path | What it is |
 |---|---|
-| `index.html` | The game (currently Level 1 in a single file) |
+| `index.html` | The game: page structure and script (currently Level 1) |
+| `css/styles.css` | All styles: design tokens, light and dark themes, layout |
 | `tests/` | Playwright tests (also run on GitHub on every push) |
