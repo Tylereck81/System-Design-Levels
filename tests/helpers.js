@@ -12,6 +12,12 @@ export async function freshPage(page, hash = '') {
   await page.waitForFunction(() => !!window.__sdl);
 }
 
+/** Reload the page and wait until the game has started (it loads its level file first). */
+export async function reloadGame(page) {
+  await page.reload();
+  await page.waitForFunction(() => !!window.__sdl);
+}
+
 /** Advance the simulation by `secs` simulated seconds without waiting in real time. */
 export async function fastForward(page, secs) {
   await page.evaluate((n) => { for (let i = 0; i < n; i++) window.__sdl.step(0.02); }, Math.round(secs * 50));

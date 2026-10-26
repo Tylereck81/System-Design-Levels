@@ -1,5 +1,5 @@
 // Level data, game state and saved progress.
-import level from '../levels/level-01.js';
+import { level } from './level.js';
 import { SIZES, COMPONENTS } from './engine/components.js';
 
 export const TARGET_MS = level.targets.latencyMs;

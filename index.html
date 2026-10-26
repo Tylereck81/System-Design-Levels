@@ -15,7 +15,7 @@
 <div class="app" id="app">
   <header class="top">
     <div class="brand">System Design Levels</div>
-    <div class="lvl"><span class="chip">Level 1 / 21</span><span class="lvl-name">One server to two tiers</span></div>
+    <div class="lvl"><span class="chip" id="lvlChip"></span><span class="lvl-name" id="lvlName"></span></div>
     <nav class="tabs" role="tablist" aria-label="Level sections">
       <button role="tab" id="tab-lesson" data-tab="lesson" aria-controls="view-lesson">Lesson</button>
       <button role="tab" id="tab-build" data-tab="build" aria-controls="view-build">Build <span class="tab-meta" id="buildMeta" title="Missions completed">0/3</span></button>
@@ -26,142 +26,13 @@
   <main>
   <!-- ================= LESSON ================= -->
   <div class="lesson" id="view-lesson" role="tabpanel" aria-labelledby="tab-lesson">
-    <p class="label">Level 1 · Foundations</p>
-    <h1>One server to two tiers</h1>
-    <p class="lede">Every large system starts as one server. In this level you build that server, follow a request through it, split off the database, and scale it up for launch day. Then you break it, to see why Level 2 exists.</p>
-    <div class="goals-box">
-      <div><b>You will learn</b>What happens between typing a URL and seeing a page.</div>
-      <div><b>You will decide</b>SQL or NoSQL, and how big each server must be.</div>
-      <div><b>You will estimate</b>Peak requests per second from daily users.</div>
-    </div>
-
-    <section>
-      <h2>What happens when someone opens your site</h2>
-      <p class="src">DNS · RFC 1034, 1035 · HTTP · RFC 9110</p>
-      <p>Start simple: one server runs everything, including the web app, the database and the cache. Follow one request:</p>
-      <figure class="fig"><svg id="figFlow" viewBox="0 0 640 250" role="img" aria-label="Request flow: user asks DNS, gets an IP, sends HTTP to the web server, receives HTML or JSON"></svg><figcaption>Request flow</figcaption></figure>
-      <ol>
-        <li>The user goes to <code>api.example.com</code>. The browser or app asks <b>DNS</b> where that is. DNS is usually a paid third-party service, not hosted on your servers.</li>
-        <li>DNS returns an <b>IP address</b>, for example <code>203.0.113.42</code>.</li>
-        <li>The device sends <b>HTTP requests</b> directly to that IP: your web server. DNS is not on this path; it only answered the question.</li>
-        <li>The web server returns an <b>HTML page</b> or a <b>JSON response</b> for rendering.</li>
-      </ol>
-      <p>Devices keep the DNS answer for a while, so the lookup does not repeat on every request.</p>
-    </section>
-
-    <section>
-      <h2>Two kinds of clients</h2>
-      <p class="src">HTTP APIs · JSON · RFC 8259</p>
-      <ul>
-        <li><b>Browser:</b> your server code (in Go, Python, Java…) does the work and returns <b>HTML</b>. JavaScript in the page draws it and handles clicks.</li>
-        <li><b>Mobile app:</b> already has its screens built in, so it only asks for data. The server answers with <b>JSON</b>: plain text, easy to read in any language.</li>
-      </ul>
-<pre class="code">GET /products/42   → the app asks for product 42
-{
-  "id": 42,
-  "name": "Trail running shoes",
-  "priceCents": 8999,
-  "inStock": true
-}</pre>
-      <div class="note"><b>Front end, back end, web server.</b> The front end runs on the user's device: HTML and JavaScript in the browser, or the mobile app. The back end is your code running on servers. This game calls that machine the <b>web server</b>; you will also hear <i>app server</i> or <i>API server</i>. In this game they are the same box.</div>
-    </section>
-
-    <section>
-      <h2>Split the web tier from the data tier</h2>
-      <p class="src">Two-tier architecture</p>
-      <p>With more users, your code and your data start fighting over the same CPU and memory. Give each its own machine: web servers answer requests (the <b>web tier</b>) and a database server keeps the data (the <b>data tier</b>). Now each tier can <b>scale independently</b>: upgrade the database and leave the web server alone, or the reverse.</p>
-      <figure class="fig"><svg id="figTiers" viewBox="0 0 640 270" role="img" aria-label="Users send HTTP to the web server in the web tier, which reads and writes the database in the data tier"></svg><figcaption>Web tier and data tier</figcaption></figure>
-    </section>
-
-    <section>
-      <h2>Which database?</h2>
-      <p class="src">Choosing a database · PostgreSQL, Redis, MongoDB, Cassandra, Neo4j docs</p>
-      <div class="tbl-wrap"><table class="t">
-        <thead><tr><th><span class="sr-only">Aspect</span></th><th>Relational (SQL, RDBMS)</th><th>Non-relational (NoSQL)</th></tr></thead>
-        <tbody>
-          <tr><td><b>Examples</b></td><td>PostgreSQL, MySQL, SQL Server</td><td>Redis (key-value), MongoDB (document), Cassandra (wide-column), Neo4j (graph)</td></tr>
-          <tr><td><b>Data model</b></td><td>Tables with a fixed schema</td><td>Four families: key-value, document, wide-column and graph</td></tr>
-          <tr><td><b>Joins</b></td><td>Yes, across tables in one query</td><td>Usually not: the app fetches each piece itself</td></tr>
-        </tbody>
-      </table></div>
-      <p>Start with relational. Joins, transactions and decades of tooling cover most apps, and one well-tuned server goes a long way. NoSQL earns its place when:</p>
-      <ul>
-        <li>you look items up by key and need a few milliseconds or less, at very high request rates;</li>
-        <li>records have no fixed shape, or there are few links between them;</li>
-        <li>you always read and write a whole object at once, such as a user's settings;</li>
-        <li>the data grows past what one relational setup can hold, and you need to spread it across many machines.</li>
-      </ul>
-    </section>
-
-    <section>
-      <h2>Scale up or scale out</h2>
-      <p class="src">Scaling up vs scaling out</p>
-      <p>A server at its limit makes every user wait, then starts refusing connections. You have two ways out.</p>
-      <ul>
-        <li><b>Vertical scaling (scale up):</b> move to a machine with more CPU and RAM. Nothing in your design changes, which makes it the right first move while traffic is small.</li>
-        <li><b>Horizontal scaling (scale out):</b> add more servers to a pool. This is Level 2.</li>
-      </ul>
-      <p>Scaling up runs into two problems:</p>
-      <ol>
-        <li><b>A ceiling.</b> The biggest machine you can rent is still one machine, and the largest sizes cost the most per unit of capacity.</li>
-        <li><b>No failover.</b> One server is one point of failure. When it stops, the whole site stops.</li>
-      </ol>
-    </section>
-
-    <section>
-      <h2>Why a busy server gets slow</h2>
-      <p class="src">How this game simulates load · standard queueing result (M/M/1)</p>
-      <p>Each server in the game has a capacity in requests per second. Its utilization is <b>ρ = load ÷ capacity</b>. Requests wait in line behind each other, so the time per request is <b>base time ÷ (1 − ρ)</b>. Above 100%, the extra requests fail.</p>
-      <figure class="fig"><svg id="figQueue" viewBox="0 0 640 250" role="img" aria-label="Response time multiplier rises slowly until about 70% utilization, then sharply: 2 times at 50%, 4 times at 75%, 10 times at 90%"></svg><figcaption>Time per request vs utilization</figcaption></figure>
-      <p>The lesson for interviews: a system gets slow well before it falls over. Keep important servers comfortably below full.</p>
-      <div class="tbl-wrap"><table class="t">
-        <thead><tr><th>Server size (game)</th><th>Capacity</th><th>Cost / month</th></tr></thead>
-        <tbody>
-          <tr><td>S · 2 vCPU</td><td class="n">200 req/s</td><td class="n">$40</td></tr>
-          <tr><td>M · 4 vCPU</td><td class="n">400 req/s</td><td class="n">$90</td></tr>
-          <tr><td>L · 8 vCPU</td><td class="n">800 req/s</td><td class="n">$200</td></tr>
-          <tr><td>XL · 16 vCPU (largest)</td><td class="n">1,600 req/s</td><td class="n">$450</td></tr>
-        </tbody>
-      </table></div>
-      <p class="assume">Game assumptions: web server work 20 ms, database query 10 ms (about one disk seek), internet round trip 40 ms, round trip inside the data center 0.5 ms, DNS $5/month. A single server running both code and data handles half its capacity, because every request needs both. A NoSQL database cannot join, so a request that needs a user, an order and its products costs 3 lookups (3 ms each) instead of one SQL query.</p>
-    </section>
-
-    <section>
-      <h2>Numbers to carry into the interview</h2>
-      <p class="src">Latency · Jeff Dean, "Numbers everyone should know" (2009) · Availability · arithmetic</p>
-      <div class="tbl-wrap"><table class="t">
-        <thead><tr><th>Operation</th><th>Time</th></tr></thead>
-        <tbody>
-          <tr><td>Main memory reference</td><td class="n">100 ns</td></tr>
-          <tr><td>Round trip within the same data center</td><td class="n">500 µs</td></tr>
-          <tr><td>Disk seek</td><td class="n">10 ms</td></tr>
-          <tr><td>Packet California → Netherlands → California</td><td class="n">150 ms</td></tr>
-        </tbody>
-      </table></div>
-      <p>A disk seek takes as long as 100,000 memory reads, so keep hot data in memory. Crossing an ocean costs more than ten disk seeks, so keep users close to their data.</p>
-      <p><b>Estimating QPS.</b> Queries per second = daily active users × requests per user per day ÷ 86,400 seconds. Peak is about 2 × the average. Example: a photo app with 40 million daily users, each loading 30 pages a day: 40M × 30 ÷ 86,400 ≈ <b>13,900 QPS</b>, peak ≈ <b>28,000</b>.</p>
-      <p>Round hard: for a first guess, call a day 100,000 seconds (the answer comes out about 14% low). Say each assumption out loud, and put a unit on every number: "36 TB", never just "36".</p>
-      <p><b>Availability.</b> 99.9% sounds high but allows 1.44 minutes of downtime a day, or 8.77 hours a year. Each extra nine cuts the allowed downtime by 10×: 99.99% is 52.6 minutes a year.</p>
-    </section>
-
-    <section>
-      <h2>How each mission maps to the interview</h2>
-      <p class="src">Interview loop · times for a 45-minute interview (formats vary by company)</p>
-      <div class="steps4">
-        <div><span>Step 1 · 5–8 min</span><b>Scope it</b>Read the brief. Estimate traffic.</div>
-        <div><span>Step 2 · 10–12 min</span><b>Sketch it</b>Drag and connect components.</div>
-        <div><span>Step 3 · 15–20 min</span><b>Go deep</b>Press play, tune sizes and types.</div>
-        <div><span>Step 4 · 5 min</span><b>Stress it</b>Break it and name the bottleneck.</div>
-      </div>
-      <p>Do not start drawing in the first minute. A design for the wrong problem is a red flag, however good it is. Ask which features matter, how many people will use it, how fast they will grow, and what technology already exists.</p>
-    </section>
 
     <div class="lesson-cta"><button class="btn primary" id="startBuild">Start mission 1 <span aria-hidden="true">→</span></button></div>
   </div>
 
   <!-- ================= BUILD ================= -->
   <section id="view-build" role="tabpanel" aria-labelledby="tab-build" hidden>
-    <h1 class="sr-only">Build: Level 1 missions</h1>
+    <h1 class="sr-only" id="buildTitle"></h1>
     <div class="build-grid">
       <button class="mstrip" id="mstrip" type="button"></button>
 
@@ -218,7 +89,7 @@
 
   <!-- ================= QUIZ ================= -->
   <section class="quiz" id="view-quiz" role="tabpanel" aria-labelledby="tab-quiz" hidden>
-    <p class="label">Level 1 quiz · 10 questions · 8 to pass</p>
+    <p class="label" id="quizLabel"></p>
     <h1>Check what stuck</h1>
     <p class="lede">Questions cover this level's lesson. Choose an answer, then check it to see whether it is right and why.</p>
     <div class="qscore"><span id="qScoreTxt">0 answered · 0 correct</span><span class="bar"><i id="qBar"></i></span></div>
@@ -228,7 +99,7 @@
   </main>
 </div>
 
-<script type="module" src="js/main.js"></script>
+<script type="module" src="js/boot.js"></script>
 
 </body>
 </html>

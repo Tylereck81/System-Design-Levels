@@ -1,5 +1,5 @@
 // Quiz tab.
-import level from '../../levels/level-01.js';
+import { level } from '../level.js';
 import { $, el } from '../dom.js';
 import { QUIZ, PASS, S, qsel, save } from '../state.js';
 import { renderTabs, setTab } from '../main.js';

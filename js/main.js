@@ -12,6 +12,9 @@ import { paintControls, togglePlay } from './ui/controls.js';
 import { log } from './ui/log.js';
 import { drawFigures } from './ui/lesson.js';
 import { quizScore, renderQuiz } from './ui/quiz.js';
+import { renderShell } from './ui/shell.js';
+import { entry } from './level.js';
+import { parseRoute, routeHash } from './route.js';
 
 document.documentElement.lang = 'en';
 
@@ -34,7 +37,7 @@ export function setTab(t, focusTab) {
   S.tab = t;
   if (t !== 'build' && run.playing) { run.playing = false; paintControls(); }
   renderTabs(); save();
-  try { history.replaceState(null, '', '#' + t); } catch (e) { /* ignore */ }
+  try { history.replaceState(null, '', routeHash(entry.id, t)); } catch (e) { /* ignore */ }
   if (t === 'build') { renderCanvas(true); renderHUD(); }
   if (focusTab) $('tab-' + t).focus();
   window.scrollTo({ top: 0 });
@@ -48,7 +51,11 @@ document.querySelector('.tabs').addEventListener('keydown', (e) => {
   if (e.key === 'Home') { e.preventDefault(); setTab('lesson', true); }
   if (e.key === 'End') { e.preventDefault(); setTab('quiz', true); }
 });
-window.addEventListener('hashchange', () => { const h = location.hash.slice(1); if (TABS.includes(h) && h !== S.tab) setTab(h); });
+window.addEventListener('hashchange', () => {
+  const r = parseRoute(location.hash);
+  if (r.level !== entry.id) { location.reload(); return; } // another level: start again with its file
+  if (TABS.includes(r.tab) && r.tab !== S.tab) setTab(r.tab);
+});
 
 export function afterChange(forceFit) {
   if (connectFrom && !byId(connectFrom)) setConnectFrom(null);
@@ -65,8 +72,9 @@ export function afterDesignChange() {
 
 function start(data) {
   try { load(data); } catch (e) { setS(fresh()); }
-  const h = (location.hash || '').slice(1);
+  const h = parseRoute(location.hash).tab;
   if (TABS.includes(h)) S.tab = h;
+  renderShell();
   drawFigures();
   run.mdl = model();
   renderPalette(); renderCanvas(true); renderInspector(); renderHUD(); renderMission(); renderQuiz(); renderTabs();
