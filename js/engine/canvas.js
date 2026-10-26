@@ -4,6 +4,7 @@ import { $, svgEl } from '../dom.js';
 import { TYPES, OK_PAIRS, pairKey, S, sel, connectFrom, refocus, run, byId, setRefocus } from '../state.js';
 import { SIZES, COMPONENTS, runsAlone } from './components.js';
 import { drawIcon } from './icons.js';
+import { crashing } from './experiments.js';
 
 export const VW = 760, VH = 520;
 export let NW = 188, NH = 60, compact = false, curView = null;
@@ -108,7 +109,7 @@ export function paintLive() {
   for (const n of S.nodes) {
     const ref = nodeRefs[n.id]; if (!ref) continue;
     const st = m && run.everPlayed ? m.node[n.id] : null;
-    const down = !!(run.crash && m && m.g.web && m.g.web.id === n.id && run.everPlayed);
+    const down = !!(run.everPlayed && m && crashing() && m.down.has(n.id));
     ref.g.classList.toggle('down', down);
     ref.downG.setAttribute('visibility', down ? 'visible' : 'hidden');
     if (st && !st.down) {

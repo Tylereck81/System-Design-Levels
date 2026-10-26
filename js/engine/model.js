@@ -1,6 +1,7 @@
 // Simulation model: load, latency, failures and cost, for any graph of components.
 import { MISSIONS, TXT, PALETTE, S, run, byId } from '../state.js';
 import { COMPONENTS, T, roleOf, isServer, costOf, serverSpec } from './components.js';
+import { activeExps, downIds, trafficFactor } from './experiments.js';
 
 export { SIZES, T } from './components.js';
 
@@ -32,11 +33,6 @@ export function graph() {
 }
 export const qmul = (u) => (u >= 0.96 ? 25 : 1 / (1 - u));
 
-/** Servers that are down. Until experiments can target any component, a crash takes down the first web server. */
-function downSet(g) {
-  return new Set(run.crash && g.web ? [g.web.id] : []);
-}
-
 /** Every server reachable from Users, in an order where each comes after all servers that send to it. */
 function topoOrder(entry) {
   const seen = new Set(), stack = [...entry];
@@ -61,14 +57,15 @@ function split(group, flow, down) {
 export function model() {
   const g = graph();
   const M = MISSIONS[S.mission];
-  const base = M.qps * (run.spike ? 10 : 1);
+  const base = M.qps * trafficFactor();
   const qps = base * (1 + 0.02 * Math.sin(run.t * 1.7) + 0.01 * Math.sin(run.t * 4.1));
-  const r = { qps, base, servedPct: 0, latency: null, cost: g.cost, spof: 0, node: {}, issue: null, g };
+  const r = { qps, base, servedPct: 0, latency: null, cost: g.cost, spof: 0, node: {}, issue: null, g, down: downIds() };
   if (!g.entry.length) { r.issue = TXT.noWeb; return r; }
   if (g.needsDns && !g.hasDNS) { r.issue = TXT.noDns; return r; }
   r.spof = countSpofs(g);
-  const down = downSet(g);
-  if (run.crash) r.issue = TXT.webDown;
+  const down = r.down;
+  const crash = activeExps().find(e => e.kind === 'crash' && e.issue);
+  if (crash) r.issue = crash.issue;
 
   // 1. Load: each server serves at most its capacity and passes on only what it served.
   const load = new Map(), served = new Map();

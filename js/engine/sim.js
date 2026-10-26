@@ -1,6 +1,9 @@
 // Simulation loop: stepping, target checks and the animation frame.
-import { MISSIONS, TXT, HOLD, S, run, save } from '../state.js';
+import { MISSIONS, TXT, HOLD, EXPERIMENTS, S, run, save } from '../state.js';
+
+const OBSERVE_SECS = 1.5; // an experiment counts once it has run this long
 import { model, sampleRoute } from './model.js';
+import { anyOn, crashing } from './experiments.js';
 import { tagsG, paintLive } from './canvas.js';
 import { dots, spawn, showIpTag, moveDots, setDots } from './dots.js';
 import { renderHUD, setBanner } from '../ui/hud.js';
@@ -11,8 +14,8 @@ import { log, observe } from '../ui/log.js';
 import { renderTabs } from '../main.js';
 
 export function stopRun(full) {
-  run.playing = false; run.crash = false; run.spike = false; run.hold = 0; run.spawnAcc = 0;
-  run.expT = { crash: 0, spike: 0 }; run.active = new Set();
+  run.playing = false; run.on = {}; run.hold = 0; run.spawnAcc = 0;
+  run.expT = {}; run.active = new Set();
   if (full) { run.t = 0; run.dnsDone = false; run.dnsFlying = false; run.everPlayed = false; run.mdl = null; }
   dots.forEach(d => d.c.remove()); setDots([]); tagsG.textContent = '';
 }
@@ -21,14 +24,14 @@ export function step(dt) {
   run.t += dt;
   const m = model(); run.mdl = m; const g = m.g;
 
-  if (g.hasDNS && g.entry.length && !run.dnsDone && !run.dnsFlying && !run.crash) {
+  if (g.hasDNS && g.entry.length && !run.dnsDone && !run.dnsFlying && !crashing()) {
     run.dnsFlying = true;
     const d = spawn([g.users.id, g.dns.id, g.users.id], 'dns', -1);
     d.onDone = () => { run.dnsDone = true; run.dnsFlying = false; showIpTag(g.users); log(TXT.dnsAnswered, ''); };
   }
   if (!g.hasDNS) run.dnsDone = false;
 
-  if (g.users && g.ready && (!m.issue || run.crash) && (run.dnsDone || run.crash || !g.needsDns)) {
+  if (g.users && g.ready && (!m.issue || crashing()) && (run.dnsDone || crashing() || !g.needsDns)) {
     const rate = Math.max(2.5, Math.min(12, m.qps / 14));
     run.spawnAcc += dt * rate;
     while (run.spawnAcc >= 1) {
@@ -41,7 +44,7 @@ export function step(dt) {
 
   const M = MISSIONS[S.mission], i = S.mission;
   if (!S.verified[i]) {
-    const allOk = !run.crash && !run.spike && M.goals.every(goal => {
+    const allOk = !anyOn() && M.goals.every(goal => {
       if (goal.type === 'exp') return true;
       if (goal.type === 'gate') return S.est;
       if (goal.type === 'struct') return goal.test(g);
@@ -51,12 +54,13 @@ export function step(dt) {
     if (run.hold >= HOLD) { S.verified[i] = true; log(`Targets held for ${HOLD} seconds.`, 'ok'); checkDone(); save(); renderMission(); }
   }
   const built = g.ready;
-  for (const k of ['crash', 'spike']) {
-    if (run[k] && built && M.goals.some(x => x.id === k) && !S.exp[k]) {
-      run.expT[k] += dt;
-      if (run.expT[k] >= 1.5) {
+  for (const exp of EXPERIMENTS) {
+    const k = exp.id;
+    if (run.on[k] && built && M.goals.some(x => x.id === k) && !S.exp[k]) {
+      run.expT[k] = (run.expT[k] || 0) + dt;
+      if (run.expT[k] >= OBSERVE_SECS) {
         S.exp[k] = true;
-        log(k === 'crash' ? TXT.crashObserved : TXT.spikeObserved, 'ok');
+        log(exp.observed, 'ok');
         checkDone(); save(); renderMission();
       }
     }

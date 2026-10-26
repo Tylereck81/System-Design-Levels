@@ -6,6 +6,7 @@ import { SIZES, T, COMPONENTS, roleOf, runsAlone } from '../engine/components.js
 import { tryConnect, disconnect, removeSel } from '../engine/interaction.js';
 import { log } from './log.js';
 import { afterDesignChange } from '../main.js';
+import { trafficFactor } from '../engine/experiments.js';
 
 export function renderInspector() {
   const box = $('insp'); box.textContent = '';
@@ -59,7 +60,7 @@ export function renderInspector() {
   if (roleOf(n) === 'client') {
     const M0 = MISSIONS[S.mission], hid = M0.gate && !S.est;
     const live = el('div', 'live');
-    live.innerHTML = `<div><b>${hid ? '?' : fmt(M0.qps * (run.spike ? 10 : 1))}</b><span>req/s at peak</span></div><div><b>${T.rtt} ms</b><span>internet round trip</span></div>`;
+    live.innerHTML = `<div><b>${hid ? '?' : fmt(M0.qps * trafficFactor())}</b><span>req/s at peak</span></div><div><b>${T.rtt} ms</b><span>internet round trip</span></div>`;
     box.appendChild(live);
   }
   // connections (keyboard- and touch-friendly alternative to dragging)

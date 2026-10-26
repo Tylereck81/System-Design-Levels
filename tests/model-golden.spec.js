@@ -19,7 +19,9 @@ async function measure(page, { mission, web, db = null, kind = 'sql', dns = true
     if (o.dns) { S.nodes.push({ id: 'd', type: 'dns', x: 650, y: 76 }); S.edges.push({ id: 'e1', from: 'u', to: 'd' }); }
     if (o.hasWeb) { S.nodes.push({ id: 'w', type: 'web', x: 380, y: 262, size: o.web }); S.edges.push({ id: 'e2', from: 'u', to: 'w' }); }
     if (o.db) { S.nodes.push({ id: 'b', type: 'db', x: 380, y: 436, size: o.db, kind: o.kind }); S.edges.push({ id: 'e3', from: 'w', to: 'b' }); }
-    run.t = o.t; run.crash = o.crash; run.spike = o.spike;
+    run.t = o.t; run.on = {};
+    if (o.crash) run.on.crash = { node: 'w' };
+    if (o.spike) run.on.spike = {};
     const m = model();
     const node = (id) => m.node[id] ? { load: m.node[id].load, cap: m.node[id].cap, util: m.node[id].util, ms: m.node[id].ms, down: !!m.node[id].down } : null;
     return { qps: m.qps, base: m.base, served: m.servedPct, latency: m.latency, cost: m.cost, spof: m.spof, issue: m.issue, web: node('w'), db: node('b') };

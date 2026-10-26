@@ -104,28 +104,37 @@ export default {
     },
   ],
 
-  // Messages the engine shows for this level's design and experiments.
+  // Break-it experiments. kind 'crash' takes down the component `target` returns when it starts;
+  // kind 'spike' multiplies traffic by `factor`. Each counts once it has run for 1.5 simulated seconds.
+  experiments: [
+    {
+      id: 'crash', kind: 'crash', target: (g) => g.web,
+      label: 'Crash web server', labelOn: 'Restart web server',
+      needsDesign: 'Build the design first: connect Users to DNS and to a web server, then crash it.',
+      on: 'You pulled the plug on the web server.', onTone: 'bad',
+      off: 'Web server restarted.',
+      issue: 'The web server is down. With only one server, every request fails.',
+      observed: 'Observed: one server down means the whole site is down. No failover, no redundancy.',
+    },
+    {
+      id: 'spike', kind: 'spike', factor: 10,
+      label: '10× traffic', labelOn: 'Back to normal traffic', hud: '10× spike',
+      needsDesign: 'Build the design first: connect Users to DNS and to a web server, then send the spike.',
+      on: (qps) => `Traffic spike: ${fmt(qps)} req/s.`, onTone: 'warn',
+      off: 'Traffic back to normal.',
+      note: (base) => `At ${fmt(base)} req/s, even the largest size (XL, 1,600 req/s) is not enough. One machine can only grow so far: that is the hard limit of scaling up.`,
+      observed: 'Observed: no single machine can absorb 10× traffic. Scaling up has a hard limit.',
+    },
+  ],
+
+  // Messages the engine shows for this level's design.
   text: {
     noWeb: 'Users have nowhere to send requests. Connect Users to a web server.',
     noDns: 'Browsers cannot find example.com. Connect Users to DNS so the name resolves to your server\'s IP.',
-    webDown: 'The web server is down. With only one server, every request fails.',
     combinedOver: ' It runs code and data on one machine, so it only gets half its capacity.',
     nosqlOver: ' NoSQL cannot join, so each request costs 3 lookups.',
-    spikeNote: (base) => `At ${fmt(base)} req/s, even the largest size (XL, 1,600 req/s) is not enough. One machine can only grow so far: that is the hard limit of scaling up.`,
     dnsAnswered: 'DNS answered: example.com is at 203.0.113.42. The device caches it.',
     ipTag: 'IP 203.0.113.42 cached',
-    crashBtn: 'Crash web server',
-    crashBtnOn: 'Restart web server',
-    spikeBtn: '10× traffic',
-    spikeBtnOn: 'Back to normal traffic',
-    crashNeedsDesign: 'Build the design first: connect Users to DNS and to a web server, then crash it.',
-    spikeNeedsDesign: 'Build the design first: connect Users to DNS and to a web server, then send the spike.',
-    crashOn: 'You pulled the plug on the web server.',
-    crashOff: 'Web server restarted.',
-    spikeOn: (qps) => `Traffic spike: ${fmt(qps)} req/s.`,
-    spikeOff: 'Traffic back to normal.',
-    crashObserved: 'Observed: one server down means the whole site is down. No failover, no redundancy.',
-    spikeObserved: 'Observed: no single machine can absorb 10× traffic. Scaling up has a hard limit.',
     levelComplete: 'Level 1 complete. Take the quiz.',
   },
 

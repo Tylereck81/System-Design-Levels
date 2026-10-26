@@ -3,6 +3,7 @@ import { fmt } from '../format.js';
 import { $ } from '../dom.js';
 import { TARGET_MS, TARGET_SERVED, TYPES, MISSIONS, S, connectFrom, run, byId, setConnectFrom } from '../state.js';
 import { model } from '../engine/model.js';
+import { crashing, spikeHud } from '../engine/experiments.js';
 
 export function renderHUD() {
   const m = run.mdl || model();
@@ -10,7 +11,7 @@ export function renderHUD() {
   const played = run.everPlayed;
   const hidden = M.gate && !S.est;
   const cells = [
-    { l: 'Traffic', v: hidden ? '?' : fmt(m.base), u: 'req/s', t: hidden ? 'estimate first' : (run.spike ? '10× spike' : 'at peak'), s: '' },
+    { l: 'Traffic', v: hidden ? '?' : fmt(m.base), u: 'req/s', t: hidden ? 'estimate first' : (spikeHud() || 'at peak'), s: '' },
     { l: 'Served', v: played ? m.servedPct.toFixed(1) : '—', u: played ? '%' : '', t: `goal ≥ ${TARGET_SERVED}%`, s: played ? (m.servedPct >= TARGET_SERVED ? 'pass' : 'fail') : '' },
     { l: 'Response', v: played && m.latency != null ? fmt(m.latency) : '—', u: played && m.latency != null ? 'ms' : '', t: `goal < ${TARGET_MS} ms`, s: played ? (m.latency != null && m.latency < TARGET_MS ? 'pass' : 'fail') : '' },
     { l: 'Cost', v: '$' + fmt(m.cost), u: '/mo', t: M.budget ? 'budget $' + M.budget : 'no budget', s: M.budget ? (m.cost <= M.budget ? 'pass' : 'fail') : '' },
@@ -24,6 +25,6 @@ export function setBanner() {
   if (connectFrom && !byId(connectFrom)) setConnectFrom(null);
   if (connectFrom) { b.className = 'banner info'; b.textContent = `Tap another component to connect it to ${TYPES[byId(connectFrom).type].name}. Press Esc to cancel.`; b.hidden = false; return; }
   const m = run.mdl;
-  if (run.playing && m && m.issue && !run.crash) { b.className = 'banner'; b.textContent = m.issue; b.hidden = false; return; }
+  if (run.playing && m && m.issue && !crashing()) { b.className = 'banner'; b.textContent = m.issue; b.hidden = false; return; }
   b.hidden = true;
 }
