@@ -3,7 +3,7 @@ import { fmt } from '../format.js';
 import { $, el } from '../dom.js';
 import { TARGET_MS, TYPES, TXT, S, run, byId } from '../state.js';
 import { T } from '../engine/components.js';
-import { activeExps, anyOn, crashing } from '../engine/experiments.js';
+import { activeExps, anyOn, crashing, expectMet, textOf } from '../engine/experiments.js';
 
 export let logLines = [];
 
@@ -40,6 +40,7 @@ export function observe(m) {
     keys.set('slow' + sig, [`Response time ${fmt(m.latency)} ms misses the ${TARGET_MS} ms goal: ${parts.join(' + ')}. Busy servers make requests wait; give the slowest one more capacity.`, 'warn']);
   }
   for (const exp of activeExps()) if (exp.note && m.g.entry.length && !crashing()) keys.set('note-' + exp.id, [exp.note(m.base), 'bad']);
+  for (const exp of activeExps()) if (exp.notMet && !expectMet(exp, m)) keys.set('notmet-' + exp.id, [textOf(exp.notMet, m), 'warn']);
   for (const [k, [msg, tone]] of keys) if (!run.active.has(k)) log(msg, tone);
   const hadProblems = run.active.size > 0;
   run.active = new Set(keys.keys());

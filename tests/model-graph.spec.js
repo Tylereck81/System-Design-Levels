@@ -64,6 +64,15 @@ test.describe('Simulation model · any graph', () => {
     expect(r.latency).toBeNull();
   });
 
+  test('the crash message appears only when requests reach the crashed component', async ({ page }) => {
+    // A healthy peer takes over: nothing fails, so no "every request fails" message.
+    await design(page, { mission: 1, webs: { w1: 'S', w2: 'S' }, dbs: { b: 'M' }, links: [['w1', 'b'], ['w2', 'b']], crash: 'w1' });
+    expect(await page.evaluate(() => window.__sdl.model().issue)).toBeNull();
+    // The only web server is down: requests reach it and fail, so the message shows.
+    await design(page, { mission: 1, webs: { w: 'S' }, dbs: { b: 'M' }, links: [['w', 'b']], crash: 'w' });
+    expect(await page.evaluate(() => window.__sdl.model().issue)).toMatch(/down/);
+  });
+
   test('overloaded peers each drop their excess; failover halves what gets through', async ({ page }) => {
     // 463 req/s → 231.5 each on S (200 max): 400 served. After a crash, one S serves 200 of 463.
     await design(page, { mission: 2, webs: { w1: 'S', w2: 'S' }, dbs: { b: 'XL' }, links: [['w1', 'b'], ['w2', 'b']] });

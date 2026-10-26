@@ -1,7 +1,7 @@
 // Simulation model: load, latency, failures and cost, for any graph of components.
 import { MISSIONS, TXT, PALETTE, S, run, byId } from '../state.js';
 import { COMPONENTS, T, roleOf, isServer, costOf, serverSpec } from './components.js';
-import { activeExps, downIds, trafficFactor } from './experiments.js';
+import { activeExps, downIds, trafficFactor, textOf } from './experiments.js';
 
 export { SIZES, T } from './components.js';
 
@@ -64,8 +64,6 @@ export function model() {
   if (g.needsDns && !g.hasDNS) { r.issue = TXT.noDns; return r; }
   r.spof = countSpofs(g);
   const down = r.down;
-  const crash = activeExps().find(e => e.kind === 'crash' && e.issue);
-  if (crash) r.issue = crash.issue;
 
   // 1. Load: each server serves at most its capacity and passes on only what it served.
   const load = new Map(), served = new Map();
@@ -120,6 +118,10 @@ export function model() {
   const res = viaGroup(g.entry, qps, T.rtt, new Set());
   r.servedPct = 100 * res.served / qps;
   r.latency = res.served > 0 ? res.end : null;
+  // A crash's message applies only when requests still reach the crashed component (no healthy peer took over).
+  const hit = [...down].some(id => r.node[id] && r.node[id].load > 0);
+  const crash = hit && activeExps().find(e => e.kind === 'crash' && e.issue);
+  if (crash) r.issue = textOf(crash.issue, r);
   return r;
 }
 

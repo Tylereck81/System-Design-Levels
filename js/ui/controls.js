@@ -20,7 +20,7 @@ export function paintControls() {
   $('playIcon').textContent = run.playing ? '❚❚' : '▶';
   $('playTxt').textContent = blocked ? 'Estimate first' : (run.playing ? 'Pause' : 'Play');
   for (const exp of EXPERIMENTS) {
-    const btn = $(exp.id + 'Btn');
+    const btn = $('exp-' + exp.id);
     btn.disabled = blocked;
     btn.setAttribute('aria-pressed', isOn(exp.id) ? 'true' : 'false');
     btn.textContent = (S.exp[exp.id] ? '✓ ' : '') + (isOn(exp.id) ? exp.labelOn : exp.label);
@@ -39,10 +39,10 @@ export const designReady = () => graph().ready;
 // One toggle button per experiment, in the Break it group.
 for (const exp of EXPERIMENTS) {
   const btn = document.createElement('button');
-  btn.className = 'btn toggle'; btn.id = exp.id + 'Btn'; btn.setAttribute('aria-pressed', 'false'); btn.textContent = exp.label;
+  btn.className = 'btn toggle'; btn.id = 'exp-' + exp.id; btn.setAttribute('aria-pressed', 'false'); btn.textContent = exp.label;
   $('expGroup').appendChild(btn);
   btn.onclick = () => {
-    if (!isOn(exp.id) && !designReady()) { log(exp.needsDesign, 'warn'); return; }
+    if (!isOn(exp.id) && (!designReady() || (exp.kind === 'crash' && !exp.target(graph())))) { log(exp.needsDesign, 'warn'); return; }
     if (isOn(exp.id)) stopExp(exp);
     else {
       // One experiment at a time, so each one's effect is clear and only that one counts.

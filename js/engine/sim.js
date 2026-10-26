@@ -3,7 +3,7 @@ import { MISSIONS, TXT, HOLD, EXPERIMENTS, S, run, save } from '../state.js';
 
 const OBSERVE_SECS = 1.5; // an experiment counts once it has run this long
 import { model, sampleRoute } from './model.js';
-import { anyOn, crashing } from './experiments.js';
+import { anyOn, crashing, expectMet, textOf } from './experiments.js';
 import { tagsG, paintLive } from './canvas.js';
 import { dots, spawn, showIpTag, moveDots, setDots } from './dots.js';
 import { renderHUD, setBanner } from '../ui/hud.js';
@@ -57,10 +57,11 @@ export function step(dt) {
   for (const exp of EXPERIMENTS) {
     const k = exp.id;
     if (run.on[k] && built && M.goals.some(x => x.id === k) && !S.exp[k]) {
+      if (!expectMet(exp, m)) { run.expT[k] = 0; continue; } // the required outcome must hold the whole time
       run.expT[k] = (run.expT[k] || 0) + dt;
       if (run.expT[k] >= OBSERVE_SECS) {
         S.exp[k] = true;
-        log(exp.observed, 'ok');
+        log(textOf(exp.observed, m), 'ok');
         checkDone(); save(); renderMission();
       }
     }
