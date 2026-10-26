@@ -254,6 +254,15 @@ test.describe('Level 1 · robustness', () => {
 });
 
 test.describe('Level 1 · teaching feedback', () => {
+  test('the busy-server chart shows the 25× cap, not a failure, below 100% busy', async ({ page }) => {
+    await freshPage(page);
+    const chart = page.locator('#figQueue');
+    await expect(chart.locator('text', { hasText: /^fail$/ })).toHaveCount(0);
+    await expect(chart.locator('.ch-cap-t')).toHaveText('capped at 25× from 96%');
+    await expect(chart).toHaveAttribute('aria-label', /capped at 25 times from 96%/);
+    await expect(page.locator('.assume').first()).toContainText('From 96% busy, a request takes at most 25× its base time; only load above 100% fails.');
+  });
+
   test('changing the design after verifying resets the check', async ({ page }) => {
     await freshPage(page, '#build');
     await unlockMissions(page, 2);

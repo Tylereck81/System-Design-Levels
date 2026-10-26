@@ -279,11 +279,11 @@ details.hint p { margin: 8px 0 0; color: var(--ink-2); }
 .ch-grid { stroke: var(--line); stroke-width: 1; }
 .ch-curve { stroke: var(--accent); stroke-width: 2.4; fill: none; }
 .ch-area { fill: var(--accent-soft); }
-.ch-fail { fill: var(--bad-soft); }
+.ch-cap { fill: var(--warn-soft); }
 .ch-t { font: 11px var(--f-mono); fill: var(--ink-3); }
 .ch-pt { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
 .ch-pt-t { font: 500 11.5px var(--f-mono); fill: var(--ink); }
-.ch-fail-t { font: 500 11px var(--f-mono); fill: var(--bad); }
+.ch-cap-t { font: 500 11px var(--f-mono); fill: var(--warn); }
 
 /* ---------- Quiz ---------- */
 .quiz { max-width: 760px; margin: 0 auto; }

@@ -244,7 +244,7 @@ export default {
       <h2>Why a busy server gets slow</h2>
       <p class="src">How this game simulates load · standard queueing result (M/M/1)</p>
       <p>Each server in the game has a capacity in requests per second. Its utilization is <b>ρ = load ÷ capacity</b>. Requests wait in line behind each other, so the time per request is <b>base time ÷ (1 − ρ)</b>. Above 100%, the extra requests fail.</p>
-      <figure class="fig"><svg id="figQueue" viewBox="0 0 640 250" role="img" aria-label="Response time multiplier rises slowly until about 70% utilization, then sharply: 2 times at 50%, 4 times at 75%, 10 times at 90%"></svg><figcaption>Time per request vs utilization</figcaption></figure>
+      <figure class="fig"><svg id="figQueue" viewBox="0 0 640 250" role="img" aria-label="Response time multiplier rises slowly until about 70% utilization, then sharply: 2 times at 50%, 4 times at 75%, 10 times at 90%, capped at 25 times from 96%"></svg><figcaption>Time per request vs utilization</figcaption></figure>
       <p>The lesson for interviews: a system gets slow well before it falls over. Keep important servers comfortably below full.</p>
       <div class="tbl-wrap"><table class="t">
         <thead><tr><th>Server size (game)</th><th>Capacity</th><th>Cost / month</th></tr></thead>
@@ -255,7 +255,7 @@ export default {
           <tr><td>XL · 16 vCPU (largest)</td><td class="n">1,600 req/s</td><td class="n">$450</td></tr>
         </tbody>
       </table></div>
-      <p class="assume">Game assumptions: web server work 20 ms, database query 10 ms (about one disk seek), internet round trip 40 ms, round trip inside the data center 0.5 ms, DNS $5/month. A single server running both code and data handles half its capacity, because every request needs both. A NoSQL database cannot join, so a request that needs a user, an order and its products costs 3 lookups (3 ms each) instead of one SQL query.</p>
+      <p class="assume">Game assumptions: web server work 20 ms, database query 10 ms (about one disk seek), internet round trip 40 ms, round trip inside the data center 0.5 ms, DNS $5/month. A single server running both code and data handles half its capacity, because every request needs both. A NoSQL database cannot join, so a request that needs a user, an order and its products costs 3 lookups (3 ms each) instead of one SQL query. From 96% busy, a request takes at most 25× its base time; only load above 100% fails.</p>
     </section>
 
     <section>
@@ -314,24 +314,25 @@ export default {
     figArrow(f2, 399, 212, 241, 212, 'return data', null, 320, 230, 'middle');
 
     const f3 = $('figQueue'); f3.textContent = '';
-    const X = (u) => 56 + u * 540, Y = (m) => 210 - (Math.min(m, 20) / 20) * 180;
-    for (const m of [5, 10, 15, 20]) {
+    const X = (u) => 56 + u * 540, Y = (m) => 210 - (Math.min(m, 25) / 25) * 180;
+    const q = (u) => (u >= 0.96 ? 25 : 1 / (1 - u)); // same rule as the simulation
+    for (const m of [5, 10, 15, 20, 25]) {
       svgEl('line', { x1: X(0), y1: Y(m), x2: X(1), y2: Y(m), class: 'ch-grid' }, f3);
       const tt = svgEl('text', { x: X(0) - 8, y: Y(m) + 4, class: 'ch-t', 'text-anchor': 'end' }, f3); tt.textContent = m + '×';
     }
-    svgEl('rect', { x: X(0.95), y: Y(20), width: X(1) - X(0.95), height: Y(0) - Y(20), class: 'ch-fail' }, f3);
     const pts = [];
-    for (let u = 0; u <= 0.9501; u += 0.005) pts.push([X(u), Y(1 / (1 - u))]);
-    svgEl('path', { d: `M${X(0)} ${Y(0)} L` + pts.map(p => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' L') + ` L${X(0.95)} ${Y(0)}Z`, class: 'ch-area' }, f3);
+    for (let i = 0; i <= 200; i++) pts.push([X(i / 200), Y(q(i / 200))]);
+    svgEl('path', { d: `M${X(0)} ${Y(0)} L` + pts.map(p => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' L') + ` L${X(1)} ${Y(0)}Z`, class: 'ch-area' }, f3);
+    svgEl('rect', { x: X(0.96), y: Y(25), width: X(1) - X(0.96), height: Y(0) - Y(25), class: 'ch-cap' }, f3);
     svgEl('path', { d: 'M' + pts.map(p => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' L'), class: 'ch-curve' }, f3);
     svgEl('line', { x1: X(0), y1: Y(0), x2: X(1), y2: Y(0), class: 'ch-axis' }, f3);
     for (const u of [0, 0.25, 0.5, 0.75, 1]) {
       const tt = svgEl('text', { x: X(u), y: Y(0) + 18, class: 'ch-t', 'text-anchor': 'middle' }, f3); tt.textContent = Math.round(u * 100) + '%';
     }
-    const ft = svgEl('text', { x: X(0.975), y: Y(20) + 14, class: 'ch-fail-t', 'text-anchor': 'middle' }, f3); ft.textContent = 'fail';
+    const ct = svgEl('text', { x: X(1), y: Y(25) - 8, class: 'ch-cap-t', 'text-anchor': 'end' }, f3); ct.textContent = 'capped at 25× from 96%';
     for (const [u, lab] of [[0.5, '2× at 50%'], [0.75, '4× at 75%'], [0.9, '10× at 90%']]) {
-      svgEl('circle', { cx: X(u), cy: Y(1 / (1 - u)), r: 4.5, class: 'ch-pt' }, f3);
-      const tt = svgEl('text', { x: X(u) - 10, y: Y(1 / (1 - u)) - 10, class: 'ch-pt-t', 'text-anchor': 'end' }, f3); tt.textContent = lab;
+      svgEl('circle', { cx: X(u), cy: Y(q(u)), r: 4.5, class: 'ch-pt' }, f3);
+      const tt = svgEl('text', { x: X(u) - 10, y: Y(q(u)) - 10, class: 'ch-pt-t', 'text-anchor': 'end' }, f3); tt.textContent = lab;
     }
     const xl = svgEl('text', { x: X(0.5), y: 246, class: 'ch-t', 'text-anchor': 'middle' }, f3); xl.textContent = 'utilization (load ÷ capacity)';
   },
