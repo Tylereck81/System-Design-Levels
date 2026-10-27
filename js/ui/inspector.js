@@ -44,6 +44,19 @@ function buildInspector() {
     const chosen = TYPES[n.type].kinds.find(k => k.id === n.kind);
     box.appendChild(el('p', 'kind-note', chosen ? chosen.note : TYPES[n.type].unsetNote));
   }
+  if (COMPONENTS[n.type].algos && TYPES[n.type].algos) {
+    box.appendChild(el('p', 'label', TYPES[n.type].algosLabel));
+    const seg = el('div', 'seg stack');
+    const current = n.algo || COMPONENTS[n.type].defaultAlgo;
+    for (const algo of TYPES[n.type].algos) {
+      const b = el('button'); b.type = 'button'; b.dataset.focusKey = 'algo-' + algo.id; b.setAttribute('aria-pressed', current === algo.id ? 'true' : 'false');
+      b.innerHTML = `<b>${algo.name}</b><span>${algo.sub}</span>`;
+      b.onclick = () => { n.algo = algo.id; afterDesignChange(); log(algo.log); };
+      seg.appendChild(b);
+    }
+    box.appendChild(seg);
+    box.appendChild(el('p', 'kind-note', TYPES[n.type].algos.find(a => a.id === current).note));
+  }
   if (COMPONENTS[n.type].sized) {
     box.appendChild(el('p', 'label', 'Server size (scale up)'));
     const seg = el('div', 'seg');

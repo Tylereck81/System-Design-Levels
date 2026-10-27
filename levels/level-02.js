@@ -9,6 +9,7 @@ const latGoal = { id: 'lat', type: 'metric', text: `Response time under ${target
 const sharedDbGoal = { id: 'shared', type: 'struct', text: 'Every web server uses the shared database', test: (g) => g.everyReaches('web', 'db') };
 const costGoal = (max) => ({ id: 'cost', type: 'struct', text: `Spend at most $${fmt(max)} per month`, test: (g) => g.cost <= max, val: (m, g) => '$' + fmt(g.cost) });
 const served99 = (m) => m.servedPct >= targets.servedPct;
+const SIZE_ORDER = ['S', 'M', 'L', 'XL']; // the web server crash takes the biggest one: the worst case for N + 1
 
 export default {
   id: 2,
@@ -20,8 +21,14 @@ export default {
     users: { name: 'Users', sub: 'Web + mobile app', desc: 'Your visitors. They look up example.com in DNS, then send HTTP requests to the address DNS returns.' },
     dns: { name: 'DNS', short: 'Domain → IP address', sub: 'Third-party · $5', desc: 'Turns example.com into the load balancer\'s public IP, 203.0.113.10. Costs $5/month in this game.' },
     lb: {
-      name: 'Load balancer', short: 'Spreads traffic', sub: 'Active · 203.0.113.10', standbySub: 'Standby · same IP',
-      desc: 'Users connect to its public IP, 203.0.113.10. It hands each request to a healthy web server over the private network and stops using a server that fails its health check. A second load balancer waits as a standby and takes over the same IP if the first one stops sending heartbeats. In this game it handles 5,000 req/s, adds 1 ms and costs $20/month.',
+      name: 'Load balancer', short: 'Spreads traffic', sub: 'Active', standbySub: 'Standby',
+      algosLabel: 'Routing method',
+      algos: [
+        { id: 'rr', short: 'round robin', name: 'Round robin', sub: 'same share for each', note: 'Each web server in turn, so each gets the same share. Fair when all servers are the same size; with mixed sizes the small one overloads first.', log: 'Load balancer set to round robin: every web server gets the same share.' },
+        { id: 'wrr', short: 'weighted', name: 'Weighted', sub: 'shares follow server size', note: 'Round robin with weights: a server twice the size gets twice the requests. You set the weights; here they follow each server\'s capacity.', log: 'Load balancer set to weighted round robin: shares follow each server\'s capacity.' },
+        { id: 'lc', short: 'least conn', name: 'Least connections', sub: 'to the least busy server', note: 'Sends each request to the server with the fewest requests in progress. Faster servers finish sooner, so they get more. In this game that works out the same as weighted; real systems also gain when some requests take much longer than others.', log: 'Load balancer set to least connections: each request goes to the server with the fewest in progress.' },
+      ],
+      desc: 'Users connect to its public IP, 203.0.113.10. It hands each request to a healthy web server over the private network, using the routing method you pick, and stops using a server that fails its health check. A second load balancer waits as a standby and takes over the same IP if the first one stops sending heartbeats. In this game it handles 5,000 req/s, adds 1 ms and costs $20/month.',
     },
     web: {
       name: 'Web server', short: 'Your back-end code',
@@ -87,7 +94,7 @@ export default {
         servedGoal, latGoal, costGoal(500),
         { id: 'crash-web', type: 'exp', text: 'Break it: crash a web server and still serve at least 99%' },
       ],
-      hint: 'Add a load balancer and connect Users to it, then connect it to each web server, and each web server to the database. The load balancer gives every server the same share, so when one crashes, the others must carry all 463 req/s between them. Several small servers cost less than a few big ones.',
+      hint: 'Add a load balancer and connect Users to it, then connect it to each web server, and each web server to the database. With round robin every server gets the same share, so use one size (or pick weighted or least connections in the load balancer). When your biggest server crashes, the others must carry all 463 req/s between them. Several small servers cost less than a few big ones.',
       takeaway: 'A server crashed and the site stayed up: the load balancer stopped sending it requests and the others took its share. That only works when the servers left can carry the whole peak. Plan for one more than you need: N + 1.',
     },
     {
@@ -113,7 +120,7 @@ export default {
         servedGoal, latGoal, costGoal(950),
         { id: 'crash-web', type: 'exp', text: 'Break it: crash a web server and still serve at least 99%' },
       ],
-      hint: 'Every request still reaches the one database, so check it first: a large database handles 800 queries/s. Then add web servers until each is well under 75% busy, plus one spare for the crash test. Use same-size servers: each one gets an equal share.',
+      hint: 'Every request still reaches the one database, so check it first: a large database handles 800 queries/s. Then add web servers until each is well under 75% busy, plus one spare for the crash test. Same-size servers are simplest; with mixed sizes, switch the load balancer to weighted or least connections.',
       takeaway: 'You grew the web tier one server at a time, and the spare kept the site up during a crash. The database could only grow bigger: it is now 75% busy, and still a single point of failure. Level 3 fixes that with replicas.',
     },
     {
@@ -134,10 +141,10 @@ export default {
   // `expect` is the outcome that must hold for the whole run before it counts.
   experiments: [
     {
-      id: 'crash-web', kind: 'crash', target: (g) => g.onPath('web')[0] || null,
+      id: 'crash-web', kind: 'crash', target: (g) => g.onPath('web').sort((a, b) => SIZE_ORDER.indexOf(b.size) - SIZE_ORDER.indexOf(a.size))[0] || null,
       label: 'Crash web server', labelOn: 'Restart web server',
       needsDesign: 'Build the design first: connect Users to the load balancer and the load balancer to the web servers, then crash one.',
-      on: 'You pulled the plug on one web server.', onTone: 'bad',
+      on: 'You pulled the plug on your biggest web server.', onTone: 'bad',
       off: 'Web server restarted.',
       expect: served99,
       notMet: (m) => `Only ${m.servedPct.toFixed(1)}% served with one web server down: the servers left cannot carry the peak. Add a spare web server (N + 1).`,
@@ -239,11 +246,11 @@ export default {
       <p class="src">Scaling out · load-balancing methods</p>
       <p>Add servers to the pool. The load balancer starts sending them requests straight away, with no downtime. How it picks a server:</p>
       <ul>
-        <li><b>Round robin:</b> each server in turn. Simple, and fair when all servers are the same size. This game uses it.</li>
+        <li><b>Round robin:</b> each server in turn. Simple, and fair when all servers are the same size. The default here.</li>
         <li><b>Least connections:</b> the server with the fewest requests in progress. Better when some requests take much longer than others.</li>
         <li><b>Weighted:</b> bigger servers get a bigger share, so you can mix sizes.</li>
       </ul>
-      <p>With plain round robin, mix sizes and the small server overloads first: it gets the same share as the big one. Keep a pool to one size.</p>
+      <p>With plain round robin, mix sizes and the small server overloads first: it gets the same share as the big one. Keep a pool to one size, or use weighted or least connections. You can pick the method on each load balancer in the inspector.</p>
       <div class="note"><b>Layer 4 or layer 7.</b> A layer 4 load balancer looks only at IP addresses and ports and forwards the connection. A layer 7 load balancer reads the HTTP request, so it can route by path or cookie, for example sending /api to one pool and /images to another. It costs a little more work per request.</div>
     </section>
 
@@ -263,7 +270,7 @@ export default {
     <section>
       <h2>How this level is simulated</h2>
       <p class="src">Game assumptions</p>
-      <p>The load balancer gives every healthy web server behind it the same share (round robin). A crashed server gets no traffic; its share moves to the others at once. A standby load balancer takes no traffic until the active one fails, then takes all of it.</p>
+      <p>With round robin the load balancer gives every healthy web server behind it the same share. With weighted or least connections, each server's share is in proportion to its capacity: in a steady stream of similar requests, least connections settles there too. A crashed server gets no traffic; its share moves to the others at once. A standby load balancer takes no traffic until the active one fails, then takes all of it.</p>
       <p class="assume">Game assumptions: the load balancer handles 5,000 req/s, adds 1 ms per request and costs $20/month. Health checks and the standby's takeover are instant here; in real systems they take a few seconds, and a few requests fail meanwhile. Server sizes, the 40 ms internet round trip, the 0.5 ms hop inside the data center and the database times are the same as in Level 1. A web server not connected to the database keeps its own copy of the data and gets half its capacity.</p>
     </section>
 
@@ -281,7 +288,7 @@ export default {
         <div><span>Step 1 · 5–8 min</span><b>Scope it</b>Read the brief. Estimate the peak.</div>
         <div><span>Step 2 · 10–12 min</span><b>Sketch it</b>Load balancer, pool, database.</div>
         <div><span>Step 3 · 15–20 min</span><b>Go deep</b>Size the pool. Keep a spare.</div>
-        <div><span>Step 4 · 5 min</span><b>Stress it</b>Crash a server, then the load balancer.</div>
+        <div><span>Step 4 · 5 min</span><b>Stress it</b>Crash your biggest server, then the load balancer.</div>
       </div>
       <p>When the interviewer asks "what happens if this server dies?", follow a request through your design and name the next single point of failure. After the load balancer and the pool, it is usually the database.</p>
     </section>

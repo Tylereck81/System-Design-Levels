@@ -77,7 +77,7 @@ test.describe('Level 2 · playthrough', () => {
       s.tryConnect('u', lb.id);
       for (const w of S.nodes.filter((n) => n.type === 'web')) s.tryConnect(lb.id, w.id);
     });
-    await expect(page.locator('[data-node] .node-sub', { hasText: 'Standby · same IP' })).toHaveCount(1);
+    await expect(page.locator('[data-node] .node-sub', { hasText: 'Standby · round robin' })).toHaveCount(1);
     const m3 = await measure(page);
     expect(m3.cost).toBe(945);
     expect(m3.spof).toBe(1); // only the database is left
@@ -166,6 +166,51 @@ test.describe('Level 2 · teaching feedback', () => {
     await page.click('#playBtn');
     await fastForward(page, 1);
     await expect(page.locator('#log')).toContainText('Web server is over capacity');
+  });
+
+  test('routing method: round robin overloads a small server; weighted and least connections share by capacity', async ({ page }) => {
+    await freshPage(page, '#level-2/build');
+    await build(page, { webs: ['M', 'S'] });
+    await page.evaluate(() => { window.__sdl.run.t = 0; });
+    expect((await measure(page)).served).toBeCloseTo(93.2, 1); // round robin: 231.5 each, the S serves only 200
+    const lb = await page.evaluate(() => window.__sdl.S.nodes.find((n) => n.type === 'lb').id);
+    await expect(page.locator(`[data-node="${lb}"] .node-sub`)).toHaveText('round robin');
+    for (const [name, label] of [['Weighted', 'weighted'], ['Least connections', 'least conn']]) {
+      await page.focus(`[data-node="${lb}"]`);
+      await page.keyboard.press('Enter');
+      await page.locator('#insp').getByRole('button', { name: new RegExp('^' + name) }).click();
+      // 463 split 2:1 → both 77% busy: 40 + LB 1.1 + 0.5 + web 87.6 + 0.5 + db 23.7
+      const r = await measure(page);
+      expect(r.served).toBeCloseTo(100, 6);
+      expect(r.latency).toBeCloseTo(153.4, 1);
+      await expect(page.locator(`[data-node="${lb}"] .node-sub`)).toHaveText(label);
+    }
+    await reloadGame(page);
+    expect(await state(page, () => window.__sdl.S.nodes.find((n) => n.type === 'lb').algo)).toBe('lc');
+  });
+
+  test('saves from before routing methods load as round robin', async ({ page }) => {
+    await freshPage(page, '#level-2/build');
+    await build(page);
+    await page.evaluate(() => {
+      const S = window.__sdl.S;
+      const saved = JSON.parse(JSON.stringify(S));
+      saved.nodes.forEach((n) => { delete n.algo; });
+      localStorage.setItem('sdl-level2-v1', JSON.stringify(saved));
+    });
+    await page.goto('about:blank');
+    await page.goto('/#level-2/build');
+    await page.waitForFunction(() => !!window.__sdl);
+    expect(await state(page, () => window.__sdl.S.nodes.find((n) => n.type === 'lb').algo)).toBe('rr');
+  });
+
+  test('crashing a web server takes down the biggest one', async ({ page }) => {
+    await freshPage(page, '#level-2/build');
+    await build(page, { webs: ['S', 'L', 'S'] });
+    await page.click('#playBtn');
+    await page.click('#exp-crash-web');
+    const down = await page.evaluate(() => { const m = window.__sdl.model(); return window.__sdl.S.nodes.filter((n) => m.node[n.id] && m.node[n.id].down).map((n) => n.size); });
+    expect(down).toEqual(['L']);
   });
 
   test('a web server not connected to the database runs at half capacity', async ({ page }) => {

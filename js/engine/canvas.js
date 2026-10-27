@@ -15,7 +15,12 @@ export const nodeRefs = {};
 
 export function nodeSub(n) {
   const c = COMPONENTS[n.type];
-  if (!c.sized) return c.routing === 'standby' && isStandby(n) ? TYPES[n.type].standbySub : TYPES[n.type].sub;
+  if (!c.sized) {
+    const standby = c.routing === 'standby' && isStandby(n);
+    const algo = c.algos && (TYPES[n.type].algos || []).find(a => a.id === (n.algo || c.defaultAlgo));
+    if (!algo) return standby ? TYPES[n.type].standbySub : TYPES[n.type].sub;
+    return standby ? `${TYPES[n.type].standbySub} · ${algo.short}` : algo.short; // the box fits about 20 characters
+  }
   if (c.kinds) return n.kind ? `${TYPES[n.type].kinds.find(k => k.id === n.kind).short} · ${n.size} ${fmt(SIZES[n.size].cap)}/s` : TYPES[n.type].unsetSub;
   return runsAlone(n) ? `${n.size} · ${fmt(SIZES[n.size].cap * c.alone.capFactor)} req/s (½)` : `${n.size} · ${fmt(SIZES[n.size].cap)} req/s`;
   return '';
