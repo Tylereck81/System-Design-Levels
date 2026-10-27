@@ -25,6 +25,9 @@ export const QUIZ = level.quiz.questions;
 export const PASS = level.quiz.passScore;
 export const TXT = level.text;
 export const EXPERIMENTS = level.experiments;
+export const WORKLOAD = level.workload || {};
+/** True while a mission's estimate hides its traffic (some estimates are about something else, such as memory). */
+export const trafficHidden = (M) => !!(M.gate && !S.est && M.gate.hidesTraffic !== false);
 export const HOLD = 4; // seconds the targets must hold
 
 /* ---------------- State ---------------- */
@@ -94,6 +97,7 @@ export function load(data) {
     if (c.sized && !n.size) n.size = 'S';
     if (c.kinds && !Object.keys(c.kinds).includes(n.kind)) n.kind = t.kinds ? null : Object.keys(c.kinds)[0];
     if (c.algos && !c.algos[n.algo]) n.algo = c.defaultAlgo;
+    for (const k in c.choices || {}) if (!c.choices[k].options[n[k]]) n[k] = c.choices[k].default;
     if (c.replicated && t.roles && !t.roles[n.role]) n.role = 'replica';
   }
   // One primary per type: any extra one goes back to being a replica.

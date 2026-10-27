@@ -1,7 +1,7 @@
 // Dashboard metrics and the canvas banner.
 import { fmt } from '../format.js';
 import { $ } from '../dom.js';
-import { TARGET_MS, TARGET_SERVED, nameOf, MISSIONS, S, connectFrom, run, byId, setConnectFrom } from '../state.js';
+import { TARGET_MS, TARGET_SERVED, nameOf, trafficHidden, MISSIONS, S, connectFrom, run, byId, setConnectFrom } from '../state.js';
 import { model } from '../engine/model.js';
 import { crashing, spikeHud } from '../engine/experiments.js';
 
@@ -9,7 +9,7 @@ export function renderHUD() {
   const m = run.mdl || model();
   const M = MISSIONS[S.mission];
   const played = run.everPlayed;
-  const hidden = M.gate && !S.est;
+  const hidden = trafficHidden(M);
   const cells = [
     { l: 'Traffic', v: hidden ? '?' : fmt(m.base), u: 'req/s', t: hidden ? 'estimate first' : (spikeHud() || 'at peak'), s: '' },
     { l: 'Served', v: played ? m.servedPct.toFixed(1) : '—', u: played ? '%' : '', t: `goal ≥ ${TARGET_SERVED}%`, s: played ? (m.servedPct >= TARGET_SERVED ? 'pass' : 'fail') : '' },

@@ -1,8 +1,8 @@
 // Inspector panel for the selected component or connection.
 import { fmt } from '../format.js';
 import { $, el, keepFocus } from '../dom.js';
-import { TYPES, OK_PAIRS, pairKey, nameOf, lowerName, edgeInfo, MISSIONS, S, sel, run, byId, setSel } from '../state.js';
-import { SIZES, T, COMPONENTS, roleOf, runsAlone, serverSpec } from '../engine/components.js';
+import { TYPES, OK_PAIRS, pairKey, nameOf, lowerName, edgeInfo, MISSIONS, S, sel, run, byId, setSel, trafficHidden } from '../state.js';
+import { T, COMPONENTS, roleOf, runsAlone, serverSpec, sizesOf, choiceOf } from '../engine/components.js';
 import { tryConnect, disconnect, removeSel, promote } from '../engine/interaction.js';
 import { log } from './log.js';
 import { afterDesignChange } from '../main.js';
@@ -68,14 +68,30 @@ function buildInspector() {
     box.appendChild(el('p', 'kind-note', TYPES[n.type].algos.find(a => a.id === current).note));
     if (isStandby(n) && TYPES[n.type].standbyNote) box.appendChild(el('p', 'kind-note', TYPES[n.type].standbyNote));
   }
+  // Settings the level offers for this component (e.g. a cache's TTL), in the order the level lists them.
+  for (const ch of (COMPONENTS[n.type].choices && TYPES[n.type].choices) || []) {
+    box.appendChild(el('p', 'label', ch.label));
+    const seg = el('div', 'seg stack');
+    const current = choiceOf(n, ch.key);
+    for (const opt of ch.options) {
+      const b = el('button'); b.type = 'button'; b.dataset.focusKey = ch.key + '-' + opt.id; b.setAttribute('aria-pressed', current === opt.id ? 'true' : 'false');
+      b.innerHTML = `<b>${opt.name}</b><span>${opt.sub}</span>`;
+      b.onclick = () => { n[ch.key] = opt.id; afterDesignChange(); log(opt.log); };
+      seg.appendChild(b);
+    }
+    box.appendChild(seg);
+    box.appendChild(el('p', 'kind-note', ch.options.find(o => o.id === current).note));
+  }
   if (COMPONENTS[n.type].sized) {
-    box.appendChild(el('p', 'label', 'Server size (scale up)'));
+    const SIZES = sizesOf(n.type), mem = (k) => SIZES[k].mem;
+    box.appendChild(el('p', 'label', mem('S') ? 'Memory (scale up)' : 'Server size (scale up)'));
     const seg = el('div', 'seg');
     for (const k of Object.keys(SIZES)) {
       const b = el('button'); b.type = 'button'; b.dataset.focusKey = 'size-' + k; b.setAttribute('aria-pressed', n.size === k ? 'true' : 'false');
-      b.innerHTML = `<b>${k}</b> <span>${fmt(SIZES[k].cap)}/s</span><br><span>$${SIZES[k].cost}</span>`;
-      b.title = `${SIZES[k].cpu} vCPU · ${fmt(SIZES[k].cap)} requests/s · $${SIZES[k].cost}/month`;
-      b.setAttribute('aria-label', `${k} ${fmt(SIZES[k].cap)}/s, $${SIZES[k].cost} a month`);
+      const what = mem(k) ? `${mem(k)} GB` : `${fmt(SIZES[k].cap)}/s`;
+      b.innerHTML = `<b>${k}</b> <span>${what}</span><br><span>$${SIZES[k].cost}</span>`;
+      b.title = mem(k) ? `${mem(k)} GB memory · $${SIZES[k].cost}/month` : `${SIZES[k].cpu} vCPU · ${fmt(SIZES[k].cap)} requests/s · $${SIZES[k].cost}/month`;
+      b.setAttribute('aria-label', `${k} ${what}, $${SIZES[k].cost} a month`);
       b.onclick = () => { n.size = k; afterDesignChange(); };
       seg.appendChild(b);
     }
@@ -87,7 +103,7 @@ function buildInspector() {
     paintInspectorLive();
   }
   if (roleOf(n) === 'client') {
-    const M0 = MISSIONS[S.mission], hid = M0.gate && !S.est;
+    const M0 = MISSIONS[S.mission], hid = trafficHidden(M0);
     const live = el('div', 'live');
     live.innerHTML = `<div><b>${hid ? '?' : fmt(M0.qps * trafficFactor())}</b><span>req/s at peak</span></div><div><b>${T.rtt} ms</b><span>internet round trip</span></div>`;
     box.appendChild(live);
@@ -121,6 +137,11 @@ export function paintInspectorLive() {
   if (!st) { live.innerHTML = `<div><b>${fmt(serverSpec(n).cap)}</b><span>capacity, per second</span></div><div><b>—</b><span>press Play for load</span></div>`; return; }
   if (st.standby) { live.innerHTML = `<div><b>standby</b><span>takes no traffic</span></div><div><b>${fmt(st.cap)}</b><span>capacity, ready to take over</span></div>`; return; }
   if (st.down) { live.innerHTML = `<div><b style="color:var(--bad)">down</b><span>serving nothing</span></div><div><b>0</b><span>req/s served</span></div>`; return; }
+  if (st.hit != null) {
+    live.innerHTML = `<div><b>${fmt(st.load)}</b><span>reads arriving, per second</span></div><div><b>${Math.round(st.hit * 100)}%</b><span>hit rate</span></div>`
+      + `<div><b>${fmt(st.misses)}</b><span>misses/s sent to the database</span></div><div><b>${st.ms.toFixed(1)} ms</b><span>per lookup</span></div>`;
+    return;
+  }
   const pct = Math.round(st.util * 100);
   const col = st.load > st.cap * 1.005 ? 'var(--bad)' : st.util >= 0.8 ? 'var(--warn)' : 'var(--ok)';
   live.innerHTML = `<div><b>${fmt(st.load)}</b><span>${st.unit} arriving</span></div><div><b>${fmt(st.cap)}</b><span>capacity${st.combined ? ' (code + data)' : ''}</span></div><div><b style="color:${col}">${pct}%</b><span>busy</span></div><div><b>${st.ms.toFixed(st.ms < 10 ? 1 : 0)} ms</b><span>per request (${st.mult.toFixed(1)}× base)</span></div>`

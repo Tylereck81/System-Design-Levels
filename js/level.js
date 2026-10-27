@@ -4,7 +4,7 @@ export let entry = null; // the level's entry in levels/index.js (id, title)
 
 export function setLevel(data, levelEntry) { level = data; entry = levelEntry; }
 
-const EXP_KINDS = ['crash', 'spike'];
+const EXP_KINDS = ['crash', 'spike', 'event']; // event: something happens (e.g. a price change); only its outcome is checked
 
 /** Problems that would make a level misbehave silently. An empty list means the level is fine. */
 export function validateLevel(data) {

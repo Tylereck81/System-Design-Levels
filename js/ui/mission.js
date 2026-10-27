@@ -1,7 +1,7 @@
 // Mission panel: brief, estimate box and goals.
 import { fmt } from '../format.js';
 import { $, el, keepFocus } from '../dom.js';
-import { TARGET_MS, MISSIONS, HOLD, S, run, expPassed } from '../state.js';
+import { TARGET_MS, MISSIONS, HOLD, S, run, expPassed, trafficHidden } from '../state.js';
 import { model } from '../engine/model.js';
 import { stopRun } from '../engine/sim.js';
 import { paintControls } from './controls.js';
@@ -27,7 +27,7 @@ export function switchMission(i) {
   S.mission = i;
   stopRun(true);
   afterChange(true);
-  log(`Mission ${i + 1}: ${MISSIONS[i].title}. Traffic is now ${MISSIONS[i].gate && !S.est ? 'unknown until you estimate it' : fmt(MISSIONS[i].qps) + ' req/s'}.`);
+  log(`Mission ${i + 1}: ${MISSIONS[i].title}. Traffic is now ${trafficHidden(MISSIONS[i]) ? 'unknown until you estimate it' : fmt(MISSIONS[i].qps) + ' req/s'}.`);
 }
 
 export function renderMission() { keepFocus($('missionCard'), buildMission, () => $('missionCard')); }
@@ -39,7 +39,7 @@ function buildMission() {
   box.appendChild(el('h2', null, M.title));
   box.appendChild(el('p', 'story', M.story));
   const facts = el('div', 'facts');
-  const trafficTxt = M.gate && !S.est ? '?' : fmt(M.qps);
+  const trafficTxt = trafficHidden(M) ? '?' : fmt(M.qps);
   facts.innerHTML = `<div><b>${trafficTxt}</b><span>req/s at peak</span></div><div><b>${M.budget ? '$' + fmt(M.budget) : '—'}</b><span>monthly budget</span></div><div><b>&lt;${TARGET_MS} ms</b><span>response</span></div>`;
   box.appendChild(facts);
   if (M.gate) box.appendChild(renderGate(M));
