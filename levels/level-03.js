@@ -212,7 +212,7 @@ export default {
 
   quiz: {
     passScore: 8,
-    passText: 'Level 3 is done. Level 4, the cache tier, is next. It isn\'t built yet.',
+    passText: 'Level 3 is done. Level 4, Cache tier, is next: open it from the level menu at the top.',
     failText: (pass) => `You need ${pass} to pass. Reread the lesson sections behind the questions you missed, then try again.`,
     questions: [
       { q: 'A shopper changes their delivery address. Where does the web server send that update?', o: ['To any replica, picked at random', 'To the primary database', 'To every replica at the same time', 'To the replica with the most capacity'], a: 1, e: 'Every change to the data (insert, update, delete) goes to the primary. The primary then sends it on to each replica. Replicas only serve reads.', r: 'Primary-replica replication' },
