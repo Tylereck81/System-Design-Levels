@@ -7,7 +7,7 @@ export const SIZES = {
   L: { cpu: 8, cap: 800, cost: 200 },
   XL: { cpu: 16, cap: 1600, cost: 450 },
 };
-export const T = { rtt: 40, web: 20, db: 10, dc: 0.5, dns: 5, nosqlLookup: 3, nosqlLookups: 3, lb: 1 };
+export const T = { rtt: 40, web: 20, db: 10, dc: 0.5, dns: 5, nosqlLookup: 3, nosqlLookups: 3, lb: 1, lag: 1 }; // lag: seconds a replica runs behind its primary
 
 // role: 'client' sends traffic, 'resolver' answers name lookups off the request path,
 //       'server' sits on the request path and has a capacity.
@@ -20,6 +20,9 @@ export const T = { rtt: 40, web: 20, db: 10, dc: 0.5, dns: 5, nosqlLookup: 3, no
 // forwards: the server only passes requests on; with no server behind it, every request it gets fails.
 // algos: routing methods the player can pick for the servers behind it. split 'even' gives each the same share;
 //   'capacity' shares in proportion to each server's capacity. defaultAlgo is used when none is chosen.
+// replicated: each server is the primary or a replica (n.role), when the level gives roles. A sender whose group
+//   holds replicas sends writes (the mission's write share) to the primary and reads to the healthy replicas,
+//   or to the primary when none is healthy. Every replica also applies each write the primary serves.
 // Failure mode for every server: when down it serves nothing; its share moves to healthy peers,
 // and with no healthy peer every request sent to it fails.
 export const COMPONENTS = {
@@ -29,7 +32,7 @@ export const COMPONENTS = {
     algos: { rr: { split: 'even' }, wrr: { split: 'capacity' }, lc: { split: 'capacity' } }, defaultAlgo: 'rr' },
   web: { role: 'server', sized: true, base: T.web, unit: 'req/s', alone: { missing: 'db', capFactor: 0.5, base: T.web + T.db } },
   db: {
-    role: 'server', sized: true,
+    role: 'server', sized: true, replicated: true,
     kinds: {
       sql: { per: 1, base: T.db, unit: 'queries/s' },
       nosql: { per: T.nosqlLookups, base: T.nosqlLookup * T.nosqlLookups, unit: 'lookups/s' },
@@ -39,6 +42,7 @@ export const COMPONENTS = {
 
 export const roleOf = (n) => (COMPONENTS[n.type] || {}).role;
 export const isServer = (n) => roleOf(n) === 'server';
+export const isReplica = (n) => !!(COMPONENTS[n.type] || {}).replicated && n.role === 'replica';
 
 /** Monthly cost of one component. */
 export function costOf(n) {

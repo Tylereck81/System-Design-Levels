@@ -40,7 +40,7 @@ function buildMission() {
   box.appendChild(el('p', 'story', M.story));
   const facts = el('div', 'facts');
   const trafficTxt = M.gate && !S.est ? '?' : fmt(M.qps);
-  facts.innerHTML = `<div><b>${trafficTxt}</b><span>req/s at peak</span></div><div><b>${M.budget ? '$' + M.budget : '—'}</b><span>monthly budget</span></div><div><b>&lt;${TARGET_MS} ms</b><span>response</span></div>`;
+  facts.innerHTML = `<div><b>${trafficTxt}</b><span>req/s at peak</span></div><div><b>${M.budget ? '$' + fmt(M.budget) : '—'}</b><span>monthly budget</span></div><div><b>&lt;${TARGET_MS} ms</b><span>response</span></div>`;
   box.appendChild(facts);
   if (M.gate) box.appendChild(renderGate(M));
   const ul = el('ul', 'goals'); ul.id = 'goals'; box.appendChild(ul);

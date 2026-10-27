@@ -1,6 +1,6 @@
 // Simulation model: load, latency, failures and cost, for any graph of components.
 import { MISSIONS, TXT, PALETTE, S, run, byId } from '../state.js';
-import { COMPONENTS, T, roleOf, isServer, costOf, serverSpec, splitRule } from './components.js';
+import { COMPONENTS, T, roleOf, isServer, isReplica, costOf, serverSpec, splitRule } from './components.js';
 import { activeExps, downIds, trafficFactor, textOf, PEAK } from './experiments.js';
 
 export { SIZES, T } from './components.js';
@@ -47,20 +47,29 @@ export function graph() {
   };
   /** How many servers of type `to` on the path server `n` connects to directly. */
   const reached = (n, to) => outs(n.id).filter(c => c.type === to && path.includes(c)).length;
-  return { users, dns, hasDNS: !!dns, entry, needsDns, ready, web, db, cost, onPath, count, everyReaches, reached };
+  const next = (n) => outs(n.id);
+  return { users, dns, hasDNS: !!dns, entry, needsDns, ready, web, db, cost, onPath, count, everyReaches, reached, next };
 }
 export const qmul = (u) => (u >= 0.96 ? 25 : 1 / (1 - u));
 
+/** Replicas that copy `n`'s writes: every replica of its type, when `n` is a primary. */
+function replicasOf(n) {
+  if (!(COMPONENTS[n.type] || {}).replicated || isReplica(n) || !n.role) return [];
+  return S.nodes.filter(c => c.type === n.type && isReplica(c));
+}
+/** Servers that come after `n`: the ones it sends to, and the replicas that copy its writes. */
+const after = (n) => outs(n.id).filter(isServer).concat(replicasOf(n));
+
 /** Every server reachable from Users, in an order where each comes after all servers that send to it. */
 function topoOrder(entry) {
-  const seen = new Set(), stack = [...entry];
-  while (stack.length) { const n = stack.pop(); if (seen.has(n.id)) continue; seen.add(n.id); stack.push(...outs(n.id).filter(isServer)); }
-  const indeg = new Map([...seen].map(id => [id, 0]));
-  for (const id of seen) for (const c of outs(id).filter(isServer)) indeg.set(c.id, indeg.get(c.id) + 1);
+  const seen = new Map(), stack = [...entry];
+  while (stack.length) { const n = stack.pop(); if (seen.has(n.id)) continue; seen.set(n.id, n); stack.push(...after(n)); }
+  const indeg = new Map([...seen.keys()].map(id => [id, 0]));
+  for (const n of seen.values()) for (const c of after(n)) indeg.set(c.id, indeg.get(c.id) + 1);
   const order = [], queue = entry.filter(n => indeg.get(n.id) === 0);
   while (queue.length) {
     const n = queue.shift(); if (order.includes(n)) continue; order.push(n);
-    for (const c of outs(n.id).filter(isServer)) { indeg.set(c.id, indeg.get(c.id) - 1); if (indeg.get(c.id) === 0) queue.push(c); }
+    for (const c of after(n)) { indeg.set(c.id, indeg.get(c.id) - 1); if (indeg.get(c.id) === 0) queue.push(c); }
   }
   return order; // servers inside a cycle never reach in-degree 0 and are left out, so a bad design cannot hang the loop
 }
@@ -73,14 +82,30 @@ const standbyRouting = (group) => (COMPONENTS[group[0].type] || {}).routing === 
  * When the sender shares by capacity (a load balancer's weighted or least-connections method), bigger servers get more.
  */
 function split(group, flow, down, sender) {
+  if (group.some(isReplica)) return splitReadsWrites(group, flow, down, sender);
   const healthy = group.filter(c => !down.has(c.id));
-  const targets = healthy.length ? (standbyRouting(group) ? healthy.slice(0, 1) : healthy) : group;
+  return share(healthy.length ? (standbyRouting(group) ? healthy.slice(0, 1) : healthy) : group, flow, sender);
+}
+function share(targets, flow, sender) {
   if (targets.length === 1) return [[targets[0], flow]];
   if (splitRule(sender) === 'capacity') {
     const caps = targets.map(c => serverSpec(c).cap), total = caps.reduce((a, b) => a + b, 0);
     return targets.map((c, i) => [c, flow * caps[i] / total]);
   }
   return targets.map(c => [c, flow / targets.length]);
+}
+const writeShare = () => MISSIONS[S.mission].writes || 0;
+/**
+ * A group with replicas: writes go to the primary (with no primary in the group they fail), reads to the healthy
+ * replicas, or to the primary when none is healthy. Write shares are tagged so the replicas can copy them.
+ */
+function splitReadsWrites(group, flow, down, sender) {
+  const w = writeShare(), primary = group.find(c => !isReplica(c));
+  const replicas = group.filter(isReplica), up = replicas.filter(c => !down.has(c.id));
+  const parts = primary && w > 0 ? [[primary, flow * w, 'write']] : [];
+  const reads = flow * (1 - w);
+  if (up.length) return parts.concat(share(up, reads, sender));
+  return parts.concat([[primary && !down.has(primary.id) ? primary : replicas[0], reads]]);
 }
 
 /** The model at this moment, or with `peak` at the top of the traffic's wobble (see PEAK). */
@@ -96,8 +121,9 @@ export function model({ peak = false } = {}) {
   const down = r.down;
 
   // 1. Load: each server serves at most its capacity and passes on only what it served.
-  const load = new Map(), served = new Map();
-  for (const [c, f] of split(g.entry, qps, down, g.users)) load.set(c.id, (load.get(c.id) || 0) + f);
+  const load = new Map(), served = new Map(), writes = new Map(), copied = new Map();
+  const add = (m, c, f) => m.set(c.id, (m.get(c.id) || 0) + f);
+  for (const [c, f] of split(g.entry, qps, down, g.users)) add(load, c, f);
   for (const n of topoOrder(g.entry)) {
     const L = load.get(n.id) || 0;
     if (down.has(n.id)) {
@@ -121,10 +147,17 @@ export function model({ peak = false } = {}) {
     if (sp.combined) st.combined = true;
     if ('nosql' in sp) st.nosql = sp.nosql;
     if (COMPONENTS[n.type].forwards && !childGroups(n).length) { st.drop = 1; r.issue = r.issue || TXT.noBackend || null; }
+    if (copied.has(n.id)) st.copied = copied.get(n.id) * sp.per;
     r.node[n.id] = st;
     // The bottleneck: the server furthest over its capacity.
     if (st.drop > 0 && (!r.bottleneck || st.util > r.node[r.bottleneck.id].util)) r.bottleneck = { id: n.id, type: n.type };
-    for (const grp of childGroups(n)) for (const [c, f] of split(grp, s, down, n)) load.set(c.id, (load.get(c.id) || 0) + f);
+    for (const grp of childGroups(n)) {
+      if (grp.some(isReplica) && grp.every(isReplica)) r.issue = r.issue || TXT.noPrimary || null;
+      for (const [c, f, kind] of split(grp, s, down, n)) { add(load, c, f); if (kind === 'write') add(writes, c, f); }
+    }
+    // Each healthy replica applies every write the primary served.
+    const wrote = (writes.get(n.id) || 0) * s / L;
+    if (wrote > 0) for (const c of replicasOf(n)) if (!down.has(c.id)) { add(load, c, wrote); add(copied, c, wrote); }
   }
 
   // 2. Served requests and response time, following each path.
@@ -183,18 +216,19 @@ function countSpofs(g) {
 /** One request's route for the animation: Users → the servers it passes through → back, and where it fails. */
 export function sampleRoute(m) {
   const fwd = [m.g.users.id], seen = new Set();
-  let group = m.g.entry, sender = m.g.users;
+  let group = m.g.entry, sender = m.g.users, lost = -1;
   while (group && group.length) {
     const down = new Set(group.filter(c => m.node[c.id] && m.node[c.id].down).map(c => c.id));
-    const shares = split(group, 1, down, sender);
-    let pick = Math.random(), n = shares[shares.length - 1][0];
+    const shares = split(group, 1, down, sender), total = shares.reduce((a, [, f]) => a + f, 0);
+    let pick = Math.random(), n = total > 1 - 1e-9 ? shares[shares.length - 1][0] : null;
     for (const [c, f] of shares) { if (pick < f) { n = c; break; } pick -= f; }
+    if (!n) { lost = fwd.length - 1; break; } // e.g. a write with no primary to take it
     if (seen.has(n.id)) break;
     seen.add(n.id); fwd.push(n.id);
     group = childGroups(n)[0]; sender = n;
   }
-  let failAt = -1;
-  for (let i = 1; i < fwd.length; i++) {
+  let failAt = lost;
+  for (let i = 1; i < fwd.length && failAt < 0; i++) {
     const st = m.node[fwd[i]];
     if (!st || st.down || Math.random() < st.drop) { failAt = i; break; }
   }

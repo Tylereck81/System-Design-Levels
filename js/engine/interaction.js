@@ -1,16 +1,16 @@
 // Adding, dragging, connecting and removing components.
 import { level } from '../level.js';
 import { $, svgEl, keepFocus } from '../dom.js';
-import { TYPES, PALETTE, LIMIT_MSG, OK_PAIRS, BAD_PAIRS, pairKey, S, sel, connectFrom, save, byId, setSel, setConnectFrom, setRefocus } from '../state.js';
+import { TYPES, PALETTE, LIMIT_MSG, OK_PAIRS, BAD_PAIRS, pairKey, nameOf, edgeInfo, MISSIONS, TXT, S, sel, connectFrom, save, byId, setSel, setConnectFrom, setRefocus } from '../state.js';
 import { drawIcon } from './icons.js';
-import { COMPONENTS, roleOf } from './components.js';
+import { COMPONENTS, T, roleOf } from './components.js';
 import { NW, NH, cv, previewLine, nodeRefs, renderEdges, renderCanvas, clampX, clampY, freeSpot, overlaps } from './canvas.js';
 import { setBanner } from '../ui/hud.js';
 import { renderInspector } from '../ui/inspector.js';
 import { togglePlay } from '../ui/controls.js';
 import { log } from '../ui/log.js';
 import { afterDesignChange } from '../main.js';
-import { dropMissingCrashes } from './experiments.js';
+import { dropMissingCrashes, downIds, trafficFactor } from './experiments.js';
 
 /* ---------------- Palette ---------------- */
 export const countType = (t) => S.nodes.filter(n => n.type === t).length;
@@ -43,9 +43,11 @@ export function addNode(type, x, y) {
   const p = (x == null) ? slotFor(type) : { x, y };
   const spot = freeSpot(clampX(p.x), clampY(p.y), null);
   const n = { id: 'n' + (S.seq++), type, x: spot.x, y: spot.y };
-  if (COMPONENTS[type].sized) n.size = 'S';
-  if (COMPONENTS[type].kinds) n.kind = null;
-  if (COMPONENTS[type].algos) n.algo = COMPONENTS[type].defaultAlgo;
+  const c = COMPONENTS[type], t = TYPES[type];
+  if (c.sized) n.size = 'S';
+  if (c.kinds) n.kind = t.kinds ? null : Object.keys(c.kinds)[0]; // with no choice offered, the first kind
+  if (c.algos) n.algo = c.defaultAlgo;
+  if (c.replicated && t.roles) n.role = S.nodes.some(m => m.type === type && m.role === 'primary') ? 'replica' : 'primary';
   S.nodes.push(n);
   setSel({ kind: 'node', id: n.id });
   afterDesignChange();
@@ -197,7 +199,7 @@ export function tryConnect(aId, bId) {
   const from = a.type === ok.from ? a : b, to = a.type === ok.from ? b : a;
   if (S.edges.some(e => e.from === from.id && e.to === to.id)) return false;
   S.edges.push({ id: 'e' + (S.seq++), from: from.id, to: to.id });
-  log(`Connected ${TYPES[from.type].name} → ${TYPES[to.type].name} (${ok.label}).`);
+  log(`Connected ${nameOf(from)} → ${nameOf(to)} (${edgeInfo(from, to).label}).`);
   afterDesignChange();
   return true;
 }
@@ -218,6 +220,17 @@ export function removeSel() {
     S.edges = S.edges.filter(e => e.id !== sel.id);
   }
   setSel(null); afterDesignChange();
+}
+
+/** Make replica `n` the primary; the old primary becomes a replica. If it was down, its newest writes never reached `n`. */
+export function promote(n) {
+  const old = S.nodes.find(m => m.type === n.type && m.role === 'primary');
+  const oldDown = !!old && downIds().has(old.id);
+  for (const m of S.nodes) if (m.type === n.type && m.role === 'primary') m.role = 'replica';
+  n.role = 'primary';
+  afterDesignChange();
+  const M = MISSIONS[S.mission], writesPerSec = M.qps * trafficFactor() * (M.writes || 0);
+  log(TXT.promoted({ oldDown, missing: Math.round(writesPerSec * T.lag), lagSecs: T.lag }), oldDown ? 'warn' : 'ok');
 }
 
 document.addEventListener('keydown', (e) => {
