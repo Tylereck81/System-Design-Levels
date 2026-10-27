@@ -43,6 +43,7 @@ export function addNode(type, x, y) {
   const n = { id: 'n' + (S.seq++), type, x: spot.x, y: spot.y };
   if (COMPONENTS[type].sized) n.size = 'S';
   if (COMPONENTS[type].kinds) n.kind = null;
+  if (COMPONENTS[type].algos) n.algo = COMPONENTS[type].defaultAlgo;
   S.nodes.push(n);
   setSel({ kind: 'node', id: n.id });
   afterDesignChange();

@@ -22,7 +22,7 @@ export const HOLD = 4; // seconds the targets must hold
 export const LS_KEY = level.saveKey;
 export const fresh = () => ({
   nodes: level.startNodes.map(n => ({ ...n })),
-  edges: [], seq: 1, mission: 0,
+  edges: (level.startEdges || []).map(e => ({ ...e })), seq: 1, mission: 0,
   done: MISSIONS.map(() => false), verified: MISSIONS.map(() => false),
   est: false, estVal: '', exp: Object.fromEntries(EXPERIMENTS.map(e => [e.id, false])),
   quiz: {}, tab: 'lesson', v: level.saveVersion,
@@ -59,7 +59,7 @@ export function load(data) {
   S.quiz = src.v === level.saveVersion ? q : {}; // saved answers from another quiz version no longer line up
   S.v = level.saveVersion;
   if (!['lesson', 'build', 'quiz'].includes(S.tab)) S.tab = 'lesson';
-  for (const n of S.nodes) { const c = COMPONENTS[n.type]; if (c.sized && !n.size) n.size = 'S'; if (c.kinds && !Object.keys(c.kinds).includes(n.kind)) n.kind = null; }
+  for (const n of S.nodes) { const c = COMPONENTS[n.type]; if (c.sized && !n.size) n.size = 'S'; if (c.kinds && !Object.keys(c.kinds).includes(n.kind)) n.kind = null; if (c.algos && !c.algos[n.algo]) n.algo = c.defaultAlgo; }
   const maxId = Math.max(0, ...S.nodes.concat(S.edges).map(x => parseInt(String(x.id).replace(/\D/g, ''), 10) || 0));
   S.seq = Math.max(Number.isInteger(src.seq) ? src.seq : 1, maxId + 1);
 }

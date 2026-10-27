@@ -11,6 +11,11 @@ export function drawIcon(type, parent, x, y, scale) {
     svgEl('circle', { cx: 13, cy: 12, r: 10.5, class: 'ic-stroke' }, g);
     svgEl('ellipse', { cx: 13, cy: 12, rx: 4.6, ry: 10.5, class: 'ic-stroke' }, g);
     svgEl('path', { d: 'M2.5 12h21M4.5 6.5h17M4.5 17.5h17', class: 'ic-stroke' }, g);
+  } else if (type === 'lb') {
+    // One point in, fanning out to three: traffic spread over a pool.
+    svgEl('circle', { cx: 4, cy: 12, r: 3.2, class: 'ic-stroke' }, g);
+    svgEl('path', { d: 'M7.2 12H12M12 12L21 3.5M12 12h9M12 12l9 8.5', class: 'ic-stroke' }, g);
+    for (const y of [3.5, 12, 20.5]) svgEl('circle', { cx: 23.5, cy: y, r: 2.4, class: 'ic-stroke' }, g);
   } else if (type === 'web') {
     svgEl('rect', { x: 6, y: 0, width: 15, height: 24, rx: 2, class: 'ic-web' }, g);
     svgEl('path', { d: 'M9.5 5.5h8M9.5 16.5h8M9.5 20h8', class: 'ic-line' }, g);

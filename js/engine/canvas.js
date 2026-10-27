@@ -5,6 +5,7 @@ import { TYPES, OK_PAIRS, pairKey, S, sel, connectFrom, refocus, run, byId, setR
 import { SIZES, COMPONENTS, runsAlone } from './components.js';
 import { drawIcon } from './icons.js';
 import { crashing } from './experiments.js';
+import { isStandby } from './model.js';
 
 export const VW = 760, VH = 520;
 export let NW = 188, NH = 60, compact = false, curView = null;
@@ -14,7 +15,12 @@ export const nodeRefs = {};
 
 export function nodeSub(n) {
   const c = COMPONENTS[n.type];
-  if (!c.sized) return TYPES[n.type].sub;
+  if (!c.sized) {
+    const standby = c.routing === 'standby' && isStandby(n);
+    const algo = c.algos && (TYPES[n.type].algos || []).find(a => a.id === (n.algo || c.defaultAlgo));
+    if (!algo) return standby ? TYPES[n.type].standbySub : TYPES[n.type].sub;
+    return standby ? `${TYPES[n.type].standbySub} · ${algo.short}` : algo.short; // the box fits about 20 characters
+  }
   if (c.kinds) return n.kind ? `${TYPES[n.type].kinds.find(k => k.id === n.kind).short} · ${n.size} ${fmt(SIZES[n.size].cap)}/s` : TYPES[n.type].unsetSub;
   return runsAlone(n) ? `${n.size} · ${fmt(SIZES[n.size].cap * c.alone.capFactor)} req/s (½)` : `${n.size} · ${fmt(SIZES[n.size].cap)} req/s`;
   return '';
@@ -81,6 +87,12 @@ export function edgePoint(n, tx, ty, pad) {
 
 export function renderEdges() {
   edgesG.textContent = '';
+  // Label each kind of connection once per sender and once per receiver, so a pool of servers stays readable.
+  // In a group, the label goes on the first connection where it doesn't sit on top of a component.
+  const labelled = new Set();
+  const covers = (x, y, w, h) => S.nodes.some(n => x < n.x + NW / 2 && x + w > n.x - NW / 2 && y < n.y + NH / 2 + 12 && y + h > n.y - NH / 2);
+  const labelOf = (e) => { const a = byId(e.from), b = byId(e.to); const info = a && b && OK_PAIRS[pairKey(a.type, b.type)]; return info ? info.label : null; };
+  const shared = (end, id, label) => S.edges.filter(e => e[end] === id && labelOf(e) === label).length;
   for (const e of S.edges) {
     const a = byId(e.from), b = byId(e.to);
     if (!a || !b) continue;
@@ -90,14 +102,18 @@ export function renderEdges() {
     svgEl('line', { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, class: 'edge-line', 'marker-end': isSel ? 'url(#arrSel)' : 'url(#arr)' }, g);
     svgEl('line', { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, class: 'edge-hit' }, g);
     const info = OK_PAIRS[pairKey(a.type, b.type)];
-    if (info) {
-      const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
-      const w = info.label.length * (compact ? 8 : 6.7) + 8;
-      const horiz = Math.abs(p2.x - p1.x) > Math.abs(p2.y - p1.y);
-      const lx = horiz ? mx - w / 2 : mx + 6, ly = horiz ? my - 24 : my - 9;
-      svgEl('rect', { x: lx, y: ly, width: w, height: compact ? 18 : 16, rx: 4, class: 'edge-label-bg' }, g);
-      const t = svgEl('text', { x: lx + 4, y: ly + (compact ? 14 : 12), class: 'edge-label' }, g); t.textContent = info.label;
-    }
+    if (!info) continue;
+    const fromKey = `from ${a.id} ${info.label}`, toKey = `to ${b.id} ${info.label}`;
+    if (labelled.has(fromKey) || labelled.has(toKey)) continue;
+    const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
+    const w = info.label.length * (compact ? 8 : 6.7) + 8, h = compact ? 18 : 16;
+    const horiz = Math.abs(p2.x - p1.x) > Math.abs(p2.y - p1.y);
+    const lx = horiz ? mx - w / 2 : mx + 6, ly = horiz ? my - 24 : my - 9;
+    const inGroup = shared('from', a.id, info.label) > 1 || shared('to', b.id, info.label) > 1;
+    if (inGroup && covers(lx, ly, w, h)) continue; // try the next connection in the group
+    labelled.add(fromKey); labelled.add(toKey);
+    svgEl('rect', { x: lx, y: ly, width: w, height: h, rx: 4, class: 'edge-label-bg' }, g);
+    const t = svgEl('text', { x: lx + 4, y: ly + (compact ? 14 : 12), class: 'edge-label' }, g); t.textContent = info.label;
   }
 }
 

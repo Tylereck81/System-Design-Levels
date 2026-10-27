@@ -140,7 +140,7 @@ export default {
 
   quiz: {
     passScore: 8,
-    passText: 'Level 1 is done. Level 2, Load balancer and horizontal scaling, is next. It isn\'t built yet: it comes after your review of Level 1.',
+    passText: 'Level 1 is done. Level 2, Load balancer and horizontal scaling, is next: open it from the level menu at the top.',
     failText: (pass) => `You need ${pass} to pass. Reread the lesson sections behind the questions you missed, then try again.`,
     questions: [
       { q: 'A user types api.example.com. What does DNS send back?', o: ['The HTML page for the site', 'A JSON response from the API', 'The IP address of the server', 'A cached copy of the data'], a: 2, e: 'DNS turns a domain name into an IP address, for example 203.0.113.42. The device then sends HTTP requests straight to that IP. DNS never carries the page itself.', r: 'DNS · RFC 1034' },

@@ -7,18 +7,26 @@ export const SIZES = {
   L: { cpu: 8, cap: 800, cost: 200 },
   XL: { cpu: 16, cap: 1600, cost: 450 },
 };
-export const T = { rtt: 40, web: 20, db: 10, dc: 0.5, dns: 5, nosqlLookup: 3, nosqlLookups: 3 };
+export const T = { rtt: 40, web: 20, db: 10, dc: 0.5, dns: 5, nosqlLookup: 3, nosqlLookups: 3, lb: 1 };
 
 // role: 'client' sends traffic, 'resolver' answers name lookups off the request path,
 //       'server' sits on the request path and has a capacity.
 // sized: capacity and cost come from the server size (S–XL).
 // kinds: variants that change the work per request (per = operations per request, base = ms per request).
 // alone: what happens when a dependency is missing (the server does that work itself).
+// cap, cost: fixed capacity (req/s) and monthly cost for servers that have no sizes.
+// routing 'standby': peers of this type don't share traffic; the first healthy one takes it all
+//   and the others wait as standbys (default: healthy peers split traffic evenly).
+// forwards: the server only passes requests on; with no server behind it, every request it gets fails.
+// algos: routing methods the player can pick for the servers behind it. split 'even' gives each the same share;
+//   'capacity' shares in proportion to each server's capacity. defaultAlgo is used when none is chosen.
 // Failure mode for every server: when down it serves nothing; its share moves to healthy peers,
 // and with no healthy peer every request sent to it fails.
 export const COMPONENTS = {
   users: { role: 'client' },
   dns: { role: 'resolver', cost: T.dns },
+  lb: { role: 'server', cap: 5000, base: T.lb, cost: 20, unit: 'req/s', routing: 'standby', forwards: true,
+    algos: { rr: { split: 'even' }, wrr: { split: 'capacity' }, lc: { split: 'capacity' } }, defaultAlgo: 'rr' },
   web: { role: 'server', sized: true, base: T.web, unit: 'req/s', alone: { missing: 'db', capFactor: 0.5, base: T.web + T.db } },
   db: {
     role: 'server', sized: true,
@@ -49,8 +57,15 @@ export function runsAlone(n) {
 export function serverSpec(n) {
   const c = COMPONENTS[n.type];
   const kind = c.kinds ? c.kinds[n.kind] || c.kinds[Object.keys(c.kinds)[0]] : null;
-  const spec = { cap: SIZES[n.size].cap, per: 1, base: c.base, unit: c.unit };
+  const spec = { cap: c.sized ? SIZES[n.size].cap : c.cap, per: 1, base: c.base, unit: c.unit };
   if (kind) Object.assign(spec, { per: kind.per, base: kind.base, unit: kind.unit, nosql: n.kind === 'nosql' });
   if (runsAlone(n)) Object.assign(spec, { cap: spec.cap * c.alone.capFactor, base: c.alone.base, combined: true });
   return spec;
+}
+
+/** How `n` splits traffic over the servers behind it: 'even' (default) or 'capacity'. */
+export function splitRule(n) {
+  const c = n && COMPONENTS[n.type];
+  if (!c || !c.algos) return 'even';
+  return (c.algos[n.algo] || c.algos[c.defaultAlgo]).split;
 }

@@ -1,6 +1,6 @@
 // Simulation model: load, latency, failures and cost, for any graph of components.
 import { MISSIONS, TXT, PALETTE, S, run, byId } from '../state.js';
-import { COMPONENTS, T, roleOf, isServer, costOf, serverSpec } from './components.js';
+import { COMPONENTS, T, roleOf, isServer, costOf, serverSpec, splitRule } from './components.js';
 import { activeExps, downIds, trafficFactor, textOf } from './experiments.js';
 
 export { SIZES, T } from './components.js';
@@ -63,11 +63,22 @@ function topoOrder(entry) {
   return order; // servers inside a cycle never reach in-degree 0 and are left out, so a bad design cannot hang the loop
 }
 
-/** Split `flow` across a group: healthy peers share it evenly; with none healthy, the dead ones receive it and fail. */
-function split(group, flow, down) {
+const standbyRouting = (group) => (COMPONENTS[group[0].type] || {}).routing === 'standby';
+
+/**
+ * Split `flow` across a group: healthy peers share it evenly; with none healthy, the dead ones receive it and fail.
+ * For a standby-routed type, the first healthy peer takes it all and the others wait.
+ * When the sender shares by capacity (a load balancer's weighted or least-connections method), bigger servers get more.
+ */
+function split(group, flow, down, sender) {
   const healthy = group.filter(c => !down.has(c.id));
-  const targets = healthy.length ? healthy : group;
-  return targets.map(c => [c, targets.length === 1 ? flow : flow / targets.length]);
+  const targets = healthy.length ? (standbyRouting(group) ? healthy.slice(0, 1) : healthy) : group;
+  if (targets.length === 1) return [[targets[0], flow]];
+  if (splitRule(sender) === 'capacity') {
+    const caps = targets.map(c => serverSpec(c).cap), total = caps.reduce((a, b) => a + b, 0);
+    return targets.map((c, i) => [c, flow * caps[i] / total]);
+  }
+  return targets.map(c => [c, flow / targets.length]);
 }
 
 export function model() {
@@ -83,7 +94,7 @@ export function model() {
 
   // 1. Load: each server serves at most its capacity and passes on only what it served.
   const load = new Map(), served = new Map();
-  for (const [c, f] of split(g.entry, qps, down)) load.set(c.id, (load.get(c.id) || 0) + f);
+  for (const [c, f] of split(g.entry, qps, down, g.users)) load.set(c.id, (load.get(c.id) || 0) + f);
   for (const n of topoOrder(g.entry)) {
     const L = load.get(n.id) || 0;
     if (down.has(n.id)) {
@@ -91,7 +102,14 @@ export function model() {
       r.node[n.id] = { down: true, util: 0, load: L, cap: 0, ms: 0, mult: 1 };
       continue;
     }
-    if (L <= 0) continue; // nothing reaches it (behind a failed component)
+    if (L <= 0) {
+      // A waiting standby is shown idle; anything else that gets no traffic sits behind a failed component.
+      if ((COMPONENTS[n.type] || {}).routing === 'standby') {
+        const sp = serverSpec(n);
+        r.node[n.id] = { standby: true, load: 0, cap: sp.cap, util: 0, ms: 0, mult: 1, base: sp.base, unit: sp.unit, drop: 0 };
+      }
+      continue;
+    }
     const sp = serverSpec(n);
     const u = (L * sp.per) / sp.cap;
     const s = Math.min(L, sp.cap / sp.per);
@@ -99,16 +117,17 @@ export function model() {
     const st = { load: L * sp.per, cap: sp.cap, util: u, ms: sp.base * qmul(u), mult: qmul(u), base: sp.base, unit: sp.unit, drop: Math.max(0, 1 - (sp.cap / sp.per) / L) };
     if (sp.combined) st.combined = true;
     if ('nosql' in sp) st.nosql = sp.nosql;
+    if (COMPONENTS[n.type].forwards && !childGroups(n).length) { st.drop = 1; r.issue = r.issue || TXT.noBackend || null; }
     r.node[n.id] = st;
-    for (const grp of childGroups(n)) for (const [c, f] of split(grp, s, down)) load.set(c.id, (load.get(c.id) || 0) + f);
+    for (const grp of childGroups(n)) for (const [c, f] of split(grp, s, down, n)) load.set(c.id, (load.get(c.id) || 0) + f);
   }
 
   // 2. Served requests and response time, following each path.
   //    `flow` is the requests per second arriving along this path, `t` the time spent before this server.
   //    Times are added in path order, so a single chain gives exactly rtt + web + hop + db.
   const NONE = { served: 0, end: null };
-  const viaGroup = (grp, flow, t, path) => {
-    const parts = split(grp, flow, down).map(([c, f]) => walk(c, f, t, path)).filter(p => p.served > 0);
+  const viaGroup = (grp, flow, t, path, sender) => {
+    const parts = split(grp, flow, down, sender).map(([c, f]) => walk(c, f, t, path)).filter(p => p.served > 0);
     const sv = parts.reduce((a, p) => a + p.served, 0);
     if (!sv) return NONE;
     return { served: sv, end: parts.length === 1 ? parts[0].end : parts.reduce((a, p) => a + p.served * p.end, 0) / sv };
@@ -119,19 +138,19 @@ export function model() {
     const passed = flow === L ? s : flow * s / L;   // this path's share of what the server served
     const end0 = t + r.node[n.id].ms;
     const next = new Set(path).add(n.id), groups = childGroups(n);
-    if (!groups.length) return { served: passed, end: end0 };
-    if (groups.length === 1) return viaGroup(groups[0], passed, end0 + T.dc, next);
+    if (!groups.length) return COMPONENTS[n.type].forwards ? NONE : { served: passed, end: end0 };
+    if (groups.length === 1) return viaGroup(groups[0], passed, end0 + T.dc, next, n);
     // Several dependencies (e.g. a cache and a database): a request needs all of them, one after another.
     let frac = 1, end = end0;
     for (const grp of groups) {
-      const res = viaGroup(grp, passed, end0 + T.dc, next);
+      const res = viaGroup(grp, passed, end0 + T.dc, next, n);
       if (!res.served) return NONE;
       frac *= res.served / passed;
       end += res.end - end0;
     }
     return { served: passed * frac, end };
   };
-  const res = viaGroup(g.entry, qps, T.rtt, new Set());
+  const res = viaGroup(g.entry, qps, T.rtt, new Set(), g.users);
   r.servedPct = 100 * res.served / qps;
   r.latency = res.served > 0 ? res.end : null;
   // A crash's message applies only when requests still reach the crashed component (no healthy peer took over).
@@ -159,14 +178,15 @@ function countSpofs(g) {
 /** One request's route for the animation: Users → the servers it passes through → back, and where it fails. */
 export function sampleRoute(m) {
   const fwd = [m.g.users.id], seen = new Set();
-  let group = m.g.entry;
+  let group = m.g.entry, sender = m.g.users;
   while (group && group.length) {
-    const healthy = group.filter(c => !(m.node[c.id] && m.node[c.id].down));
-    const pool = healthy.length ? healthy : group;
-    const n = pool.length === 1 ? pool[0] : pool[Math.floor(Math.random() * pool.length)];
+    const down = new Set(group.filter(c => m.node[c.id] && m.node[c.id].down).map(c => c.id));
+    const shares = split(group, 1, down, sender);
+    let pick = Math.random(), n = shares[shares.length - 1][0];
+    for (const [c, f] of shares) { if (pick < f) { n = c; break; } pick -= f; }
     if (seen.has(n.id)) break;
     seen.add(n.id); fwd.push(n.id);
-    group = childGroups(n)[0];
+    group = childGroups(n)[0]; sender = n;
   }
   let failAt = -1;
   for (let i = 1; i < fwd.length; i++) {
@@ -174,4 +194,14 @@ export function sampleRoute(m) {
     if (!st || st.down || Math.random() < st.drop) { failAt = i; break; }
   }
   return { route: fwd.concat(fwd.slice(0, -1).reverse()), failAt };
+}
+
+/** For standby-routed types: true when `n` is not the first of its peers, so it waits while the first is healthy. */
+export function isStandby(n) {
+  if ((COMPONENTS[n.type] || {}).routing !== 'standby') return false;
+  const parent = S.edges.find(e => e.to === n.id);
+  if (!parent) return false;
+  const p = byId(parent.from);
+  const peers = (p ? outs(p.id) : []).filter(c => c.type === n.type);
+  return peers.indexOf(n) > 0;
 }
