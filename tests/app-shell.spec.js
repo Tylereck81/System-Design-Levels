@@ -50,7 +50,7 @@ test.describe('App shell · level picker, routing, saved progress', () => {
     await expect(page.locator('#view-quiz')).toBeVisible();
     await expect(page).toHaveURL(/#quiz$/);
     // Changing the address to an unknown level while playing does not reload the page.
-    await page.evaluate(() => { window.__notReloaded = true; location.hash = '#level-7/build'; });
+    await page.evaluate(() => { window.__notReloaded = true; location.hash = '#level-20/build'; });
     await expect(page.locator('#view-build')).toBeVisible();
     await expect(page).toHaveURL(/#build$/);
     expect(await page.evaluate(() => window.__notReloaded)).toBe(true);

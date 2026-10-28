@@ -8,4 +8,5 @@ export const LEVELS = [
   { id: 4, title: 'Cache tier', load: () => import('./level-04.js') },
   { id: 5, title: 'CDN for static content', load: () => import('./level-05.js') },
   { id: 6, title: 'Stateless web tier and autoscaling', load: () => import('./level-06.js') },
+  { id: 7, title: 'Multiple data centers', load: () => import('./level-07.js') },
 ];
