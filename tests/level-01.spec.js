@@ -179,7 +179,7 @@ test.describe('Level 1 · robustness', () => {
     expect(await state(page, () => window.__sdl.S.done[2])).toBe(false);
   });
 
-  test('Delete and Backspace remove a component only when focus is on the canvas or the page', async ({ page }) => {
+  test('Delete and Backspace remove a component only when focus is on the canvas or the page', async ({ page, browserName }) => {
     await freshPage(page, '#build');
     const ids = await buildBasic(page);
     const has = (type) => page.evaluate((t) => window.__sdl.S.nodes.some((n) => n.type === t), type);
@@ -187,7 +187,8 @@ test.describe('Level 1 · robustness', () => {
     await page.focus(`[data-node="${ids.web}"]`);
     await page.keyboard.press('Enter');
     await page.focus('#mtabs button:first-child');
-    await page.keyboard.press('Backspace');
+    // Playwright's WebKit treats Backspace on a button as "go back" and leaves the game, so press it elsewhere only.
+    if (browserName !== 'webkit') await page.keyboard.press('Backspace');
     await page.keyboard.press('Delete');
     expect(await has('web')).toBe(true);
     // Back on the canvas node, Delete removes it.
