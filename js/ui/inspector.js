@@ -7,6 +7,7 @@ import { tryConnect, disconnect, removeSel } from '../engine/interaction.js';
 import { log } from './log.js';
 import { afterDesignChange } from '../main.js';
 import { trafficFactor } from '../engine/experiments.js';
+import { isStandby } from '../engine/model.js';
 
 export function renderInspector() {
   keepFocus($('insp'), buildInspector, () => { const b = $('insp'); b.tabIndex = -1; return b; });
@@ -56,6 +57,7 @@ function buildInspector() {
     }
     box.appendChild(seg);
     box.appendChild(el('p', 'kind-note', TYPES[n.type].algos.find(a => a.id === current).note));
+    if (isStandby(n) && TYPES[n.type].standbyNote) box.appendChild(el('p', 'kind-note', TYPES[n.type].standbyNote));
   }
   if (COMPONENTS[n.type].sized) {
     box.appendChild(el('p', 'label', 'Server size (scale up)'));
