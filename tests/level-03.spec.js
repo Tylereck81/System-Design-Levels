@@ -473,7 +473,7 @@ test.describe('Level 3 · layout and accessibility', () => {
             await page.click('#playBtn'); await page.waitForTimeout(500);
             await select(page, id);
           }
-          const results = await new AxeBuilder({ page }).analyze();
+          const results = await new AxeBuilder({ page }).setLegacyMode().analyze();
           expect(results.violations.map((v) => `${tab}: ${v.id} (${v.nodes.length})`)).toEqual([]);
         }
       });

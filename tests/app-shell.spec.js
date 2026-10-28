@@ -79,7 +79,7 @@ test.describe('App shell · level picker, routing, saved progress', () => {
       await page.emulateMedia({ colorScheme });
       await freshPage(page);
       await page.click('#lvlBtn');
-      const results = await new AxeBuilder({ page }).analyze();
+      const results = await new AxeBuilder({ page }).setLegacyMode().analyze();
       expect(results.violations.map((v) => `${v.id} (${v.nodes.length})`)).toEqual([]);
     });
   }
