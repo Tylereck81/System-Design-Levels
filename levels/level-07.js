@@ -171,7 +171,7 @@ export default {
 
   quiz: {
     passScore: 8,
-    passText: 'Level 7 is done. Level 8, message queues and workers, is next. It isn\'t built yet.',
+    passText: 'Level 7 is done. Level 8, Message queue, workers and monitoring, is next: open it from the level menu at the top.',
     failText: (pass) => `You need ${pass} to pass. Reread the lesson sections behind the questions you missed, then try again.`,
     questions: [
       { q: 'What does GeoDNS do?', o: ['Caches pages in cities near users', 'Answers by where the user is', 'Copies data between data centers', 'Balances load across web servers'], a: 1, e: 'GeoDNS returns a different address depending on the user\'s location, usually the nearest data center. Copying data is replication; caching near users is a CDN.', r: 'GeoDNS' },
