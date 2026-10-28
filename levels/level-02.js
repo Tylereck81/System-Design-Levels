@@ -202,7 +202,7 @@ export default {
 
   quiz: {
     passScore: 8,
-    passText: 'Level 2 is done. Level 3, database replication, is next. It isn\'t built yet.',
+    passText: 'Level 2 is done. Level 3, database replication, is next: open it from the level menu at the top.',
     failText: (pass) => `You need ${pass} to pass. Reread the lesson sections behind the questions you missed, then try again.`,
     questions: [
       { q: 'You put a load balancer in front of your web servers. Which IP does DNS now give users\' devices for example.com?', o: ['The private IP of the first web server', 'The load balancer\'s public IP', 'A web server IP picked at random', 'The database server\'s IP'], a: 1, e: 'Devices connect to the load balancer\'s public IP. The load balancer then forwards each request to a web server over the private network, so users never see the web servers.', r: 'Load balancing' },

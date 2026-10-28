@@ -11,6 +11,15 @@ export const LIMIT_MSG = level.limitMsg;
 export const OK_PAIRS = level.connections.ok;
 export const BAD_PAIRS = level.connections.bad;
 export const pairKey = (a, b) => [a, b].sort().join('|');
+/** A component's display name: its role's name when the level gives roles (e.g. "Read replica"). */
+/** A component's name inside a sentence: its role's lowercase name when the level gives one (e.g. "primary database"). */
+export const lowerName = (n) => { const t = TYPES[n.type], r = t.roles && n.role && t.roles[n.role]; return (r && r.lower) || nameOf(n).toLowerCase(); };
+export const nameOf = (n) => { const t = TYPES[n.type], r = t.roles && n.role && t.roles[n.role]; return r ? r.name : t.name; };
+/** Label and description of the connection a → b; a level can word it by the receiver's role. */
+export const edgeInfo = (a, b) => {
+  const info = OK_PAIRS[pairKey(a.type, b.type)], byRole = info && info.byRole && b.role && info.byRole[b.role];
+  return byRole ? { ...info, ...byRole } : info;
+};
 export const MISSIONS = level.missions;
 export const QUIZ = level.quiz.questions;
 export const PASS = level.quiz.passScore;
@@ -80,7 +89,15 @@ export function load(data) {
   S.quiz = (src.qv ?? src.v) === QUIZ_VERSION ? q : {}; // saved answers from another quiz version no longer line up
   S.v = level.saveVersion; S.qv = QUIZ_VERSION;
   if (!['lesson', 'build', 'quiz'].includes(S.tab)) S.tab = 'lesson';
-  for (const n of S.nodes) { const c = COMPONENTS[n.type]; if (c.sized && !n.size) n.size = 'S'; if (c.kinds && !Object.keys(c.kinds).includes(n.kind)) n.kind = null; if (c.algos && !c.algos[n.algo]) n.algo = c.defaultAlgo; }
+  for (const n of S.nodes) {
+    const c = COMPONENTS[n.type], t = TYPES[n.type];
+    if (c.sized && !n.size) n.size = 'S';
+    if (c.kinds && !Object.keys(c.kinds).includes(n.kind)) n.kind = t.kinds ? null : Object.keys(c.kinds)[0];
+    if (c.algos && !c.algos[n.algo]) n.algo = c.defaultAlgo;
+    if (c.replicated && t.roles && !t.roles[n.role]) n.role = 'replica';
+  }
+  // One primary per type: any extra one goes back to being a replica.
+  for (const type of Object.keys(TYPES)) S.nodes.filter(n => n.type === type && n.role === 'primary').slice(1).forEach(n => { n.role = 'replica'; });
   const maxId = Math.max(0, ...S.nodes.concat(S.edges).map(x => parseInt(String(x.id).replace(/\D/g, ''), 10) || 0));
   S.seq = Math.max(Number.isInteger(src.seq) ? src.seq : 1, maxId + 1);
 }
