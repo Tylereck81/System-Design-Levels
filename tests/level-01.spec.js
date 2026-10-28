@@ -144,7 +144,7 @@ test.describe('Level 1 · robustness', () => {
     await page.click('#estBtn');
     await page.click('#exp-crash');
     await fastForward(page, 2);
-    expect(await state(page, () => window.__sdl.S.exp.crash)).toBe(false);
+    expect(await state(page, () => window.__sdl.S.exp[2].crash)).toBe(false);
     expect(await logText(page)).toContain('Build the design first');
     await buildBasic(page);
     await page.click('#playBtn');
@@ -175,7 +175,7 @@ test.describe('Level 1 · robustness', () => {
     await expect(page.locator('#exp-spike')).toHaveAttribute('aria-pressed', 'true');
     expect(await logText(page)).toContain('Web server restarted.');
     await fastForward(page, 2);
-    expect(await state(page, () => window.__sdl.S.exp)).toEqual({ crash: false, spike: true });
+    expect(await state(page, () => window.__sdl.S.exp[2])).toEqual({ crash: false, spike: true });
     expect(await state(page, () => window.__sdl.S.done[2])).toBe(false);
   });
 

@@ -155,7 +155,7 @@ test.describe('Level 2 · teaching feedback', () => {
     await fastForward(page, 5);
     await page.click('#exp-crash-web');
     await fastForward(page, 3);
-    expect(await state(page, () => window.__sdl.S.exp['crash-web'])).toBe(false);
+    expect(await state(page, () => window.__sdl.S.exp[1]['crash-web'])).toBe(false);
     await expect(page.locator('#log')).toContainText('Add a spare web server (N + 1)');
   });
 
@@ -204,7 +204,7 @@ test.describe('Level 2 · teaching feedback', () => {
     expect(await state(page, () => window.__sdl.S.nodes.find((n) => n.type === 'lb').algo)).toBe('rr');
   });
 
-  test('crashing a web server takes down the biggest one', async ({ page }) => {
+  test('crashing a web server takes down the one whose loss hurts most', async ({ page }) => {
     await freshPage(page, '#level-2/build');
     await build(page, { webs: ['S', 'L', 'S'] });
     await page.click('#playBtn');
@@ -240,7 +240,7 @@ test.describe('Level 2 · teaching feedback', () => {
     await page.click('#exp-crash-lb');
     expect((await measure(page)).issue).toContain('The load balancer is down');
     await fastForward(page, 3);
-    expect(await state(page, () => window.__sdl.S.exp['crash-lb'])).toBe(false);
+    expect(await state(page, () => window.__sdl.S.exp[2]['crash-lb'])).toBe(false);
     await page.click('#exp-crash-lb');
     await page.evaluate(() => {
       const s = window.__sdl, S = s.S;
@@ -269,6 +269,97 @@ test.describe('Level 2 · teaching feedback', () => {
     await page.fill('#estIn', '1204 req/s');
     await page.click('#estBtn');
     expect(await state(page, () => window.__sdl.S.est)).toBe(true);
+  });
+});
+
+test.describe('Level 2 · break-it results', () => {
+  const crashPassed = (page, i) => page.evaluate((k) => window.__sdl.S.exp[k]['crash-web'], i);
+  const servedAtPeak = (page) => page.evaluate(() => window.__sdl.model({ peak: true }).servedPct);
+
+  test('results belong to a mission: Mission 2 starts with its crash test not done', async ({ page }) => {
+    await freshPage(page, '#level-2/build');
+    await build(page);
+    await page.click('#playBtn');
+    await fastForward(page, 5);
+    await page.click('#exp-crash-web');
+    await fastForward(page, 2);
+    await page.click('#exp-crash-web');
+    expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
+    await page.click('#mission .complete button');
+    expect(await crashPassed(page, 1)).toBe(false);
+    await expect(page.locator('#goals li', { hasText: 'crash a web server' })).toHaveClass(/todo/);
+    await expect(page.locator('#goals li', { hasText: 'crash a web server' })).toContainText('not tested yet');
+    await expect(page.locator('#exp-crash-web')).toHaveText('Crash web server'); // no ✓ carried over
+  });
+
+  test('changing the design clears a passed crash test of an unfinished mission', async ({ page }) => {
+    await freshPage(page, '#level-2/build');
+    const { webs } = await build(page);
+    await page.click('#playBtn');
+    await page.click('#exp-crash-web');
+    await fastForward(page, 2);
+    await page.click('#exp-crash-web');
+    expect(await crashPassed(page, 0)).toBe(true);
+    expect(await state(page, () => window.__sdl.S.done[0])).toBe(false); // the targets have not held yet
+    await page.evaluate((id) => { const s = window.__sdl; s.S.nodes = s.S.nodes.filter((n) => n.id !== id); s.S.edges = s.S.edges.filter((e) => e.from !== id && e.to !== id); s.afterDesignChange(); }, webs[2]);
+    expect(await crashPassed(page, 0)).toBe(false);
+    await fastForward(page, 5);
+    expect(await state(page, () => window.__sdl.S.done[0])).toBe(false);
+  });
+
+  test('the outcome is judged at peak traffic: L + M + M + M never passes', async ({ page }) => {
+    await freshPage(page, '#level-2/build');
+    await goTo(page, 1);
+    await page.evaluate(() => { window.__sdl.S.est = true; });
+    await build(page, { webs: ['L', 'M', 'M', 'M'], db: 'XL' });
+    await page.evaluate(() => { window.__sdl.S.nodes.find((n) => n.type === 'lb').algo = 'wrr'; window.__sdl.afterDesignChange(); });
+    await page.click('#playBtn');
+    await page.click('#exp-crash-web');
+    const served = await servedAtPeak(page);
+    expect(served).toBeGreaterThanOrEqual(96.5);
+    expect(served).toBeLessThanOrEqual(98.6);
+    const down = await page.evaluate(() => { const m = window.__sdl.model(); return window.__sdl.S.nodes.filter((n) => m.node[n.id] && m.node[n.id].down).map((n) => n.size); });
+    expect(down).toEqual(['L']); // the server the others can least cover for
+    for (let i = 0; i < 6; i++) { await fastForward(page, 1.3); expect(await crashPassed(page, 1)).toBe(false); }
+  });
+
+  test('when the database is the bottleneck, the crash message names it', async ({ page }) => {
+    await freshPage(page, '#level-2/build');
+    await goTo(page, 1);
+    await page.evaluate(() => { window.__sdl.S.est = true; });
+    await build(page, { webs: ['M', 'M', 'M', 'M', 'M', 'M'], db: 'L' });
+    await page.click('#playBtn');
+    await page.click('#exp-crash-web');
+    await fastForward(page, 2);
+    expect(await crashPassed(page, 1)).toBe(false);
+    await expect(page.locator('#log')).toContainText('the database is the bottleneck');
+  });
+
+  test('a save from before per-mission results keeps finished missions finished', async ({ page }) => {
+    await freshPage(page, '#level-2/build');
+    await page.evaluate(() => {
+      const S = window.__sdl.S;
+      const old = { ...JSON.parse(JSON.stringify(S)), v: 1, mission: 2, done: [true, true, false], verified: [true, true, false], est: true, quiz: { 0: 1 }, exp: { 'crash-web': true, 'crash-lb': false } };
+      delete old.qv;
+      localStorage.setItem('sdl-level2-v1', JSON.stringify(old));
+    });
+    await reloadGame(page);
+    const s = await state(page, () => { const S = window.__sdl.S; return { done: S.done, exp: S.exp, mission: S.mission, quiz: S.quiz, v: S.v }; });
+    expect(s.done).toEqual([true, true, false]);
+    expect(s.exp).toEqual([{ 'crash-web': true }, { 'crash-web': true }, { 'crash-lb': false }]);
+    expect(s.mission).toBe(2);
+    expect(s.quiz).toEqual({ 0: 1 }); // the quiz didn't change, so its answers stay
+    expect(s.v).toBe(2);
+  });
+
+  test('an unfinished mission keeps the result it had in an old save', async ({ page }) => {
+    await freshPage(page, '#level-2/build');
+    await page.evaluate(() => {
+      const S = window.__sdl.S;
+      localStorage.setItem('sdl-level2-v1', JSON.stringify({ ...JSON.parse(JSON.stringify(S)), v: 1, mission: 0, exp: { 'crash-web': true, 'crash-lb': true } }));
+    });
+    await reloadGame(page);
+    expect(await state(page, () => window.__sdl.S.exp)).toEqual([{ 'crash-web': true }, { 'crash-web': false }, { 'crash-lb': false }]);
   });
 });
 

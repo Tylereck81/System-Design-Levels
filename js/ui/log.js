@@ -40,7 +40,8 @@ export function observe(m) {
     keys.set('slow' + sig, [`Response time ${fmt(m.latency)} ms misses the ${TARGET_MS} ms goal: ${parts.join(' + ')}. Busy servers make requests wait; give the slowest one more capacity.`, 'warn']);
   }
   for (const exp of activeExps()) if (exp.note && m.g.entry.length && !crashing()) keys.set('note-' + exp.id, [exp.note(m.base), 'bad']);
-  for (const exp of activeExps()) if (exp.notMet && !expectMet(exp, m)) keys.set('notmet-' + exp.id, [textOf(exp.notMet, m), 'warn']);
+  const mx = m.atPeak || m; // outcomes are judged at peak traffic (see sim.js)
+  for (const exp of activeExps()) if (exp.notMet && !expectMet(exp, mx)) keys.set('notmet-' + exp.id, [textOf(exp.notMet, mx), 'warn']);
   for (const [k, [msg, tone]] of keys) if (!run.active.has(k)) log(msg, tone);
   const hadProblems = run.active.size > 0;
   run.active = new Set(keys.keys());

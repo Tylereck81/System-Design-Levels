@@ -1,6 +1,6 @@
 // Play, experiments and reset buttons.
 import { $ } from '../dom.js';
-import { MISSIONS, EXPERIMENTS, fresh, S, run, setS, setSel, setConnectFrom } from '../state.js';
+import { MISSIONS, EXPERIMENTS, fresh, S, run, setS, setSel, setConnectFrom, expPassed } from '../state.js';
 import { graph, model } from '../engine/model.js';
 import { paintLive } from '../engine/canvas.js';
 import { stopRun } from '../engine/sim.js';
@@ -9,7 +9,7 @@ import { renderInspector } from './inspector.js';
 import { paintGoals } from './mission.js';
 import { log } from './log.js';
 import { afterChange, afterDesignChange } from '../main.js';
-import { isOn, activeExps, startExp, stopExp } from '../engine/experiments.js';
+import { isOn, activeExps, startExp, stopExp, crashCandidates } from '../engine/experiments.js';
 
 export function paintControls() {
   const M = MISSIONS[S.mission];
@@ -23,7 +23,7 @@ export function paintControls() {
     const btn = $('exp-' + exp.id);
     btn.disabled = blocked;
     btn.setAttribute('aria-pressed', isOn(exp.id) ? 'true' : 'false');
-    btn.textContent = (S.exp[exp.id] ? '✓ ' : '') + (isOn(exp.id) ? exp.labelOn : exp.label);
+    btn.textContent = (expPassed(exp.id) ? '✓ ' : '') + (isOn(exp.id) ? exp.labelOn : exp.label);
   }
 }
 export function togglePlay() {
@@ -36,18 +36,26 @@ export function togglePlay() {
 }
 $('playBtn').onclick = togglePlay;
 export const designReady = () => graph().ready;
+/** % served at peak traffic with component `id` taken down by crash `exp`: how much its loss hurts. */
+function servedWithout(exp, id) {
+  const was = run.on[exp.id];
+  run.on[exp.id] = { node: id };
+  const s = model({ peak: true }).servedPct;
+  if (was) run.on[exp.id] = was; else delete run.on[exp.id];
+  return s;
+}
 // One toggle button per experiment, in the Break it group.
 for (const exp of EXPERIMENTS) {
   const btn = document.createElement('button');
   btn.className = 'btn toggle'; btn.id = 'exp-' + exp.id; btn.setAttribute('aria-pressed', 'false'); btn.textContent = exp.label;
   $('expGroup').appendChild(btn);
   btn.onclick = () => {
-    if (!isOn(exp.id) && (!designReady() || (exp.kind === 'crash' && !exp.target(graph())))) { log(exp.needsDesign, 'warn'); return; }
+    if (!isOn(exp.id) && (!designReady() || (exp.kind === 'crash' && !crashCandidates(exp, graph()).length))) { log(exp.needsDesign, 'warn'); return; }
     if (isOn(exp.id)) stopExp(exp);
     else {
       // One experiment at a time, so each one's effect is clear and only that one counts.
       for (const other of activeExps()) { stopExp(other); log(other.off, 'ok'); }
-      startExp(exp, graph());
+      startExp(exp, graph(), servedWithout);
     }
     run.hold = 0;
     if (isOn(exp.id)) { log(typeof exp.on === 'function' ? exp.on(MISSIONS[S.mission].qps * exp.factor) : exp.on, exp.onTone); if (!run.playing) togglePlay(); }

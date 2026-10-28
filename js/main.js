@@ -1,6 +1,6 @@
 // Boot, tab routing and the glue that re-renders after a change.
 import { $ } from './dom.js';
-import { MISSIONS, QUIZ, PASS, fresh, S, connectFrom, run, load, save, byId, setS, setConnectFrom } from './state.js';
+import { MISSIONS, QUIZ, PASS, fresh, S, connectFrom, run, load, save, byId, setS, setConnectFrom, clearOpenResults } from './state.js';
 import { model, sampleRoute } from './engine/model.js';
 import { renderCanvas } from './engine/canvas.js';
 import { renderPalette, addNode, tryConnect } from './engine/interaction.js';
@@ -72,6 +72,7 @@ export function afterDesignChange() {
   const i = S.mission;
   if (!S.done[i] && S.verified[i]) log('Design changed. Run it again to check the targets.', '');
   S.verified = S.verified.map((v, k) => v && S.done[k]);
+  clearOpenResults(); // and its break-it results
   run.hold = 0;
   afterChange(true);
 }

@@ -20,13 +20,22 @@ export const HOLD = 4; // seconds the targets must hold
 
 /* ---------------- State ---------------- */
 export const LS_KEY = level.saveKey;
+// Break-it results are kept per mission: the same experiment can be a goal of several missions.
+const expGoals = (i) => MISSIONS[i].goals.filter(x => x.type === 'exp').map(x => x.id);
+const noResults = (i) => Object.fromEntries(expGoals(i).map(id => [id, false]));
+// The quiz has its own version, so a save-format change doesn't throw away quiz answers.
+const QUIZ_VERSION = level.quizVersion ?? level.saveVersion;
 export const fresh = () => ({
   nodes: level.startNodes.map(n => ({ ...n })),
   edges: (level.startEdges || []).map(e => ({ ...e })), seq: 1, mission: 0,
   done: MISSIONS.map(() => false), verified: MISSIONS.map(() => false),
-  est: false, estVal: '', exp: Object.fromEntries(EXPERIMENTS.map(e => [e.id, false])),
-  quiz: {}, tab: 'lesson', v: level.saveVersion,
+  est: false, estVal: '', exp: MISSIONS.map((_, i) => noResults(i)),
+  quiz: {}, tab: 'lesson', v: level.saveVersion, qv: QUIZ_VERSION,
 });
+/** True when mission i's break-it goal `id` has passed. */
+export const expPassed = (id, i = S.mission) => !!(S.exp[i] && S.exp[i][id]);
+/** Forget the break-it results of every mission not finished yet (after a design change, as for verification). */
+export function clearOpenResults() { S.exp = S.exp.map((r, i) => (S.done[i] ? r : noResults(i))); }
 export let S = fresh();
 export let sel = null;          // {kind:'node'|'edge', id}
 export let connectFrom = null;  // tap-to-connect source id
@@ -52,12 +61,19 @@ export function load(data) {
   S = Object.assign(f, src);
   const bools = (a) => MISSIONS.map((_, i) => !!(Array.isArray(a) && a[i]));
   S.done = bools(src.done); S.verified = bools(src.verified);
-  S.exp = Object.fromEntries(EXPERIMENTS.map(e => [e.id, !!(src.exp && src.exp[e.id])]));
+  // Results per mission. An older save kept one result per experiment for the whole level: it belongs to the
+  // mission that was open. A finished mission keeps all its goals passed.
+  const old = src.exp && typeof src.exp === 'object' && !Array.isArray(src.exp);
+  S.exp = MISSIONS.map((_, i) => Object.fromEntries(expGoals(i).map(id => {
+    if (S.done[i]) return [id, true];
+    const r = old ? (i === src.mission ? src.exp[id] : false) : Array.isArray(src.exp) && src.exp[i] && src.exp[i][id];
+    return [id, !!r];
+  })));
   S.est = !!src.est; S.estVal = typeof src.estVal === 'string' ? src.estVal : '';
   const q = {};
   if (src.quiz && typeof src.quiz === 'object') for (const k in src.quiz) { const v = src.quiz[k]; if (Number.isInteger(v) && v >= 0 && Number.isInteger(+k) && +k >= 0 && +k < QUIZ.length && v < QUIZ[+k].o.length) q[k] = v; }
-  S.quiz = src.v === level.saveVersion ? q : {}; // saved answers from another quiz version no longer line up
-  S.v = level.saveVersion;
+  S.quiz = (src.qv ?? src.v) === QUIZ_VERSION ? q : {}; // saved answers from another quiz version no longer line up
+  S.v = level.saveVersion; S.qv = QUIZ_VERSION;
   if (!['lesson', 'build', 'quiz'].includes(S.tab)) S.tab = 'lesson';
   for (const n of S.nodes) { const c = COMPONENTS[n.type]; if (c.sized && !n.size) n.size = 'S'; if (c.kinds && !Object.keys(c.kinds).includes(n.kind)) n.kind = null; if (c.algos && !c.algos[n.algo]) n.algo = c.defaultAlgo; }
   const maxId = Math.max(0, ...S.nodes.concat(S.edges).map(x => parseInt(String(x.id).replace(/\D/g, ''), 10) || 0));

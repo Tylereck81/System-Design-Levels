@@ -9,12 +9,13 @@ const latGoal = { id: 'lat', type: 'metric', text: `Response time under ${target
 const sharedDbGoal = { id: 'shared', type: 'struct', text: 'Every web server uses the shared database', test: (g) => g.everyReaches('web', 'db') };
 const costGoal = (max) => ({ id: 'cost', type: 'struct', text: `Spend at most $${fmt(max)} per month`, test: (g) => g.cost <= max, val: (m, g) => '$' + fmt(g.cost) });
 const served99 = (m) => m.servedPct >= targets.servedPct;
-const SIZE_ORDER = ['S', 'M', 'L', 'XL']; // the web server crash takes the biggest one: the worst case for N + 1
+const TIER = { db: 'database', lb: 'load balancer' }; // names for the bottleneck message
 
 export default {
   id: 2,
   saveKey: 'sdl-level2-v1',
-  saveVersion: 1,
+  saveVersion: 2, // 2: break-it results are kept per mission
+  quizVersion: 1,
   targets,
 
   components: {
@@ -137,17 +138,20 @@ export default {
     },
   ],
 
-  // Break-it experiments. A crash takes down the component `target` picks when it starts;
-  // `expect` is the outcome that must hold for the whole run before it counts.
+  // Break-it experiments. A crash takes down the component `target` picks when it starts, or the one of its `targets`
+  // whose loss hurts most. `expect` is the outcome that must hold, at peak traffic, for the whole run before it counts.
   experiments: [
     {
-      id: 'crash-web', kind: 'crash', target: (g) => g.onPath('web').sort((a, b) => SIZE_ORDER.indexOf(b.size) - SIZE_ORDER.indexOf(a.size))[0] || null,
+      // Any web server could fail; the test takes down the one the others can least cover for.
+      id: 'crash-web', kind: 'crash', targets: (g) => g.onPath('web'),
       label: 'Crash web server', labelOn: 'Restart web server',
       needsDesign: 'Build the design first: connect Users to the load balancer and the load balancer to the web servers, then crash one.',
-      on: 'You pulled the plug on your biggest web server.', onTone: 'bad',
+      on: 'You pulled the plug on the web server the site can least afford to lose.', onTone: 'bad',
       off: 'Web server restarted.',
       expect: served99,
-      notMet: (m) => `Only ${m.servedPct.toFixed(1)}% served with one web server down: the servers left cannot carry the peak. Add a spare web server (N + 1).`,
+      notMet: (m) => (m.bottleneck && m.bottleneck.type !== 'web'
+        ? `Only ${m.servedPct.toFixed(1)}% served with one web server down, but the web servers keep up: the ${TIER[m.bottleneck.type] || 'next server'} is the bottleneck. Give it more capacity.`
+        : `Only ${m.servedPct.toFixed(1)}% served with one web server down: the servers left cannot carry the peak. Add a spare web server (N + 1).`),
       issue: 'The only web server behind the load balancer is down, so every request fails.',
       observed: (m) => `Observed: one web server down, ${m.servedPct.toFixed(1)}% still served. The load balancer stopped sending it requests and the others took its share.`,
     },
