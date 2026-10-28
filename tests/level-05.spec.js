@@ -280,6 +280,32 @@ test.describe('Level 5 · teaching feedback', () => {
   });
 });
 
+test.describe('Level 5 · fixes from QA', () => {
+  test('Mission 2: a CDN without fallback is a single point of failure; with fallback it is not', async ({ page }) => {
+    await freshPage(page, '#level-5/build');
+    await goTo(page, 1);
+    const id = await addCdn(page);
+    await calm(page);
+    expect((await measure(page)).spof).toBe(1);
+    await page.click('#playBtn');
+    await fastForward(page, 1);
+    await expect(page.locator('#goals li', { hasText: 'No single point of failure' })).toHaveClass(/fail/);
+    await set(page, id, { fallback: 'origin' });
+    await calm(page);
+    expect((await measure(page)).spof).toBe(0);
+    await page.click('#playBtn');
+    await page.click('#exp-crash-cdn');
+    expect(await page.evaluate(() => window.__sdl.model({ peak: true }).servedPct)).toBeGreaterThanOrEqual(99);
+  });
+
+  test('a CDN Users do not connect to is not counted', async ({ page }) => {
+    await freshPage(page, '#level-5/build');
+    await addCdn(page, { users: false });
+    await calm(page);
+    expect((await measure(page)).spof).toBe(0);
+  });
+});
+
 test.describe('Level 5 · quiz', () => {
   test('answer key is balanced and not guessable by length', async ({ page }) => {
     await freshPage(page, '#level-5/quiz');

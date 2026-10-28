@@ -153,7 +153,7 @@ export default {
         farGoal, servedGoal, latGoal, costGoal(BUDGET),
       ],
       hint: 'Add a CDN. Connect Users to it, and connect it to both load balancers: they are its origin. Then select it and pick a TTL long enough that most files are still at the edge when the next request comes. Select Users to see both round trips.',
-      takeaway: 'Files now come from an edge near each shopper: about 40 ms for America instead of 132. The load balancers lost most of their traffic too. Pages still travel to Frankfurt; putting servers in America is Level 7.',
+      takeaway: 'Files now come from an edge near each shopper: about 45 ms for America instead of about 130. The load balancers lost most of their traffic too. Pages still travel to Frankfurt; putting servers in America is Level 7.',
     },
     {
       title: 'The CDN goes down', ref: 'CDN fallback', qps: 4000, writes: 0.2, files: 0.5, far: 0.3, budget: BUDGET,
