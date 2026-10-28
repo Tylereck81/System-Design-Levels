@@ -1,6 +1,6 @@
 // Simulation model: load, latency, failures and cost, for any graph of components.
 import { MISSIONS, TXT, PALETTE, S, run, byId } from '../state.js';
-import { COMPONENTS, T, roleOf, isServer, isReplica, isCache, isEdge, isStore, isSticky, scales, sessionsOn, holdsSessions, copiesFor, isLocated, isFar, isGeo, replicates, isQueue, hitRate, edgeHit, fallsBack, staleSecs, costOf, serverSpec, splitRule } from './components.js';
+import { COMPONENTS, T, roleOf, isServer, isReplica, isCache, isEdge, isStore, isSticky, scales, sessionsOn, holdsSessions, copiesFor, isLocated, isFar, isGeo, replicates, isQueue, isOffload, shardShares, keyedShards, hitRate, edgeHit, fallsBack, staleSecs, costOf, serverSpec, splitRule } from './components.js';
 import { activeExps, downIds, trafficFactor, uploadFactor, dayShift, textOf, PEAK } from './experiments.js';
 
 export { SIZES, T } from './components.js';
@@ -19,7 +19,11 @@ export function childGroups(n) {
   return [...groups.values()];
 }
 /** The groups a server hands work to, leaving out its session store (every page reads that first, see storeGroup). */
-const depGroups = (n) => childGroups(n).filter(grp => !isStore(grp[0]) && !isQueue(grp[0]));
+const depGroups = (n) => childGroups(n).filter(grp => !isStore(grp[0]) && !isQueue(grp[0]) && !isOffload(grp[0]));
+/** The store that takes a server's non-relational queries (offload), if it connects to one. */
+const offloadGroup = (n) => childGroups(n).find(grp => isOffload(grp[0])) || null;
+const nonRelShare = () => MISSIONS[S.mission].nonRel || 0; // share of queries that need no joins
+const hotShare = () => MISSIONS[S.mission].hot || 0;       // share of queries about a few very popular accounts
 const storeGroup = (n) => childGroups(n).find(grp => isStore(grp[0])) || null;
 /** The queue a server publishes uploads to, instead of processing them itself. */
 const queueGroup = (n) => childGroups(n).find(grp => isQueue(grp[0])) || null;
@@ -230,6 +234,7 @@ function loadPhase(g, qps, sizing, down, r, day, backlog, U) {
       continue;
     }
     if (COMPONENTS[n.type].consumes) { consume(n, L); continue; }
+    if (COMPONENTS[n.type].sharded) { shard(n, L); continue; }
     const sp = serverSpec(n);
     const Lf = files.get(n.id) || 0, ownFiles = Lf > 0 && sp.filePer != null; // a server that sends files itself
     // Uploads (a share U of its pages): published to its queue as an ordinary request, or processed here.
@@ -288,7 +293,10 @@ function loadPhase(g, qps, sizing, down, r, day, backlog, U) {
       for (const [c, f, h] of a.parts) { add(load, c, f); hitOf.set(c.id, h); hits += f * h; }
       for (const grp of cs.others) { send(grp, a.writes, 1); send(grp, a.misses + a.bypass, 0); }
     } else {
-      for (const grp of depGroups(n)) send(grp, on);
+      // A store that takes the non-relational queries gets that share; the database gets the rest.
+      const og = offloadGroup(n), R = og ? nonRelShare() : 0;
+      if (og) send(og, on * R);
+      for (const grp of depGroups(n)) send(grp, R ? on * (1 - R) : on);
     }
     // Each healthy replica applies every write the primary served.
     const wrote = (writes.get(n.id) || 0) * s / L;
@@ -312,6 +320,21 @@ function loadPhase(g, qps, sizing, down, r, day, backlog, U) {
     served.set(n.id, out);
     r.node[n.id] = { load: L, cap: sp.cap, util: out / sp.cap, ms: sp.base, mult: 1, base: sp.base, unit: sp.unit, drop: 0, consumer: true, backlog: b, ...(k ? { copies: k } : {}) };
   }
+  /**
+   * A sharded database: each shard is its own server with its share of the queries. The box reports its busiest shard,
+   * the average time of the queries it served, and the share that failed on overloaded shards.
+   */
+  function shard(n, L) {
+    const sp = serverSpec(n), shares = shardShares(n, hotShare());
+    const shards = shares.map(f => { const l = L * f * sp.per, u = l / sp.cap; return { load: l, util: u, ms: sp.base * qmul(u), drop: Math.max(0, 1 - sp.cap / l) }; });
+    const ok = shares.reduce((a, f, i) => a + f * (1 - shards[i].drop), 0);
+    const ms = ok ? shares.reduce((a, f, i) => a + f * (1 - shards[i].drop) * shards[i].ms, 0) / ok : 0;
+    const util = Math.max(...shards.map(x => x.util));
+    served.set(n.id, L * ok);
+    r.node[n.id] = { load: L * sp.per, cap: sp.cap * shards.length, util, ms, mult: ms / sp.base, base: sp.base, unit: sp.unit, drop: 1 - ok, shards };
+    r.maxShardUtil = Math.max(r.maxShardUtil || 0, util);
+    r.shardCount = (r.shardCount || 0) + keyedShards(n);
+  }
 }
 
 /** The model at this moment, or with `peak` at the top of the traffic's wobble (see PEAK). */
@@ -320,7 +343,7 @@ export function model({ peak = false } = {}) {
   const M = MISSIONS[S.mission];
   const base = M.qps * trafficFactor();
   const qps = peak ? base * PEAK : base * (1 + 0.02 * Math.sin(run.t * 1.7) + 0.01 * Math.sin(run.t * 4.1));
-  const r = { qps, base, servedPct: 0, latency: null, cost: g.cost, spof: 0, node: {}, issue: null, g, down: downIds(), bottleneck: null, hitRate: null, staleSecs: 0, fileStaleSecs: 0, farFileMs: null, lostPct: 0, farPageMs: null, noDataPct: 0, lagWrites: 0, queues: {}, uploadMs: null, jobsIn: 0, jobsOut: 0, backlog: 0, alert: null };
+  const r = { qps, base, servedPct: 0, latency: null, cost: g.cost, spof: 0, node: {}, issue: null, g, down: downIds(), bottleneck: null, hitRate: null, staleSecs: 0, fileStaleSecs: 0, farFileMs: null, lostPct: 0, farPageMs: null, noDataPct: 0, lagWrites: 0, queues: {}, uploadMs: null, jobsIn: 0, jobsOut: 0, backlog: 0, alert: null, maxShardUtil: null, shardCount: 0 };
   if (!g.entry.length) { r.issue = TXT.noWeb; return r; }
   if (g.needsDns && !g.hasDNS) { r.issue = TXT.noDns; return r; }
   r.spof = countSpofs(g);
@@ -366,6 +389,13 @@ export function model({ peak = false } = {}) {
     if (sg) { const res = viaGroup(sg, passed, end0 + T.dc, next, n); if (!res.served) return NONE; passed = res.served; end0 = res.end; }
     const cs = cacheSplit(n);
     if (cs) return viaCache(n, cs, passed, end0, next);
+    const og = offloadGroup(n);
+    if (og) {
+      // Non-relational queries go to their store; the rest to the database, as below.
+      const R = nonRelShare(), parts = [viaGroup(og, passed * R, end0 + T.dc, next, n), viaAll(groups, passed * (1 - R), end0, next, n)].filter(p => p.served > 0);
+      const sv = parts.reduce((a, p) => a + p.served, 0);
+      return sv ? { served: sv, end: parts.reduce((a, p) => a + p.served * p.end, 0) / sv } : NONE;
+    }
     if (!groups.length) return COMPONENTS[n.type].forwards ? NONE : { served: passed, end: end0 };
     if (groups.length === 1) return viaGroup(groups[0], passed, end0 + T.dc, next, n);
     // Several dependencies (e.g. a cache and a database): a request needs all of them, one after another.

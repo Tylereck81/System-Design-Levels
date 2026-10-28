@@ -24,6 +24,13 @@ export function observe(m) {
     const st = m.node[id], n = byId(id); if (!n || st.down) continue;
     const nm = nameOf(n);
     if (st.consumer) continue; // a worker that can't keep up leaves jobs waiting in its queue (see below), not failed requests
+    if (st.shards) {
+      // A sharded database is as good as its busiest shard.
+      const each = st.cap / st.shards.length, top = st.shards.reduce((a, x) => (x.load > a.load ? x : a)), low = st.shards.reduce((a, x) => (x.load < a.load ? x : a));
+      if (top.util > 1.005) { overloaded = true; keys.set('over' + id, [`${nm}: its busiest shard gets ${fmt(top.load)} queries/s, ${fmt(each)} max. About ${Math.max(1, Math.round(st.drop * 100))}% of the database's queries fail.`, 'bad']); }
+      else if (top.util >= 0.7) keys.set('busy' + id, [`${nm}: its busiest shard is ${Math.round(top.util * 100)}% busy (${fmt(top.load)} of ${fmt(each)} queries/s), while the quietest is ${Math.round(low.util * 100)}%.`, 'warn']);
+      continue;
+    }
     const copied = st.copied && TXT.copiedWrites ? TXT.copiedWrites(st) : '';
     if (st.sessionMiss && TXT.sessionMiss) keys.set('sess' + id, [TXT.sessionMiss(nm, st.sessionMiss), 'bad']);
     if (st.load > st.cap * 1.005) {
