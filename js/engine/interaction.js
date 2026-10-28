@@ -4,7 +4,7 @@ import { $, svgEl, keepFocus } from '../dom.js';
 import { TYPES, PALETTE, LIMIT_MSG, OK_PAIRS, BAD_PAIRS, pairKey, S, sel, connectFrom, save, byId, setSel, setConnectFrom, setRefocus } from '../state.js';
 import { drawIcon } from './icons.js';
 import { COMPONENTS, roleOf } from './components.js';
-import { NW, NH, cv, previewLine, nodeRefs, renderEdges, renderCanvas, clampX, clampY, freeSpot } from './canvas.js';
+import { NW, NH, cv, previewLine, nodeRefs, renderEdges, renderCanvas, clampX, clampY, freeSpot, overlaps } from './canvas.js';
 import { setBanner } from '../ui/hud.js';
 import { renderInspector } from '../ui/inspector.js';
 import { togglePlay } from '../ui/controls.js';
@@ -35,10 +35,12 @@ function buildPalette() {
 }
 
 export const SLOTS = level.slots;
+// A level's slot for a type is one spot, or a list tried in order until one is free.
+const slotFor = (type) => { const list = [].concat(SLOTS[type]); return list.find(p => !overlaps(clampX(p.x), clampY(p.y), null)) || list[0]; };
 
 export function addNode(type, x, y) {
   if (atLimit(type)) { log(LIMIT_MSG[type], 'warn'); return; }
-  const p = (x == null) ? SLOTS[type] : { x, y };
+  const p = (x == null) ? slotFor(type) : { x, y };
   const spot = freeSpot(clampX(p.x), clampY(p.y), null);
   const n = { id: 'n' + (S.seq++), type, x: spot.x, y: spot.y };
   if (COMPONENTS[type].sized) n.size = 'S';

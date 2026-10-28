@@ -397,6 +397,51 @@ test.describe('Level 2 · break-it results', () => {
   });
 });
 
+test.describe('Level 2 · canvas labels', () => {
+  test('load balancer labels follow failover', async ({ page }) => {
+    await freshPage(page, '#level-2/build');
+    await goTo(page, 2);
+    const { lbs } = await build(page, { webs: ['M', 'M', 'M', 'M', 'M'], db: 'XL', lbs: 2 });
+    const sub = (id) => page.locator(`[data-node="${id}"] .node-sub`);
+    await expect(sub(lbs[0])).toHaveText('Active · round robin');
+    await expect(sub(lbs[1])).toHaveText('Standby · round robin');
+    await page.click('#playBtn');
+    await page.click('#exp-crash-lb');
+    await fastForward(page, 1);
+    await expect(sub(lbs[1])).toHaveText('Active · took over');
+    await page.click('#exp-crash-lb');
+    await fastForward(page, 1);
+    await expect(sub(lbs[1])).toHaveText('Standby · round robin');
+    await expect(sub(lbs[0])).toHaveText('Active · round robin');
+  });
+
+  test('the standby label fits its box, and its inspector says what it does', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await freshPage(page, '#level-2/build');
+    const { lbs } = await build(page, { lbs: 2 });
+    const fits = await page.evaluate((id) => {
+      const g = document.querySelector(`[data-node="${id}"]`), box = g.querySelector('.node-box').getBBox(), t = g.querySelector('.node-sub').getBBox();
+      return t.x + t.width <= box.width - 4;
+    }, lbs[1]);
+    expect(fits).toBe(true);
+    await page.focus(`[data-node="${lbs[1]}"]`);
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#insp')).toContainText('Standby: takes no traffic until the active one fails.');
+    await page.focus(`[data-node="${lbs[0]}"]`);
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#insp')).not.toContainText('Standby: takes no traffic');
+  });
+
+  test('a second load balancer from the palette lands beside the first', async ({ page }) => {
+    await freshPage(page, '#level-2/build');
+    await page.click('.pal-item[data-type="lb"]');
+    await page.click('.pal-item[data-type="lb"]');
+    const ys = await state(page, () => window.__sdl.S.nodes.filter((n) => n.type === 'lb').map((n) => n.y));
+    expect(ys).toHaveLength(2);
+    expect(ys[1]).toBe(ys[0]);
+  });
+});
+
 test.describe('Level 2 · quiz', () => {
   test('answer key is balanced and not guessable by length', async ({ page }) => {
     await freshPage(page, '#level-2/quiz');

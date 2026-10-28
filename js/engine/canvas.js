@@ -5,7 +5,7 @@ import { TYPES, OK_PAIRS, pairKey, S, sel, connectFrom, refocus, run, byId, setR
 import { SIZES, COMPONENTS, runsAlone } from './components.js';
 import { drawIcon } from './icons.js';
 import { crashing } from './experiments.js';
-import { isStandby } from './model.js';
+import { standbyPeers } from './model.js';
 
 export const VW = 760, VH = 520;
 export let NW = 188, NH = 60, compact = false, curView = null;
@@ -16,10 +16,15 @@ export const nodeRefs = {};
 export function nodeSub(n) {
   const c = COMPONENTS[n.type];
   if (!c.sized) {
-    const standby = c.routing === 'standby' && isStandby(n);
+    const { index, count } = standbyPeers(n), standby = index > 0;
+    // While the active one is down, the standby carries the traffic: it is the active one now.
+    const m = run.mdl, st = m && run.everPlayed ? m.node[n.id] : null;
+    if (standby && st && !st.down && st.load > 0) return `${TYPES[n.type].sub} · took over`;
     const algo = c.algos && (TYPES[n.type].algos || []).find(a => a.id === (n.algo || c.defaultAlgo));
     if (!algo) return standby ? TYPES[n.type].standbySub : TYPES[n.type].sub;
-    return standby ? `${TYPES[n.type].standbySub} · ${algo.short}` : algo.short; // the box fits about 20 characters
+    if (st && st.down) return algo.short; // short, so it clears the DOWN mark
+    if (standby) return `${TYPES[n.type].standbySub} · ${algo.short}`;
+    return count > 1 ? `${TYPES[n.type].sub} · ${algo.short}` : algo.short; // with a standby, say which one is active
   }
   if (c.kinds) return n.kind ? `${TYPES[n.type].kinds.find(k => k.id === n.kind).short} · ${n.size} ${fmt(SIZES[n.size].cap)}/s` : TYPES[n.type].unsetSub;
   return runsAlone(n) ? `${n.size} · ${fmt(SIZES[n.size].cap * c.alone.capFactor)} req/s (½)` : `${n.size} · ${fmt(SIZES[n.size].cap)} req/s`;
@@ -44,6 +49,13 @@ export function fitView(force) {
   cv.setAttribute('viewBox', `${curView.x} ${curView.y} ${curView.w} ${curView.h}`);
 }
 
+/** Squeeze a component's second line into its box when it is too long to fit. */
+function fitText(el) {
+  el.removeAttribute('textLength'); el.removeAttribute('lengthAdjust');
+  const room = NW - 52 - 8;
+  if (el.getComputedTextLength() > room) { el.setAttribute('textLength', room); el.setAttribute('lengthAdjust', 'spacingAndGlyphs'); }
+}
+
 export function renderNodes() {
   nodesG.textContent = '';
   for (const k in nodeRefs) delete nodeRefs[k];
@@ -59,6 +71,7 @@ export function renderNodes() {
       drawIcon(n.type, g, 12, 18);
       const name = svgEl('text', { x: 52, y: 26, class: 'node-name' }, g); name.textContent = TYPES[n.type].name + ' ';
       const subEl = svgEl('text', { x: 52, y: 43, class: 'node-sub' + (COMPONENTS[n.type].kinds && !n.kind ? ' todo' : '') }, g); subEl.textContent = sub;
+      fitText(subEl);
     }
     const ubg = svgEl('rect', { x: 12, y: NH - 7, width: NW - 24, height: 3, rx: 1.5, class: 'ubar-bg', visibility: 'hidden' }, g);
     const ub = svgEl('rect', { x: 12, y: NH - 7, width: 0, height: 3, rx: 1.5, class: 'ubar', visibility: 'hidden' }, g);
@@ -70,7 +83,7 @@ export function renderNodes() {
     svgEl('circle', { r: 9, class: 'hv' }, h);
     svgEl('path', { d: 'M-4 0h8M0 -4v8' }, h);
     const title = svgEl('title', {}, h); title.textContent = 'Drag to connect';
-    nodeRefs[n.id] = { g, ub, ubg, downG };
+    nodeRefs[n.id] = { g, ub, ubg, downG, sub: compact ? null : g.querySelector('.node-sub') };
   }
   if (refocus && nodeRefs[refocus]) nodeRefs[refocus].g.focus();
   setRefocus(null);
@@ -128,6 +141,7 @@ export function paintLive() {
     const down = !!(run.everPlayed && m && crashing() && m.down.has(n.id));
     ref.g.classList.toggle('down', down);
     ref.downG.setAttribute('visibility', down ? 'visible' : 'hidden');
+    if (ref.sub) { const t = nodeSub(n); if (ref.sub.textContent !== t) { ref.sub.textContent = t; fitText(ref.sub); } } // e.g. a standby that took over
     if (st && !st.down) {
       const u = Math.min(1, st.util);
       ref.ubg.setAttribute('visibility', 'visible'); ref.ub.setAttribute('visibility', 'visible');

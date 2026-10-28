@@ -202,11 +202,13 @@ export function sampleRoute(m) {
 }
 
 /** For standby-routed types: true when `n` is not the first of its peers, so it waits while the first is healthy. */
-export function isStandby(n) {
-  if ((COMPONENTS[n.type] || {}).routing !== 'standby') return false;
+export const isStandby = (n) => standbyPeers(n).index > 0;
+/** For standby-routed types: n's place among the peers its sender reaches (0 = active), and how many there are. */
+export function standbyPeers(n) {
+  if ((COMPONENTS[n.type] || {}).routing !== 'standby') return { index: 0, count: 1 };
   const parent = S.edges.find(e => e.to === n.id);
-  if (!parent) return false;
+  if (!parent) return { index: 0, count: 1 };
   const p = byId(parent.from);
   const peers = (p ? outs(p.id) : []).filter(c => c.type === n.type);
-  return peers.indexOf(n) > 0;
+  return { index: Math.max(0, peers.indexOf(n)), count: peers.length };
 }
