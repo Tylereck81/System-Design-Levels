@@ -170,7 +170,7 @@ test.describe('Level 4 · teaching feedback', () => {
     expect((await measure(page)).served).toBeCloseTo(84, 6);
     await page.click('#playBtn');
     await fastForward(page, 3);
-    expect(await state(page, () => window.__sdl.S.exp['crash-cache'])).toBe(false);
+    expect(await state(page, () => window.__sdl.S.exp[window.__sdl.S.mission]['crash-cache'])).toBe(false);
     await expect(page.locator('#log')).toContainText('Add a second cache server');
   });
 
@@ -195,7 +195,7 @@ test.describe('Level 4 · teaching feedback', () => {
     await page.click('#playBtn');
     await page.click('#exp-price-change');
     await fastForward(page, 3);
-    expect(await state(page, () => window.__sdl.S.exp['price-change'])).toBe(false);
+    expect(await state(page, () => window.__sdl.S.exp[window.__sdl.S.mission]['price-change'])).toBe(false);
     await expect(page.locator('#log')).toContainText('old price for up to 10 minutes');
     // A 1-minute TTL is fresh enough but drops the hit rate below 85%.
     await page.evaluate((ids) => { for (const id of ids) window.__sdl.S.nodes.find((n) => n.id === id).ttl = '60'; }, [a, b]);

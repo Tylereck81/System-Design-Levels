@@ -166,11 +166,12 @@ export default {
     },
   ],
 
-  // Break-it experiments. A crash takes down the component `target` picks when it starts;
-  // `expect` is the outcome that must hold for the whole run before it counts.
+  // Break-it experiments. A crash takes down the component `target` picks when it starts, or the one of its `targets`
+  // whose loss hurts most. `expect` is the outcome that must hold, at peak traffic, for the whole run before it counts.
   experiments: [
     {
-      id: 'crash-cache', kind: 'crash', target: (g) => g.onPath('cache')[0] || null,
+      // Any cache could fail; the test takes down the one whose loss hurts most.
+      id: 'crash-cache', kind: 'crash', targets: (g) => g.onPath('cache'),
       label: 'Crash cache', labelOn: 'Restart cache',
       needsDesign: 'Build the design first: add a cache and connect the web servers to it, then crash it.',
       on: 'You pulled the plug on a cache server. Everything in its memory is gone.', onTone: 'bad',
