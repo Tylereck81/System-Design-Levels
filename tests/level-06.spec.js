@@ -206,18 +206,15 @@ test.describe('Level 6 · teaching feedback', () => {
     await goTo(page, 2);
     await addStore(page);
     await autoscale(page, 'M');
-    const pause = () => page.evaluate(() => { window.__sdl.run.playing = false; }); // only simulated time passes
+    // Pause and set the day's clock directly, so real time passing in the browser can't move it.
+    const at = (h) => page.evaluate((x) => { const s = window.__sdl; s.run.playing = false; s.run.on['run-day'].t = x; s.afterChange(); }, h);
     await page.click('#exp-run-day'); // starts Play too
-    await pause();
-    await fastForward(page, 4.2); // 04:00: 15% of the peak
-    await page.click('#playBtn'); // redraws the dashboard
-    await page.waitForTimeout(300); // a few real frames redraw the canvas
-    await pause();
+    await at(4.5); // 04:00: 15% of the peak
     await expect(page.locator('#hud')).toContainText('at 04:00');
     expect(await state(page, () => Math.round(window.__sdl.model().base))).toBe(600);
     expect((await measure(page)).copies).toEqual([1, 1]);
     await expect(page.locator('[data-node="w1"] .node-sub')).toHaveText('M · auto, ×1 now');
-    await fastForward(page, 16); // 20:00, the peak
+    await at(20.5); // 20:00, the peak
     expect((await measure(page)).copies).toEqual([5, 5]);
     await page.click('#exp-run-day'); // stopping early doesn't count
     expect(await state(page, () => window.__sdl.S.exp['run-day'])).toBe(false);
