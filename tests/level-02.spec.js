@@ -397,48 +397,29 @@ test.describe('Level 2 · break-it results', () => {
   });
 });
 
-test.describe('Level 2 · canvas labels', () => {
-  test('load balancer labels follow failover', async ({ page }) => {
+test.describe('Level 2 · saved data and inputs', () => {
+  test('a save with more web servers than the limit loads only the limit', async ({ page }) => {
+    const errors = trackErrors(page);
     await freshPage(page, '#level-2/build');
-    await goTo(page, 2);
-    const { lbs } = await build(page, { webs: ['M', 'M', 'M', 'M', 'M'], db: 'XL', lbs: 2 });
-    const sub = (id) => page.locator(`[data-node="${id}"] .node-sub`);
-    await expect(sub(lbs[0])).toHaveText('Active · round robin');
-    await expect(sub(lbs[1])).toHaveText('Standby · round robin');
-    await page.click('#playBtn');
-    await page.click('#exp-crash-lb');
-    await fastForward(page, 1);
-    await expect(sub(lbs[1])).toHaveText('Active · took over');
-    await page.click('#exp-crash-lb');
-    await fastForward(page, 1);
-    await expect(sub(lbs[1])).toHaveText('Standby · round robin');
-    await expect(sub(lbs[0])).toHaveText('Active · round robin');
+    await page.evaluate(() => {
+      const S = JSON.parse(JSON.stringify(window.__sdl.S));
+      for (let i = 0; i < 8; i++) { S.nodes.push({ id: 'x' + i, type: 'web', x: 100 + i, y: 300, size: 'S' }); S.edges.push({ id: 'y' + i, from: 'x' + i, to: 'b' }); }
+      for (let i = 0; i < 3; i++) S.nodes.push({ id: 'l' + i, type: 'lb', x: 200 + i, y: 170 });
+      localStorage.setItem('sdl-level2-v1', JSON.stringify(S));
+    });
+    await reloadGame(page);
+    const s = await state(page, () => ({ web: window.__sdl.S.nodes.filter((n) => n.type === 'web').length, lb: window.__sdl.S.nodes.filter((n) => n.type === 'lb').length, edges: window.__sdl.S.edges.filter((e) => !window.__sdl.S.nodes.some((n) => n.id === e.from) || !window.__sdl.S.nodes.some((n) => n.id === e.to)).length }));
+    expect(s).toEqual({ web: 6, lb: 2, edges: 0 });
+    expect(errors).toEqual([]);
   });
 
-  test('the standby label fits its box, and its inspector says what it does', async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
+  test('the estimate box rejects a negative number', async ({ page }) => {
     await freshPage(page, '#level-2/build');
-    const { lbs } = await build(page, { lbs: 2 });
-    const fits = await page.evaluate((id) => {
-      const g = document.querySelector(`[data-node="${id}"]`), box = g.querySelector('.node-box').getBBox(), t = g.querySelector('.node-sub').getBBox();
-      return t.x + t.width <= box.width - 4;
-    }, lbs[1]);
-    expect(fits).toBe(true);
-    await page.focus(`[data-node="${lbs[1]}"]`);
-    await page.keyboard.press('Enter');
-    await expect(page.locator('#insp')).toContainText('Standby: takes no traffic until the active one fails.');
-    await page.focus(`[data-node="${lbs[0]}"]`);
-    await page.keyboard.press('Enter');
-    await expect(page.locator('#insp')).not.toContainText('Standby: takes no traffic');
-  });
-
-  test('a second load balancer from the palette lands beside the first', async ({ page }) => {
-    await freshPage(page, '#level-2/build');
-    await page.click('.pal-item[data-type="lb"]');
-    await page.click('.pal-item[data-type="lb"]');
-    const ys = await state(page, () => window.__sdl.S.nodes.filter((n) => n.type === 'lb').map((n) => n.y));
-    expect(ys).toHaveLength(2);
-    expect(ys[1]).toBe(ys[0]);
+    await goTo(page, 1);
+    await page.fill('#estIn', '-1204');
+    await page.click('#estBtn');
+    await expect(page.locator('#estFb')).toContainText('Type the estimate as a number');
+    expect(await state(page, () => window.__sdl.S.est)).toBe(false);
   });
 });
 

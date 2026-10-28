@@ -69,6 +69,11 @@ export function load(data) {
     const r = old ? (i === src.mission ? src.exp[id] : false) : Array.isArray(src.exp) && src.exp[i] && src.exp[i][id];
     return [id, !!r];
   })));
+  // At most the level's limit of each component type; extra ones (and their connections) are dropped.
+  const kept = {};
+  S.nodes = S.nodes.filter(n => { kept[n.type] = (kept[n.type] || 0) + 1; return kept[n.type] <= (level.limits[n.type] ?? Infinity); });
+  const ids = new Set(S.nodes.map(n => n.id));
+  S.edges = S.edges.filter(e => ids.has(e.from) && ids.has(e.to));
   S.est = !!src.est; S.estVal = typeof src.estVal === 'string' ? src.estVal : '';
   const q = {};
   if (src.quiz && typeof src.quiz === 'object') for (const k in src.quiz) { const v = src.quiz[k]; if (Number.isInteger(v) && v >= 0 && Number.isInteger(+k) && +k >= 0 && +k < QUIZ.length && v < QUIZ[+k].o.length) q[k] = v; }

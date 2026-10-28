@@ -76,8 +76,8 @@ export function renderGate(M) {
   inp.value = S.estVal || '';
   const check = () => {
     S.estVal = inp.value;
-    const m = (inp.value || '').replace(/,/g, '').match(/\d+(\.\d+)?/);
-    if (!m) { fb.className = 'fb bad'; fb.textContent = M.gate.notNumber; return; }
+    const m = (inp.value || '').replace(/,/g, '').match(/-?\d+(\.\d+)?/);
+    if (!m || parseFloat(m[0]) < 0) { fb.className = 'fb bad'; fb.textContent = M.gate.notNumber; return; } // a count can't be negative
     const v = parseFloat(m[0]);
     if (v >= M.gate.lo && v <= M.gate.hi) { S.est = true; log(M.gate.acceptedLog, 'ok'); afterChange(); return; }
     fb.className = 'fb bad';

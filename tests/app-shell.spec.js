@@ -56,6 +56,15 @@ test.describe('App shell · level picker, routing, saved progress', () => {
     expect(await page.evaluate(() => window.__notReloaded)).toBe(true);
   });
 
+  for (const [address, tab, fixed] of [['#level-2/', 'lesson', '#level-2/lesson'], ['#LEVEL-2/build', 'build', '#level-2/build'], ['#level-2/xyz', 'lesson', '#level-2/lesson']]) {
+    test(`the address ${address} opens Level 2 and is corrected to ${fixed}`, async ({ page }) => {
+      await freshPage(page, address);
+      await expect(page.locator('#lvlChip')).toHaveText('Level 2 / 21');
+      await expect(page.locator(`#view-${tab}`)).toBeVisible();
+      await expect(page).toHaveURL(new RegExp(fixed + '$'));
+    });
+  }
+
   test('Level 1 progress is saved under its own key and still loads', async ({ page }) => {
     await freshPage(page, '#build');
     await page.evaluate(() => { window.__sdl.addNode('dns'); window.__sdl.S.quiz = { 0: 2 }; window.__sdl.afterChange(); });
