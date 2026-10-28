@@ -11,4 +11,5 @@ export const LEVELS = [
   { id: 7, title: 'Multiple data centers', load: () => import('./level-07.js') },
   { id: 8, title: 'Message queue, workers and monitoring', load: () => import('./level-08.js') },
   { id: 9, title: 'Scale the data tier with sharding', load: () => import('./level-09.js') },
+  { id: 10, title: 'Rate limiter', load: () => import('./level-10.js') },
 ];
