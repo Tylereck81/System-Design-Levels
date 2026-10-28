@@ -197,11 +197,11 @@ test.describe('Level 4 · teaching feedback', () => {
     await fastForward(page, 3);
     expect(await state(page, () => window.__sdl.S.exp[window.__sdl.S.mission]['price-change'])).toBe(false);
     await expect(page.locator('#log')).toContainText('old price for up to 10 minutes');
-    // A 1-minute TTL is fresh enough but drops the hit rate below 85%.
+    // A 1-minute TTL is fresh enough but caps the hit rate at 60 ÷ 70, below 86%.
     await page.evaluate((ids) => { for (const id of ids) window.__sdl.S.nodes.find((n) => n.id === id).ttl = '60'; }, [a, b]);
     let r = await measure(page);
     expect(r.staleSecs).toBe(60);
-    expect(r.hitRate).toBeLessThan(0.85);
+    expect(r.hitRate).toBeLessThan(0.86);
     await page.evaluate((ids) => { for (const id of ids) Object.assign(window.__sdl.S.nodes.find((n) => n.id === id), { ttl: '600', onWrite: 'delete' }); }, [a, b]);
     r = await measure(page);
     expect(r.staleSecs).toBe(0);
@@ -248,6 +248,32 @@ test.describe('Level 4 · teaching feedback', () => {
     await page.fill('#estIn', '4 GB');
     await page.click('#estBtn');
     expect(await state(page, () => window.__sdl.S.est)).toBe(true);
+  });
+});
+
+test.describe('Level 4 · fixes from QA', () => {
+  test('Mission 3: a 1-minute TTL with lots of memory falls short of 86%; delete-on-change passes', async ({ page }) => {
+    await freshPage(page, '#level-4/build');
+    await goTo(page, 2);
+    const ids = await setup(page, { caches: [['L', '60', 'ttl'], ['L', '60', 'ttl'], ['L', '60', 'ttl']] });
+    await calm(page);
+    const r = await measure(page);
+    expect(r.hitRate).toBeCloseTo(60 / 70, 3); // memory holds every read; the TTL alone caps it
+    await page.click('#playBtn');
+    await fastForward(page, 1);
+    await expect(page.locator('#goals li', { hasText: 'hit rate' }).first()).toHaveClass(/fail/);
+    await page.evaluate((list) => {
+      const s = window.__sdl;
+      s.S.nodes = s.S.nodes.filter((n) => n.id !== list[2]); s.S.edges = s.S.edges.filter((e) => e.to !== list[2]);
+      for (const id of list.slice(0, 2)) Object.assign(s.S.nodes.find((n) => n.id === id), { ttl: '600', onWrite: 'delete' });
+      s.afterDesignChange();
+    }, ids);
+    expect((await measure(page)).hitRate).toBeGreaterThan(0.86);
+    await fastForward(page, 5);
+    await page.click('#exp-price-change');
+    await fastForward(page, 2);
+    await page.click('#exp-price-change');
+    expect(await state(page, () => window.__sdl.S.done[2])).toBe(true);
   });
 });
 

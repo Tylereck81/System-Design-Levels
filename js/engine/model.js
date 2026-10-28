@@ -315,7 +315,10 @@ export function model({ peak = false } = {}) {
   return r;
 }
 
-/** Servers on the request path with no peer of the same type to take over. DNS is third-party and not counted. */
+/**
+ * Servers on the request path with no peer of the same type to take over. DNS is third-party and not counted. A CDN
+ * is a provider's service too, but if pages can't fall back to the origin when it fails, every file fails with it.
+ */
 function countSpofs(g) {
   const spof = new Set();
   const visit = (group, seen) => {
@@ -327,6 +330,7 @@ function countSpofs(g) {
     }
   };
   visit(g.entry, new Set());
+  for (const c of g.cdn || []) if (!fallsBack(c)) spof.add(c.id);
   return spof.size;
 }
 

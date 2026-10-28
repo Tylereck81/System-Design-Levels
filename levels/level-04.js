@@ -155,13 +155,13 @@ export default {
     },
     {
       title: 'Prices must be fresh', ref: 'Cache consistency', qps: 2000, writes: 0.2, budget: 2100,
-      story: 'A flash sale starts at noon: 300 products drop their price at once, and shoppers must see the new price within a minute. For the sale, the database team also wants a hit rate of at least 85%. Change the prices, then check how long shoppers can still see the old ones.',
+      story: 'A flash sale starts at noon: 300 products drop their price at once, and shoppers must see the new price within a minute. For the sale, the database team also wants a hit rate of at least 86%. Change the prices, then check how long shoppers can still see the old ones.',
       goals: [
-        hitGoal(85), spofGoal, dbBusyGoal,
+        hitGoal(86), spofGoal, dbBusyGoal,
         servedGoal, latGoal, costGoal(2100),
         { id: 'price-change', type: 'exp', text: 'Break it: change prices; shoppers see them within a minute' },
       ],
-      hint: 'A 1-minute TTL keeps prices fresh enough but misses more, and 85% would then need more memory than the budget buys. Keep a long TTL instead, and set "When a product changes" to delete the cached copy on each cache server.',
+      hint: 'A 1-minute TTL keeps prices fresh, but 1 read in 7 then finds its item expired, so the hit rate can\'t reach 86%. Keep a long TTL instead, and set "When a product changes" to delete the cached copy on each cache server.',
       takeaway: 'Deleting the cached copy on every change keeps prices fresh without giving up a long TTL. The order matters: write the database first, then delete the key. Delete it first and a read in between can put the old price back into the cache.',
     },
   ],
