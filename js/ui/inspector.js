@@ -88,9 +88,9 @@ function buildInspector() {
     const seg = el('div', 'seg');
     for (const k of Object.keys(SIZES)) {
       const b = el('button'); b.type = 'button'; b.dataset.focusKey = 'size-' + k; b.setAttribute('aria-pressed', n.size === k ? 'true' : 'false');
-      const what = mem(k) ? `${mem(k)} GB` : `${fmt(SIZES[k].cap)}/s`;
+      const what = TYPES[n.type].sizeWhat ? TYPES[n.type].sizeWhat(SIZES[k]) : mem(k) ? `${mem(k)} GB` : `${fmt(SIZES[k].cap)}/s`;
       b.innerHTML = `<b>${k}</b> <span>${what}</span><br><span>$${fmt(SIZES[k].cost)}</span>`;
-      b.title = mem(k) ? `${mem(k)} GB memory · $${fmt(SIZES[k].cost)}/month` : SIZES[k].cpu ? `${SIZES[k].cpu} vCPU · ${fmt(SIZES[k].cap)} requests/s · $${fmt(SIZES[k].cost)}/month` : `${fmt(SIZES[k].cap)}/s · $${fmt(SIZES[k].cost)}/month`;
+      b.title = TYPES[n.type].sizeWhat ? `${what} · $${fmt(SIZES[k].cost)}/month` : mem(k) ? `${mem(k)} GB memory · $${fmt(SIZES[k].cost)}/month` : SIZES[k].cpu ? `${SIZES[k].cpu} vCPU · ${fmt(SIZES[k].cap)} requests/s · $${fmt(SIZES[k].cost)}/month` : `${fmt(SIZES[k].cap)}/s · $${fmt(SIZES[k].cost)}/month`;
       b.setAttribute('aria-label', `${k} ${what}, $${fmt(SIZES[k].cost)} a month`);
       b.onclick = () => { n.size = k; afterDesignChange(); };
       seg.appendChild(b);
@@ -149,6 +149,13 @@ export function paintInspectorLive() {
   if (!st) { live.innerHTML = `<div><b>${fmt(serverSpec(n).cap)}</b><span>capacity, per second</span></div><div><b>—</b><span>press Play for load</span></div>`; return; }
   if (st.standby) { live.innerHTML = `<div><b>standby</b><span>takes no traffic</span></div><div><b>${fmt(st.cap)}</b><span>capacity, ready to take over</span></div>`; return; }
   if (st.down) { live.innerHTML = `<div><b style="color:var(--bad)">down</b><span>serving nothing</span></div><div><b>0</b><span>req/s served</span></div>`; return; }
+  if (st.consumer) {
+    // A worker group: jobs in and out, and what waits in its queue.
+    live.innerHTML = `<div><b>${st.load.toFixed(2)}</b><span>jobs/s arriving</span></div><div><b>${st.cap.toFixed(2)}</b><span>jobs/s it can take</span></div>`
+      + `<div><b>${Math.round(st.util * 100)}%</b><span>busy</span></div><div><b>${fmt(st.backlog)}</b><span>jobs waiting in the queue</span></div>`
+      + (st.copies ? `<div class="wide"><b>${st.copies} ${st.copies === 1 ? 'server' : 'servers'} now</b><span>of size ${n.size}</span></div>` : '');
+    return;
+  }
   if (st.hit != null) {
     // A cache's words by default; a level can word them for another type (e.g. a CDN's files and origin).
     const w = { arriving: 'reads arriving, per second', misses: 'misses/s sent to the database', per: 'per lookup', ...TYPES[n.type].live };
@@ -162,5 +169,7 @@ export function paintInspectorLive() {
     + (st.copied ? `<div class="wide"><b>${fmt(st.load - st.copied)} + ${fmt(st.copied)}</b><span>reads + writes copied from the primary</span></div>` : '')
     + (st.files ? `<div class="wide"><b>${fmt(st.pages)} + ${fmt(st.files)}</b><span>pages + files arriving per second. A file takes ${fmt(100 * serverSpec(n).filePer)}% of a page's work.</span></div>` : '')
     + (st.copies ? `<div class="wide"><b>${st.copies} ${st.copies === 1 ? 'server' : 'servers'} now</b><span>of size ${n.size}, each at most ${Math.round(100 * T.scaleAt)}% busy</span></div>` : '')
+    + (run.queues[n.id] != null ? `<div class="wide"><b>${fmt(run.queues[n.id])} jobs</b><span>waiting for a worker</span></div>` : '')
+    + (st.uploads ? `<div class="wide"><b>${st.jobMs != null ? (st.jobMs / 1000).toFixed(0) + ' s' : 'published'}</b><span>per upload${st.jobMs != null ? ', processed here before it answers' : ' to the queue, then answered'}</span></div>` : '')
     + (st.sessionMiss ? `<div class="wide"><b style="color:var(--bad)">${Math.round(100 * st.sessionMiss)}% of pages</b><span>land here without their session and fail: the cart is on another server</span></div>` : '');
 }
