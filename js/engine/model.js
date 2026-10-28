@@ -1,6 +1,6 @@
 // Simulation model: load, latency, failures and cost, for any graph of components.
 import { MISSIONS, TXT, PALETTE, S, run, byId } from '../state.js';
-import { COMPONENTS, T, roleOf, isServer, isReplica, costOf, serverSpec, splitRule } from './components.js';
+import { COMPONENTS, T, roleOf, isServer, isReplica, isCache, hitRate, staleSecs, costOf, serverSpec, splitRule } from './components.js';
 import { activeExps, downIds, trafficFactor, textOf, PEAK } from './experiments.js';
 
 export { SIZES, T } from './components.js';
@@ -81,8 +81,8 @@ const standbyRouting = (group) => (COMPONENTS[group[0].type] || {}).routing === 
  * For a standby-routed type, the first healthy peer takes it all and the others wait.
  * When the sender shares by capacity (a load balancer's weighted or least-connections method), bigger servers get more.
  */
-function split(group, flow, down, sender) {
-  if (group.some(isReplica)) return splitReadsWrites(group, flow, down, sender);
+function split(group, flow, down, sender, w = writeShare()) {
+  if (group.some(isReplica)) return splitReadsWrites(group, flow, down, sender, w);
   const healthy = group.filter(c => !down.has(c.id));
   return share(healthy.length ? (standbyRouting(group) ? healthy.slice(0, 1) : healthy) : group, flow, sender);
 }
@@ -99,13 +99,34 @@ const writeShare = () => MISSIONS[S.mission].writes || 0;
  * A group with replicas: writes go to the primary (with no primary in the group they fail), reads to the healthy
  * replicas, or to the primary when none is healthy. Write shares are tagged so the replicas can copy them.
  */
-function splitReadsWrites(group, flow, down, sender) {
-  const w = writeShare(), primary = group.find(c => !isReplica(c));
+function splitReadsWrites(group, flow, down, sender, w) {
+  const primary = group.find(c => !isReplica(c));
   const replicas = group.filter(isReplica), up = replicas.filter(c => !down.has(c.id));
   const parts = primary && w > 0 ? [[primary, flow * w, 'write']] : [];
   const reads = flow * (1 - w);
   if (up.length) return parts.concat(share(up, reads, sender));
   return parts.concat([[primary && !down.has(primary.id) ? primary : replicas[0], reads]]);
+}
+
+/** A sender's cache group and its other groups, when it has caches (cache-aside); null otherwise. */
+function cacheSplit(n) {
+  const groups = childGroups(n), caches = groups.find(grp => isCache(grp[0]));
+  return caches ? { caches, others: groups.filter(grp => grp !== caches) } : null;
+}
+/**
+ * Cache-aside: reads go to the caches first, keys split evenly over all of them. Each healthy cache answers its
+ * hit share; its misses go on to the database after the lookup. A down cache's keys skip it (bypass).
+ * Writes skip the caches. Returns the cache parts [cache, reads, hit rate] and the flows that go on.
+ */
+function cacheAside(caches, flow, down, w) {
+  const each = flow * (1 - w) / caches.length, out = { parts: [], writes: flow * w, misses: 0, bypass: 0 };
+  for (const c of caches) {
+    if (down.has(c.id)) { out.bypass += each; continue; }
+    const h = hitRate(c, caches.length);
+    out.parts.push([c, each, h]);
+    out.misses += each * (1 - h);
+  }
+  return out;
 }
 
 /** The model at this moment, or with `peak` at the top of the traffic's wobble (see PEAK). */
@@ -114,14 +135,15 @@ export function model({ peak = false } = {}) {
   const M = MISSIONS[S.mission];
   const base = M.qps * trafficFactor();
   const qps = peak ? base * PEAK : base * (1 + 0.02 * Math.sin(run.t * 1.7) + 0.01 * Math.sin(run.t * 4.1));
-  const r = { qps, base, servedPct: 0, latency: null, cost: g.cost, spof: 0, node: {}, issue: null, g, down: downIds(), bottleneck: null };
+  const r = { qps, base, servedPct: 0, latency: null, cost: g.cost, spof: 0, node: {}, issue: null, g, down: downIds(), bottleneck: null, hitRate: null, staleSecs: 0 };
   if (!g.entry.length) { r.issue = TXT.noWeb; return r; }
   if (g.needsDns && !g.hasDNS) { r.issue = TXT.noDns; return r; }
   r.spof = countSpofs(g);
   const down = r.down;
 
   // 1. Load: each server serves at most its capacity and passes on only what it served.
-  const load = new Map(), served = new Map(), writes = new Map(), copied = new Map();
+  const load = new Map(), served = new Map(), writes = new Map(), copied = new Map(), hitOf = new Map();
+  let reads = 0, hits = 0; // reads that went to a cache group, and how many it answered
   const add = (m, c, f) => m.set(c.id, (m.get(c.id) || 0) + f);
   for (const [c, f] of split(g.entry, qps, down, g.users)) add(load, c, f);
   for (const n of topoOrder(g.entry)) {
@@ -148,12 +170,22 @@ export function model({ peak = false } = {}) {
     if ('nosql' in sp) st.nosql = sp.nosql;
     if (COMPONENTS[n.type].forwards && !childGroups(n).length) { st.drop = 1; r.issue = r.issue || TXT.noBackend || null; }
     if (copied.has(n.id)) st.copied = copied.get(n.id) * sp.per;
+    if (hitOf.has(n.id)) { st.hit = hitOf.get(n.id); st.misses = L * (1 - st.hit); r.staleSecs = Math.max(r.staleSecs, staleSecs(n)); }
     r.node[n.id] = st;
     // The bottleneck: the server furthest over its capacity.
     if (st.drop > 0 && (!r.bottleneck || st.util > r.node[r.bottleneck.id].util)) r.bottleneck = { id: n.id, type: n.type };
-    for (const grp of childGroups(n)) {
+    const cs = cacheSplit(n);
+    const send = (grp, flow, w) => {
       if (grp.some(isReplica) && grp.every(isReplica)) r.issue = r.issue || TXT.noPrimary || null;
-      for (const [c, f, kind] of split(grp, s, down, n)) { add(load, c, f); if (kind === 'write') add(writes, c, f); }
+      for (const [c, f, kind] of split(grp, flow, down, n, w)) { add(load, c, f); if (kind === 'write') add(writes, c, f); }
+    };
+    if (cs) {
+      const a = cacheAside(cs.caches, s, down, writeShare());
+      reads += s * (1 - writeShare());
+      for (const [c, f, h] of a.parts) { add(load, c, f); hitOf.set(c.id, h); hits += f * h; }
+      for (const grp of cs.others) { send(grp, a.writes, 1); send(grp, a.misses + a.bypass, 0); }
+    } else {
+      for (const grp of childGroups(n)) send(grp, s);
     }
     // Each healthy replica applies every write the primary served.
     const wrote = (writes.get(n.id) || 0) * s / L;
@@ -164,8 +196,8 @@ export function model({ peak = false } = {}) {
   //    `flow` is the requests per second arriving along this path, `t` the time spent before this server.
   //    Times are added in path order, so a single chain gives exactly rtt + web + hop + db.
   const NONE = { served: 0, end: null };
-  const viaGroup = (grp, flow, t, path, sender) => {
-    const parts = split(grp, flow, down, sender).map(([c, f]) => walk(c, f, t, path)).filter(p => p.served > 0);
+  const viaGroup = (grp, flow, t, path, sender, w) => {
+    const parts = split(grp, flow, down, sender, w).map(([c, f]) => walk(c, f, t, path)).filter(p => p.served > 0);
     const sv = parts.reduce((a, p) => a + p.served, 0);
     if (!sv) return NONE;
     return { served: sv, end: parts.length === 1 ? parts[0].end : parts.reduce((a, p) => a + p.served * p.end, 0) / sv };
@@ -176,6 +208,8 @@ export function model({ peak = false } = {}) {
     const passed = flow === L ? s : flow * s / L;   // this path's share of what the server served
     const end0 = t + r.node[n.id].ms;
     const next = new Set(path).add(n.id), groups = childGroups(n);
+    const cs = cacheSplit(n);
+    if (cs) return viaCache(n, cs, passed, end0, next);
     if (!groups.length) return COMPONENTS[n.type].forwards ? NONE : { served: passed, end: end0 };
     if (groups.length === 1) return viaGroup(groups[0], passed, end0 + T.dc, next, n);
     // Several dependencies (e.g. a cache and a database): a request needs all of them, one after another.
@@ -188,7 +222,34 @@ export function model({ peak = false } = {}) {
     }
     return { served: passed * frac, end };
   };
+  // A flow that needs every one of `groups` (writes, or reads the cache missed), starting at time t.
+  const viaAll = (groups, flow, t, path, n, w) => {
+    if (!flow) return NONE;
+    if (!groups.length) return COMPONENTS[n.type].forwards ? NONE : { served: flow, end: t };
+    let frac = 1, end = t;
+    for (const grp of groups) {
+      const res = viaGroup(grp, flow, t + T.dc, path, n, w);
+      if (!res.served) return NONE;
+      frac *= res.served / flow;
+      end += res.end - t;
+    }
+    return { served: flow * frac, end };
+  };
+  // Cache-aside from server n: hits end at the cache; misses go on after the lookup; writes and bypassed keys go straight on.
+  const viaCache = (n, cs, passed, end0, path) => {
+    const a = cacheAside(cs.caches, passed, down, writeShare()), results = [];
+    for (const [c, f, h] of a.parts) {
+      const L = load.get(c.id), s = served.get(c.id);
+      if (!s || !L) continue;
+      const got = f * s / L, tc = end0 + T.dc + r.node[c.id].ms;
+      results.push({ served: got * h, end: tc }, viaAll(cs.others, got * (1 - h), tc, path, n, 0));
+    }
+    results.push(viaAll(cs.others, a.bypass, end0, path, n, 0), viaAll(cs.others, a.writes, end0, path, n, 1));
+    const ok = results.filter(p => p.served > 0), sv = ok.reduce((x, p) => x + p.served, 0);
+    return sv ? { served: sv, end: ok.reduce((x, p) => x + p.served * p.end, 0) / sv } : NONE;
+  };
   const res = viaGroup(g.entry, qps, T.rtt, new Set(), g.users);
+  if (reads > 0) r.hitRate = hits / reads;
   r.servedPct = 100 * res.served / qps;
   r.latency = res.served > 0 ? res.end : null;
   // A crash's message applies only when requests still reach the crashed component (no healthy peer took over).
@@ -216,16 +277,22 @@ function countSpofs(g) {
 /** One request's route for the animation: Users → the servers it passes through → back, and where it fails. */
 export function sampleRoute(m) {
   const fwd = [m.g.users.id], seen = new Set();
-  let group = m.g.entry, sender = m.g.users, lost = -1;
+  let group = m.g.entry, sender = m.g.users, lost = -1, w;
   while (group && group.length) {
     const down = new Set(group.filter(c => m.node[c.id] && m.node[c.id].down).map(c => c.id));
-    const shares = split(group, 1, down, sender), total = shares.reduce((a, [, f]) => a + f, 0);
+    const shares = split(group, 1, down, sender, w), total = shares.reduce((a, [, f]) => a + f, 0);
     let pick = Math.random(), n = total > 1 - 1e-9 ? shares[shares.length - 1][0] : null;
     for (const [c, f] of shares) { if (pick < f) { n = c; break; } pick -= f; }
     if (!n) { lost = fwd.length - 1; break; } // e.g. a write with no primary to take it
     if (seen.has(n.id)) break;
     seen.add(n.id); fwd.push(n.id);
-    group = childGroups(n)[0]; sender = n;
+    sender = n; w = undefined;
+    const cs = cacheSplit(n);
+    if (!cs) { group = childGroups(n)[0]; continue; }
+    w = Math.random() < writeShare() ? 1 : 0;
+    const c = cs.caches[Math.floor(Math.random() * cs.caches.length)], st = m.node[c.id];
+    if (!w && st && !st.down && Math.random() < (st.hit || 0)) { fwd.push(c.id); break; } // a hit ends at the cache
+    group = cs.others[0]; // a miss or a write goes on to the database (the dot skips the cache)
   }
   let failAt = lost;
   for (let i = 1; i < fwd.length && failAt < 0; i++) {

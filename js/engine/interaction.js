@@ -47,6 +47,7 @@ export function addNode(type, x, y) {
   if (c.sized) n.size = 'S';
   if (c.kinds) n.kind = t.kinds ? null : Object.keys(c.kinds)[0]; // with no choice offered, the first kind
   if (c.algos) n.algo = c.defaultAlgo;
+  for (const k in c.choices || {}) n[k] = c.choices[k].default;
   if (c.replicated && t.roles) n.role = S.nodes.some(m => m.type === type && m.role === 'primary') ? 'replica' : 'primary';
   S.nodes.push(n);
   setSel({ kind: 'node', id: n.id });

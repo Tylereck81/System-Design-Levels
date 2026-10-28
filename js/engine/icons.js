@@ -19,6 +19,11 @@ export function drawIcon(type, parent, x, y, scale) {
   } else if (type === 'web') {
     svgEl('rect', { x: 6, y: 0, width: 15, height: 24, rx: 2, class: 'ic-web' }, g);
     svgEl('path', { d: 'M9.5 5.5h8M9.5 16.5h8M9.5 20h8', class: 'ic-line' }, g);
+  } else if (type === 'cache') {
+    // A memory chip: data kept in RAM.
+    svgEl('rect', { x: 4, y: 4, width: 18, height: 16, rx: 2, class: 'ic-stroke' }, g);
+    svgEl('path', { d: 'M8.5 0.5v3.5M13 0.5v3.5M17.5 0.5v3.5M8.5 20v3.5M13 20v3.5M17.5 20v3.5', class: 'ic-stroke' }, g);
+    svgEl('rect', { x: 9, y: 9, width: 8, height: 6, rx: 1, class: 'ic-stroke' }, g);
   } else if (type === 'db') {
     svgEl('path', { d: 'M3.5 5v14a9.5 4 0 0 0 19 0V5z', class: 'ic-data' }, g);
     svgEl('ellipse', { cx: 13, cy: 5, rx: 9.5, ry: 4, class: 'ic-data-top' }, g);

@@ -2,7 +2,7 @@
 import { fmt } from '../format.js';
 import { $, svgEl } from '../dom.js';
 import { TYPES, nameOf, edgeInfo, S, sel, connectFrom, refocus, run, byId, setRefocus } from '../state.js';
-import { SIZES, COMPONENTS, runsAlone, serverSpec } from './components.js';
+import { SIZES, COMPONENTS, runsAlone, serverSpec, sizesOf } from './components.js';
 import { drawIcon } from './icons.js';
 import { crashing } from './experiments.js';
 import { standbyPeers } from './model.js';
@@ -26,6 +26,7 @@ export function nodeSub(n) {
     if (standby) return `${TYPES[n.type].standbySub} · ${algo.short}`;
     return count > 1 ? `${TYPES[n.type].sub} · ${algo.short}` : algo.short; // with a standby, say which one is active
   }
+  if (TYPES[n.type].subOf) return TYPES[n.type].subOf(n, sizesOf(n.type)[n.size]); // e.g. a cache: "8 GB · TTL 10 min"
   if (c.replicated && TYPES[n.type].roles && n.role) return `${n.size} · ${fmt(serverSpec(n).cap)}/s`;
   if (c.kinds && TYPES[n.type].kinds) return n.kind ? `${TYPES[n.type].kinds.find(k => k.id === n.kind).short} · ${n.size} ${fmt(SIZES[n.size].cap)}/s` : TYPES[n.type].unsetSub;
   return runsAlone(n) ? `${n.size} · ${fmt(SIZES[n.size].cap * c.alone.capFactor)} req/s (½)` : `${n.size} · ${fmt(SIZES[n.size].cap)} req/s`;
