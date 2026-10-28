@@ -34,6 +34,7 @@ export default {
     dns: { name: 'DNS', short: 'Domain → IP address', sub: 'Third-party · $5', desc: 'Turns example.com into the load balancer\'s public IP, 203.0.113.10. Costs $5/month in this game.' },
     lb: {
       name: 'Load balancer', short: 'Spreads traffic', sub: 'Active', standbySub: 'Standby',
+      standbyNote: 'Standby: takes no traffic until the active one fails.',
       algosLabel: 'Routing method',
       algos: [
         { id: 'rr', short: 'round robin', name: 'Round robin', sub: 'same share for each', note: 'Each web server in turn, so each gets the same share. Fair when all servers are the same size; with mixed sizes the small one overloads first.', log: 'Load balancer set to round robin: every web server gets the same share.' },
@@ -74,7 +75,8 @@ export default {
     { id: 'b', type: 'db', x: 380, y: 456, size: 'L', kind: 'sql' },
   ],
   startEdges: [{ id: 's1', from: 'u', to: 'd' }, { id: 's2', from: 'w1', to: 'b' }],
-  slots: { dns: { x: 640, y: 64 }, lb: { x: 380, y: 172 }, web: { x: 380, y: 280 }, db: { x: 380, y: 456 } },
+  // The second load balancer, a standby, goes beside the first in the same row.
+  slots: { dns: { x: 640, y: 64 }, lb: [{ x: 380, y: 172 }, { x: 640, y: 172 }], web: { x: 380, y: 280 }, db: { x: 380, y: 456 } },
 
   connections: {
     ok: {
