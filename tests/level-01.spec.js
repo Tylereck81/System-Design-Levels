@@ -320,7 +320,7 @@ test.describe('Level 1 · teaching feedback', () => {
     await dragBetween(page, '.pal-item[data-type="web"]', '[data-node="u"] .node-box');
     const web = await state(page, () => window.__sdl.S.nodes.find((n) => n.type === 'web'));
     expect(Math.abs(web.y - 76) >= 74 || Math.abs(web.x - 380) >= 202).toBe(true);
-    await dragBetween(page, '.pal-item[data-type="db"]', { x: 700, y: 890 });
+    await dragBetween(page, '.pal-item[data-type="db"]', '#hud'); // outside the canvas
     expect(await logText(page)).toContain('Drop the database on the canvas');
   });
 });

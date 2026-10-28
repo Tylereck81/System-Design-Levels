@@ -7,8 +7,10 @@ import { drawIcon } from './icons.js';
 import { crashing } from './experiments.js';
 import { standbyPeers } from './model.js';
 
-export const VW = 760, VH = 520;
-export let NW = 188, NH = 60, compact = false, curView = null;
+export const VW = 760, VH = 520; // the design area: level slots and start designs fit inside it
+export const ZOOMS = [1, 0.85, 0.7]; // desktop zoom levels, from 100% out to 70%
+export let NW = 188, NH = 60, compact = false, curView = null, zoom = 1;
+let view = { x: 0, y: 0, w: VW, h: VH }; // the visible part of the canvas, in canvas units
 
 export const cv = $('cv'), nodesG = $('nodesG'), edgesG = $('edgesG'), dotsG = $('dotsG'), tagsG = $('tagsG'), previewLine = $('previewLine');
 export const nodeRefs = {};
@@ -39,8 +41,42 @@ export function applyMode() {
   if (c !== compact) { compact = c; NW = c ? 150 : 188; NH = c ? 48 : 60; curView = null; }
   cv.classList.toggle('compact', compact);
 }
+/**
+ * Desktop view at zoom z: the canvas element's whole size, centred on the design area. At 100% the design area just
+ * fits, at no more than 1.05 px per unit, so a wider canvas shows more room rather than bigger boxes.
+ */
+function viewAt(z) {
+  const cw = cv.clientWidth || VW, ch = cv.clientHeight || VH;
+  const k = Math.min(1.05, cw / VW, ch / VH) * z;
+  const w = cw / k, h = ch / k;
+  return { x: VW / 2 - w / 2, y: VH / 2 - h / 2, w, h };
+}
+const fits = (v) => S.nodes.every(n => n.x - NW / 2 >= v.x && n.x + NW / 2 <= v.x + v.w
+  && n.y - NH / 2 - (n.type === 'users' ? 26 : 0) >= v.y && n.y + NH / 2 + 20 <= v.y + v.h);
+/** Zoom one step in (dir -1) or out (dir +1). Zooming in stops where a component would leave the view. */
+export function setZoom(dir) {
+  const i = ZOOMS.indexOf(zoom) + dir;
+  if (i < 0 || i >= ZOOMS.length || (dir < 0 && !fits(viewAt(ZOOMS[i])))) return;
+  zoom = ZOOMS[i];
+  renderCanvas();
+}
+function paintZoom() {
+  const i = ZOOMS.indexOf(zoom);
+  $('zoomPct').textContent = Math.round(zoom * 100) + '%';
+  $('zoomIn').disabled = i === 0 || !fits(viewAt(ZOOMS[i - 1]));
+  $('zoomOut').disabled = i === ZOOMS.length - 1;
+}
 export function fitView(force) {
-  if (!compact) { cv.setAttribute('viewBox', `0 0 ${VW} ${VH}`); curView = null; return; }
+  if (!compact) {
+    // Zoom out as far as needed (down to 70%) so every component stays in view, e.g. after the window shrinks.
+    let i = ZOOMS.indexOf(zoom);
+    while (i < ZOOMS.length - 1 && !fits(viewAt(ZOOMS[i]))) i++;
+    zoom = ZOOMS[i]; view = viewAt(zoom); curView = null;
+    cv.setAttribute('viewBox', [view.x, view.y, view.w, view.h].map(v => v.toFixed(1)).join(' '));
+    paintZoom();
+    return;
+  }
+  view = { x: 0, y: 0, w: VW, h: VH };
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const n of S.nodes) { x0 = Math.min(x0, n.x - NW / 2); x1 = Math.max(x1, n.x + NW / 2); y0 = Math.min(y0, n.y - NH / 2 - (n.type === 'users' ? 26 : 0)); y1 = Math.max(y1, n.y + NH / 2 + 20); }
   if (!force && curView && x0 >= curView.x && x1 <= curView.x + curView.w && y0 >= curView.y && y1 <= curView.y + curView.h) return;
@@ -143,6 +179,14 @@ export function renderEdges() {
 
 export function renderCanvas(force) { applyMode(); fitView(!!force); renderEdges(); renderNodes(); }
 window.addEventListener('resize', () => { if (S.tab === 'build') renderCanvas(true); });
+// The first render can happen before the page has its layout (e.g. the build tab is still hidden), so fit the view
+// again whenever the canvas's own size changes: phone or desktop mode, and how much of the design area shows.
+let lastSize = '';
+new ResizeObserver(() => {
+  const size = cv.clientWidth + 'x' + cv.clientHeight;
+  if (size === lastSize || !cv.clientWidth || S.tab !== 'build') return;
+  lastSize = size; renderCanvas(true);
+}).observe(cv);
 
 export function paintLive() {
   const m = run.mdl;
@@ -164,8 +208,11 @@ export function paintLive() {
   }
 }
 
-export const clampX = (x) => Math.max(NW / 2 + 4, Math.min(VW - NW / 2 - 4, x));
-export const clampY = (y) => Math.max(NH / 2 + 30, Math.min(VH - NH / 2 - 22, y));
+// Components stay inside the visible part of the canvas (the design area on a phone).
+export const clampX = (x) => Math.max(view.x + NW / 2 + 4, Math.min(view.x + view.w - NW / 2 - 4, x));
+export const clampY = (y) => Math.max(view.y + NH / 2 + 30, Math.min(view.y + view.h - NH / 2 - 22, y));
+$('zoomOut').onclick = () => setZoom(1);
+$('zoomIn').onclick = () => setZoom(-1);
 export const overlaps = (x, y, id) => S.nodes.some(n => n.id !== id && Math.abs(n.x - x) < NW + 14 && Math.abs(n.y - y) < NH + 14);
 export function freeSpot(x, y, id) {
   if (!overlaps(x, y, id)) return { x, y };
