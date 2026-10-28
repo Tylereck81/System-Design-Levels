@@ -1,7 +1,7 @@
 // Mission panel: brief, estimate box and goals.
 import { fmt } from '../format.js';
 import { $, el, keepFocus } from '../dom.js';
-import { TARGET_MS, MISSIONS, HOLD, S, run } from '../state.js';
+import { TARGET_MS, MISSIONS, HOLD, S, run, expPassed } from '../state.js';
 import { model } from '../engine/model.js';
 import { stopRun } from '../engine/sim.js';
 import { paintControls } from './controls.js';
@@ -101,7 +101,7 @@ export const liveMetrics = () => run.everPlayed && !anyOn();
 export function goalStatus(goal, m, g) {
   if (goal.type === 'struct') return goal.test(g) ? 'pass' : (run.everPlayed || goal.id === 'cost' ? 'fail' : 'todo');
   if (goal.type === 'gate') return S.est ? 'pass' : 'todo';
-  if (goal.type === 'exp') return S.exp[goal.id] ? 'pass' : 'todo';
+  if (goal.type === 'exp') return expPassed(goal.id) ? 'pass' : 'todo';
   if (liveMetrics()) return goal.test(m) ? 'pass' : 'fail';
   return S.verified[S.mission] ? 'pass' : 'todo';
 }

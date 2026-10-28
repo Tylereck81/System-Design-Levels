@@ -1,7 +1,7 @@
 // Simulation model: load, latency, failures and cost, for any graph of components.
 import { MISSIONS, TXT, PALETTE, S, run, byId } from '../state.js';
 import { COMPONENTS, T, roleOf, isServer, costOf, serverSpec, splitRule } from './components.js';
-import { activeExps, downIds, trafficFactor, textOf } from './experiments.js';
+import { activeExps, downIds, trafficFactor, textOf, PEAK } from './experiments.js';
 
 export { SIZES, T } from './components.js';
 
@@ -81,12 +81,13 @@ function split(group, flow, down, sender) {
   return targets.map(c => [c, flow / targets.length]);
 }
 
-export function model() {
+/** The model at this moment, or with `peak` at the top of the traffic's wobble (see PEAK). */
+export function model({ peak = false } = {}) {
   const g = graph();
   const M = MISSIONS[S.mission];
   const base = M.qps * trafficFactor();
-  const qps = base * (1 + 0.02 * Math.sin(run.t * 1.7) + 0.01 * Math.sin(run.t * 4.1));
-  const r = { qps, base, servedPct: 0, latency: null, cost: g.cost, spof: 0, node: {}, issue: null, g, down: downIds() };
+  const qps = peak ? base * PEAK : base * (1 + 0.02 * Math.sin(run.t * 1.7) + 0.01 * Math.sin(run.t * 4.1));
+  const r = { qps, base, servedPct: 0, latency: null, cost: g.cost, spof: 0, node: {}, issue: null, g, down: downIds(), bottleneck: null };
   if (!g.entry.length) { r.issue = TXT.noWeb; return r; }
   if (g.needsDns && !g.hasDNS) { r.issue = TXT.noDns; return r; }
   r.spof = countSpofs(g);
@@ -119,6 +120,8 @@ export function model() {
     if ('nosql' in sp) st.nosql = sp.nosql;
     if (COMPONENTS[n.type].forwards && !childGroups(n).length) { st.drop = 1; r.issue = r.issue || TXT.noBackend || null; }
     r.node[n.id] = st;
+    // The bottleneck: the server furthest over its capacity.
+    if (st.drop > 0 && (!r.bottleneck || st.util > r.node[r.bottleneck.id].util)) r.bottleneck = { id: n.id, type: n.type };
     for (const grp of childGroups(n)) for (const [c, f] of split(grp, s, down, n)) load.set(c.id, (load.get(c.id) || 0) + f);
   }
 

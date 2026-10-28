@@ -15,12 +15,23 @@ export function downIds() {
   return new Set(activeExps().filter(e => e.kind === 'crash').map(e => run.on[e.id].node).filter(id => id && byId(id)));
 }
 
-/** Start an experiment. A crash records the component its target picks now, so it stays on that one component. */
-export function startExp(exp, g) {
+/** The components a crash could take down: its `targets` (peers to choose from), or the one its `target` picks. */
+export const crashCandidates = (exp, g) => (exp.targets ? exp.targets(g) : [exp.target(g)]).filter(Boolean);
+
+/**
+ * Start an experiment. A crash records the component it takes down, so it stays on that one component. With several
+ * candidates it takes down the one whose loss hurts most: `served(id)` gives the % served with that one down.
+ */
+export function startExp(exp, g, served) {
   if (exp.kind === 'crash') {
-    const n = exp.target(g);
-    if (!n) return false;
-    run.on[exp.id] = { node: n.id };
+    const list = crashCandidates(exp, g);
+    if (!list.length) return false;
+    let pick = list[0];
+    if (list.length > 1 && served) {
+      let worst = Infinity;
+      for (const n of list) { const s = served(exp, n.id); if (s < worst - 1e-9) { worst = s; pick = n; } }
+    }
+    run.on[exp.id] = { node: pick.id };
   } else {
     run.on[exp.id] = {};
   }
@@ -38,6 +49,9 @@ export const spikeHud = () => (activeExps().find(e => e.kind === 'spike') || {})
 
 /** A message can be fixed text or a function of the model's result, so it can describe what actually happened. */
 export const textOf = (msg, m) => (typeof msg === 'function' ? msg(m) : msg);
+
+/** Traffic at the top of its wobble: a required outcome is checked here, so a lucky moment can't pass it. */
+export const PEAK = 1.03;
 
 /** True when the experiment has no required outcome, or the outcome holds in model result `m`. */
 export const expectMet = (exp, m) => !exp.expect || !!exp.expect(m);

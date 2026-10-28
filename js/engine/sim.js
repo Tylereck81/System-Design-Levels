@@ -3,7 +3,7 @@ import { MISSIONS, TXT, HOLD, EXPERIMENTS, S, run, save } from '../state.js';
 
 const OBSERVE_SECS = 1.5; // an experiment counts once it has run this long
 import { model, sampleRoute } from './model.js';
-import { anyOn, crashing, expectMet, textOf } from './experiments.js';
+import { anyOn, crashing, expectMet, textOf, activeExps } from './experiments.js';
 import { tagsG, paintLive } from './canvas.js';
 import { dots, spawn, showIpTag, moveDots, setDots } from './dots.js';
 import { renderHUD, setBanner } from '../ui/hud.js';
@@ -23,6 +23,8 @@ export function stopRun(full) {
 export function step(dt) {
   run.t += dt;
   const m = model(); run.mdl = m; const g = m.g;
+  // A running experiment with a required outcome is judged at the top of the traffic's wobble.
+  if (activeExps().some(e => e.expect)) m.atPeak = model({ peak: true });
 
   if (g.hasDNS && g.entry.length && !run.dnsDone && !run.dnsFlying && !crashing()) {
     run.dnsFlying = true;
@@ -56,12 +58,13 @@ export function step(dt) {
   const built = g.ready;
   for (const exp of EXPERIMENTS) {
     const k = exp.id;
-    if (run.on[k] && built && M.goals.some(x => x.id === k) && !S.exp[k]) {
-      if (!expectMet(exp, m)) { run.expT[k] = 0; continue; } // the required outcome must hold the whole time
+    if (run.on[k] && built && M.goals.some(x => x.id === k) && !S.exp[i][k]) {
+      const mx = m.atPeak || m;
+      if (!expectMet(exp, mx)) { run.expT[k] = 0; continue; } // the required outcome must hold the whole time
       run.expT[k] = (run.expT[k] || 0) + dt;
       if (run.expT[k] >= OBSERVE_SECS) {
-        S.exp[k] = true;
-        log(textOf(exp.observed, m), 'ok');
+        S.exp[i][k] = true;
+        log(textOf(exp.observed, mx), 'ok');
         checkDone(); save(); renderMission();
       }
     }
@@ -71,7 +74,7 @@ export function step(dt) {
 export function checkDone() {
   const i = S.mission, M = MISSIONS[i];
   if (S.done[i]) return;
-  const expsOk = M.goals.filter(x => x.type === 'exp').every(x => S.exp[x.id]);
+  const expsOk = M.goals.filter(x => x.type === 'exp').every(x => S.exp[i][x.id]);
   if (S.verified[i] && expsOk && (!M.gate || S.est)) {
     S.done[i] = true;
     log(i === MISSIONS.length - 1 ? TXT.levelComplete : `Mission ${i + 1} complete.`, 'ok');

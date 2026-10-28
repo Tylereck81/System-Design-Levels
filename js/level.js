@@ -13,7 +13,7 @@ export function validateLevel(data) {
     if (ids.has(e.id)) problems.push(`two experiments use the id "${e.id}"`);
     ids.add(e.id);
     if (!EXP_KINDS.includes(e.kind)) problems.push(`experiment "${e.id}" has unknown kind "${e.kind}"`);
-    if (e.kind === 'crash' && typeof e.target !== 'function') problems.push(`crash experiment "${e.id}" needs a target function`);
+    if (e.kind === 'crash' && typeof e.target !== 'function' && typeof e.targets !== 'function') problems.push(`crash experiment "${e.id}" needs a target or targets function`);
   }
   data.missions.forEach((M, i) => {
     for (const g of M.goals) if (g.type === 'exp' && !ids.has(g.id)) problems.push(`Mission ${i + 1} goal "${g.id}" has no matching experiment`);

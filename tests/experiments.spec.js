@@ -34,12 +34,12 @@ test.describe('Experiments', () => {
     await patchCrash(page, `crash.expect = (m) => m.servedPct >= 99; crash.notMet = (m) => 'Only ' + m.servedPct.toFixed(0) + '% served.';`);
     await page.click('#exp-crash');
     await fastForward(page, 3); // the only web server is down: 0% served, so it never counts
-    expect(await state(page, () => window.__sdl.S.exp.crash)).toBe(false);
+    expect(await state(page, () => window.__sdl.S.exp[2].crash)).toBe(false);
     // The live display loop (real time, not simulated steps) writes this message, so wait for it.
     await expect(page.locator('#log')).toContainText('Only 0% served.');
     await patchCrash(page, `crash.expect = () => true;`);
     await fastForward(page, 2);
-    expect(await state(page, () => window.__sdl.S.exp.crash)).toBe(true);
+    expect(await state(page, () => window.__sdl.S.exp[2].crash)).toBe(true);
   });
 
   test('the "observed" message can describe what actually happened', async ({ page }) => {
