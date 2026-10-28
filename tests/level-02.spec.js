@@ -397,6 +397,32 @@ test.describe('Level 2 · break-it results', () => {
   });
 });
 
+test.describe('Level 2 · saved data and inputs', () => {
+  test('a save with more web servers than the limit loads only the limit', async ({ page }) => {
+    const errors = trackErrors(page);
+    await freshPage(page, '#level-2/build');
+    await page.evaluate(() => {
+      const S = JSON.parse(JSON.stringify(window.__sdl.S));
+      for (let i = 0; i < 8; i++) { S.nodes.push({ id: 'x' + i, type: 'web', x: 100 + i, y: 300, size: 'S' }); S.edges.push({ id: 'y' + i, from: 'x' + i, to: 'b' }); }
+      for (let i = 0; i < 3; i++) S.nodes.push({ id: 'l' + i, type: 'lb', x: 200 + i, y: 170 });
+      localStorage.setItem('sdl-level2-v1', JSON.stringify(S));
+    });
+    await reloadGame(page);
+    const s = await state(page, () => ({ web: window.__sdl.S.nodes.filter((n) => n.type === 'web').length, lb: window.__sdl.S.nodes.filter((n) => n.type === 'lb').length, edges: window.__sdl.S.edges.filter((e) => !window.__sdl.S.nodes.some((n) => n.id === e.from) || !window.__sdl.S.nodes.some((n) => n.id === e.to)).length }));
+    expect(s).toEqual({ web: 6, lb: 2, edges: 0 });
+    expect(errors).toEqual([]);
+  });
+
+  test('the estimate box rejects a negative number', async ({ page }) => {
+    await freshPage(page, '#level-2/build');
+    await goTo(page, 1);
+    await page.fill('#estIn', '-1204');
+    await page.click('#estBtn');
+    await expect(page.locator('#estFb')).toContainText('Type the estimate as a number');
+    expect(await state(page, () => window.__sdl.S.est)).toBe(false);
+  });
+});
+
 test.describe('Level 2 · quiz', () => {
   test('answer key is balanced and not guessable by length', async ({ page }) => {
     await freshPage(page, '#level-2/quiz');

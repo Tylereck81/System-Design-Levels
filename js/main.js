@@ -57,9 +57,13 @@ window.addEventListener('hashchange', () => {
   const target = (LEVELS.find(l => l.id === r.level) || LEVELS[0]).id; // an unknown level means Level 1
   if (target !== entry.id) { location.reload(); return; } // another level: start again with its file
   const tab = TABS.includes(r.tab) ? r.tab : S.tab;
-  if (r.level !== entry.id) { try { history.replaceState(null, '', routeHash(entry.id, tab)); } catch (e) { /* ignore */ } }
+  fixAddress(tab);
   if (tab !== S.tab) setTab(tab);
 });
+/** Show this level's own address for `tab` when the address bar holds another form of it (or a wrong one). */
+function fixAddress(tab) {
+  if (location.hash && location.hash !== routeHash(entry.id, tab)) { try { history.replaceState(null, '', routeHash(entry.id, tab)); } catch (e) { /* ignore */ } }
+}
 
 export function afterChange(forceFit) {
   if (connectFrom && !byId(connectFrom)) setConnectFrom(null);
@@ -81,7 +85,7 @@ function start(data) {
   try { load(data); } catch (e) { setS(fresh()); }
   const route = parseRoute(location.hash);
   if (TABS.includes(route.tab)) S.tab = route.tab;
-  if (route.level !== entry.id) { try { history.replaceState(null, '', routeHash(entry.id, S.tab)); } catch (e) { /* ignore */ } } // unknown level: show Level 1's address
+  fixAddress(S.tab); // e.g. an unknown level shows Level 1's address, and #level-2/XYZ shows #level-2/lesson
   renderShell();
   drawFigures();
   run.mdl = model();
@@ -89,6 +93,5 @@ function start(data) {
   log(S.done.every(Boolean) ? 'Welcome back. All missions done: replay any mission, or take the quiz.' : `Mission ${S.mission + 1}: ${MISSIONS[S.mission].title}.`);
   requestAnimationFrame(frame);
 }
-window.claude?.hot?.snapshot?.(() => ({ S }));
-window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
+start({});
 window.__sdl = { get S() { return S; }, run, model, sampleRoute, addNode, tryConnect, setTab, switchMission, togglePlay, step, afterChange, afterDesignChange };
