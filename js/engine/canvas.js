@@ -15,6 +15,7 @@ export const nodeRefs = {};
 
 export function nodeSub(n) {
   const c = COMPONENTS[n.type];
+  if (TYPES[n.type].subOf) return TYPES[n.type].subOf(n, c.sized ? sizesOf(n.type)[n.size] : null); // e.g. a cache: "8 GB · TTL 10 min"
   if (!c.sized) {
     const { index, count } = standbyPeers(n), standby = index > 0;
     // While the active one is down, the standby carries the traffic: it is the active one now.
@@ -26,7 +27,6 @@ export function nodeSub(n) {
     if (standby) return `${TYPES[n.type].standbySub} · ${algo.short}`;
     return count > 1 ? `${TYPES[n.type].sub} · ${algo.short}` : algo.short; // with a standby, say which one is active
   }
-  if (TYPES[n.type].subOf) return TYPES[n.type].subOf(n, sizesOf(n.type)[n.size]); // e.g. a cache: "8 GB · TTL 10 min"
   if (c.replicated && TYPES[n.type].roles && n.role) return `${n.size} · ${fmt(serverSpec(n).cap)}/s`;
   if (c.kinds && TYPES[n.type].kinds) return n.kind ? `${TYPES[n.type].kinds.find(k => k.id === n.kind).short} · ${n.size} ${fmt(SIZES[n.size].cap)}/s` : TYPES[n.type].unsetSub;
   return runsAlone(n) ? `${n.size} · ${fmt(SIZES[n.size].cap * c.alone.capFactor)} req/s (½)` : `${n.size} · ${fmt(SIZES[n.size].cap)} req/s`;
