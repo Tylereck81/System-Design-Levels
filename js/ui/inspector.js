@@ -1,7 +1,7 @@
 // Inspector panel for the selected component or connection.
 import { fmt } from '../format.js';
 import { $, el, keepFocus } from '../dom.js';
-import { TYPES, OK_PAIRS, pairKey, nameOf, edgeInfo, MISSIONS, S, sel, run, byId, setSel } from '../state.js';
+import { TYPES, OK_PAIRS, pairKey, nameOf, lowerName, edgeInfo, MISSIONS, S, sel, run, byId, setSel } from '../state.js';
 import { SIZES, T, COMPONENTS, roleOf, runsAlone, serverSpec } from '../engine/components.js';
 import { tryConnect, disconnect, removeSel, promote } from '../engine/interaction.js';
 import { log } from './log.js';
@@ -110,7 +110,7 @@ function buildInspector() {
     box.appendChild(list);
   }
   if (roleOf(n) !== 'client') {
-    const rm = el('button', 'btn danger', 'Remove ' + nameOf(n).toLowerCase()); rm.type = 'button'; rm.dataset.focusKey = 'remove'; rm.onclick = removeSel;
+    const rm = el('button', 'btn danger', 'Remove ' + lowerName(n)); rm.type = 'button'; rm.dataset.focusKey = 'remove'; rm.onclick = removeSel;
     box.appendChild(rm);
   }
 }

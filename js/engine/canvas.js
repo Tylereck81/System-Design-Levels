@@ -103,9 +103,11 @@ export function renderEdges() {
   edgesG.textContent = '';
   // Label each kind of connection once per sender and once per receiver, so a pool of servers stays readable.
   // In a group, the label goes on the first connection with room for it (its middle, or about a third of the way
-  // from either end) where it doesn't sit on top of a component.
-  const labelled = new Set();
-  const covers = (x, y, w, h) => S.nodes.some(n => x < n.x + NW / 2 && x + w > n.x - NW / 2 && y < n.y + NH / 2 + 12 && y + h > n.y - NH / 2);
+  // from either end; above or right of the line first, then below or left) where it doesn't sit on a component
+  // or on a label already drawn.
+  const labelled = new Set(), placed = [];
+  const covers = (x, y, w, h) => S.nodes.some(n => x < n.x + NW / 2 && x + w > n.x - NW / 2 && y < n.y + NH / 2 + 12 && y + h > n.y - NH / 2)
+    || placed.some(p => x < p.x + p.w + 4 && x + w + 4 > p.x && y < p.y + p.h + 2 && y + h + 2 > p.y);
   const labelOf = (e) => { const a = byId(e.from), b = byId(e.to); const info = a && b && edgeInfo(a, b); return info ? info.label : null; };
   const shared = (end, id, label) => S.edges.filter(e => e[end] === id && labelOf(e) === label).length;
   for (const e of S.edges) {
@@ -122,15 +124,17 @@ export function renderEdges() {
     if (labelled.has(fromKey) || labelled.has(toKey)) continue;
     const w = info.label.length * (compact ? 8 : 6.7) + 8, h = compact ? 18 : 16;
     const horiz = Math.abs(p2.x - p1.x) > Math.abs(p2.y - p1.y);
-    const at = (f) => {
+    const at = ([f, other]) => {
       const mx = p1.x + (p2.x - p1.x) * f, my = p1.y + (p2.y - p1.y) * f;
-      return horiz ? { lx: mx - w / 2, ly: my - 24 } : { lx: mx + 6, ly: my - 9 };
+      if (horiz) return { lx: mx - w / 2, ly: other ? my + 8 : my - 24 };
+      return { lx: other ? mx - w - 6 : mx + 6, ly: my - 9 };
     };
     const inGroup = shared('from', a.id, info.label) > 1 || shared('to', b.id, info.label) > 1;
-    const spot = inGroup ? [0.5, 0.35, 0.65].map(at).find(p => !covers(p.lx, p.ly, w, h)) : at(0.5);
+    const spots = [[0.5], [0.35], [0.65], [0.5, true], [0.35, true], [0.65, true]];
+    const spot = inGroup ? spots.map(at).find(p => !covers(p.lx, p.ly, w, h)) : at([0.5]);
     if (!spot) continue; // try the next connection in the group
     const { lx, ly } = spot;
-    labelled.add(fromKey); labelled.add(toKey);
+    labelled.add(fromKey); labelled.add(toKey); placed.push({ x: lx, y: ly, w, h });
     svgEl('rect', { x: lx, y: ly, width: w, height: h, rx: 4, class: 'edge-label-bg' }, g);
     const t = svgEl('text', { x: lx + 4, y: ly + (compact ? 14 : 12), class: 'edge-label' }, g); t.textContent = info.label;
   }

@@ -152,7 +152,7 @@ test.describe('Level 3 · teaching feedback', () => {
     expect(r.served).toBeCloseTo(100, 6);
     await page.click('#playBtn');
     await fastForward(page, 1);
-    await expect(page.locator('#log')).toContainText(/150 of its 60\d queries\/s are writes copied from the primary/);
+    await expect(page.locator('#log')).toContainText(/1[45]\d of its [56]\d\d queries\/s are writes copied from the primary/); // logged while traffic wobbles
     expect((await logText(page)).match(/Read replica is 7\d% busy/g)).toHaveLength(1); // three equal replicas, one line
     await expect(page.locator('#goals')).toContainText('75% max');
   });
@@ -224,7 +224,7 @@ test.describe('Level 3 · teaching feedback', () => {
     expect((await measure(page)).served).toBeCloseTo(84, 6);
     await page.click('#playBtn');
     await fastForward(page, 3);
-    expect(await state(page, () => window.__sdl.S.exp['crash-replica'])).toBe(false);
+    expect(await state(page, () => window.__sdl.S.exp[1]['crash-replica'])).toBe(false);
     await expect(page.locator('#log')).toContainText('Add another replica');
   });
 
@@ -297,6 +297,105 @@ test.describe('Level 3 · teaching feedback', () => {
     await page.fill('#estIn', '400');
     await page.click('#estBtn');
     expect(await state(page, () => window.__sdl.S.est)).toBe(true);
+  });
+});
+
+test.describe('Level 3 · fixes from QA', () => {
+  test('Mission 2: the replica crash takes down the one the others can least cover for', async ({ page }) => {
+    await freshPage(page, '#level-3/build');
+    await goTo(page, 1);
+    await page.evaluate(() => { window.__sdl.S.nodes.find((n) => n.id === 'b').size = 'L'; });
+    const [a, b] = await addReplicas(page, ['XL', 'XL']);
+    const [c] = await addReplicas(page, ['XL'], { connect: false });
+    await page.evaluate((id) => { window.__sdl.tryConnect('w2', id); window.__sdl.afterDesignChange(); }, c);
+    await page.click('#playBtn');
+    await page.click('#exp-crash-replica');
+    const down = await page.evaluate(() => [...window.__sdl.model().down]);
+    expect([a, b]).toContain(down[0]);
+    const served = await page.evaluate(() => window.__sdl.model({ peak: true }).servedPct);
+    expect(served).toBeGreaterThan(98);
+    expect(served).toBeLessThan(99);
+    await fastForward(page, 3);
+    expect(await state(page, () => window.__sdl.S.exp[1]['crash-replica'])).toBe(false);
+  });
+
+  test('Mission 3: an old primary that comes back smaller is explained, and promoting it back finishes the mission', async ({ page }) => {
+    await freshPage(page, '#level-3/build');
+    await goTo(page, 2);
+    await page.evaluate(() => { window.__sdl.S.nodes.find((n) => n.id === 'b').size = 'L'; });
+    const [r1] = await addReplicas(page, ['XL', 'XL', 'XL']);
+    await page.click('#playBtn');
+    await fastForward(page, 5);
+    await page.click('#exp-crash-primary');
+    await select(page, r1);
+    await page.locator('#insp').getByRole('button', { name: 'Promote to primary' }).click();
+    await fastForward(page, 2);
+    expect(await state(page, () => window.__sdl.S.exp[2]['crash-primary'])).toBe(true);
+    await page.click('#exp-crash-primary'); // restart the old primary: it comes back as a replica, and it is an L
+    await fastForward(page, 2);
+    await expect(page.locator('#log')).toContainText('It was the primary and is smaller than the other replicas.');
+    expect(await state(page, () => window.__sdl.S.done[2])).toBe(false);
+    await select(page, 'b');
+    await page.locator('#insp').getByRole('button', { name: 'Promote to primary' }).click();
+    await fastForward(page, 5);
+    expect(await state(page, () => window.__sdl.S.done[2])).toBe(true);
+  });
+
+  test('Mission 3: resizing the old primary is a design change, so the crash test runs again', async ({ page }) => {
+    await freshPage(page, '#level-3/build');
+    await goTo(page, 2);
+    await page.evaluate(() => { window.__sdl.S.nodes.find((n) => n.id === 'b').size = 'L'; });
+    const [r1] = await addReplicas(page, ['XL', 'XL', 'XL']);
+    await page.click('#playBtn');
+    await page.click('#exp-crash-primary');
+    await select(page, r1);
+    await page.locator('#insp').getByRole('button', { name: 'Promote to primary' }).click();
+    await fastForward(page, 2);
+    expect(await state(page, () => window.__sdl.S.exp[2]['crash-primary'])).toBe(true); // promoting kept nothing from counting
+    await page.click('#exp-crash-primary');
+    await page.evaluate(() => { const s = window.__sdl; s.S.nodes.find((n) => n.id === 'b').size = 'XL'; s.afterDesignChange(); });
+    expect(await state(page, () => window.__sdl.S.exp[2]['crash-primary'])).toBe(false);
+  });
+
+  for (const [w, h] of [[1440, 900], [390, 844]]) {
+    test(`${w} px: a primary and three replicas, with no label overflow and no line under a database`, async ({ page }) => {
+      await page.setViewportSize({ width: w, height: h });
+      await freshPage(page, '#level-3/build');
+      await addReplicas(page, ['XL', 'XL', 'XL']);
+      const bad = await page.evaluate(() => {
+        const problems = [], svg = document.getElementById('cv');
+        const boxes = [...svg.querySelectorAll('[data-node]')].map((g) => {
+          const r = g.querySelector('.node-box').getBBox(), m = g.transform.baseVal.consolidate().matrix;
+          const sub = g.querySelector('.node-sub');
+          if (sub && sub.getBBox().x + sub.getBBox().width > r.width - 4) problems.push('overflow ' + g.dataset.node);
+          return { id: g.dataset.node, x0: m.e, y0: m.f, x1: m.e + r.width, y1: m.f + r.height };
+        });
+        const crosses = (l, b) => { // sample the segment
+          for (let t = 0.02; t < 0.98; t += 0.01) { const x = l.x1 + (l.x2 - l.x1) * t, y = l.y1 + (l.y2 - l.y1) * t; if (x > b.x0 && x < b.x1 && y > b.y0 && y < b.y1) return true; }
+          return false;
+        };
+        for (const e of window.__sdl.S.edges) {
+          const line = svg.querySelector(`[data-edge="${e.id}"] .edge-line`);
+          const l = { x1: +line.getAttribute('x1'), y1: +line.getAttribute('y1'), x2: +line.getAttribute('x2'), y2: +line.getAttribute('y2') };
+          for (const b of boxes) if (b.id !== e.from && b.id !== e.to && crosses(l, b)) problems.push(`${e.from}→${e.to} under ${b.id}`);
+        }
+        return problems;
+      });
+      expect(bad).toEqual([]);
+    });
+  }
+
+  test('sentences name the primary database in full, and Promote has room under it', async ({ page }) => {
+    await freshPage(page, '#level-3/build');
+    const [r] = await addReplicas(page, ['XL']);
+    await select(page, 'b');
+    await expect(page.locator('#insp [data-focus-key="remove"]')).toHaveText('Remove primary database');
+    await select(page, r);
+    const gap = await page.evaluate(() => {
+      const btn = document.querySelector('#insp [data-focus-key="promote"]'), note = btn.nextElementSibling;
+      return note.getBoundingClientRect().top - btn.getBoundingClientRect().bottom;
+    });
+    expect(gap).toBeGreaterThanOrEqual(6);
   });
 });
 

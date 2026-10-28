@@ -71,12 +71,13 @@ export function afterChange(forceFit) {
   renderPalette(); renderCanvas(forceFit); renderInspector(); renderHUD(); renderMission(); renderTabs(); setBanner();
   save();
 }
-export function afterDesignChange() {
+export function afterDesignChange({ keepResults = false } = {}) {
   // The design is shared by every mission, so a change invalidates every unfinished mission's check.
   const i = S.mission;
   if (!S.done[i] && S.verified[i]) log('Design changed. Run it again to check the targets.', '');
   S.verified = S.verified.map((v, k) => v && S.done[k]);
-  clearOpenResults(); // and its break-it results
+  // and its break-it results, unless the change is an operation an experiment asks for (promoting a replica)
+  if (!keepResults) clearOpenResults();
   run.hold = 0;
   afterChange(true);
 }

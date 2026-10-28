@@ -226,9 +226,9 @@ export function removeSel() {
 export function promote(n) {
   const old = S.nodes.find(m => m.type === n.type && m.role === 'primary');
   const oldDown = !!old && downIds().has(old.id);
-  for (const m of S.nodes) if (m.type === n.type && m.role === 'primary') m.role = 'replica';
-  n.role = 'primary';
-  afterDesignChange();
+  for (const m of S.nodes) if (m.type === n.type && m.role === 'primary') { m.role = 'replica'; m.wasPrimary = true; }
+  n.role = 'primary'; delete n.wasPrimary;
+  afterDesignChange({ keepResults: true }); // promoting is what the primary crash test asks for, not a new design
   const M = MISSIONS[S.mission], writesPerSec = M.qps * trafficFactor() * (M.writes || 0);
   log(TXT.promoted({ oldDown, missing: Math.round(writesPerSec * T.lag), lagSecs: T.lag }), oldDown ? 'warn' : 'ok');
 }

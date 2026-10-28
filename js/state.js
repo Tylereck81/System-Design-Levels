@@ -12,6 +12,8 @@ export const OK_PAIRS = level.connections.ok;
 export const BAD_PAIRS = level.connections.bad;
 export const pairKey = (a, b) => [a, b].sort().join('|');
 /** A component's display name: its role's name when the level gives roles (e.g. "Read replica"). */
+/** A component's name inside a sentence: its role's lowercase name when the level gives one (e.g. "primary database"). */
+export const lowerName = (n) => { const t = TYPES[n.type], r = t.roles && n.role && t.roles[n.role]; return (r && r.lower) || nameOf(n).toLowerCase(); };
 export const nameOf = (n) => { const t = TYPES[n.type], r = t.roles && n.role && t.roles[n.role]; return r ? r.name : t.name; };
 /** Label and description of the connection a → b; a level can word it by the receiver's role. */
 export const edgeInfo = (a, b) => {

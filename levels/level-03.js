@@ -31,7 +31,8 @@ const primaryUp = (m) => m.g.onPath('db').some((n) => n.role === 'primary' && !m
 export default {
   id: 3,
   saveKey: 'sdl-level3-v1',
-  saveVersion: 1,
+  saveVersion: 2, // 2: break-it results are kept per mission
+  quizVersion: 1,
   targets,
 
   components: {
@@ -47,8 +48,8 @@ export default {
       name: 'Database', short: 'Primary or replica',
       desc: 'A relational (SQL) database server.',
       roles: {
-        primary: { name: 'Primary DB', desc: 'Takes every write: each insert, update and delete. It sends each change on to the replicas. There is one primary; the first database you add is it, and every one after it is a replica.' },
-        replica: { name: 'Read replica', desc: 'A copy of the primary that serves reads. It also applies every write the primary sends it, about 1 second behind in this game, and refuses writes of its own.' },
+        primary: { name: 'Primary DB', lower: 'primary database', desc: 'Takes every write: each insert, update and delete. It sends each change on to the replicas. There is one primary; the first database you add is it, and every one after it is a replica.' },
+        replica: { name: 'Read replica', lower: 'read replica', desc: 'A copy of the primary that serves reads. It also applies every write the primary sends it, about 1 second behind in this game, and refuses writes of its own.' },
       },
       promoteNote: 'Promoting makes this replica the primary, and the current primary becomes a replica. Do it when the primary fails.',
       downNote: 'This replica is down, so it cannot take over. Promote a healthy one.',
@@ -59,7 +60,7 @@ export default {
   limitMsg: {
     dns: 'You only need one DNS service for example.com.',
     lb: 'Two load balancers is the limit: one active, one standby.',
-    web: 'The web tier is big enough in this level: two XL web servers handle 3,200 req/s.',
+    web: 'Two XL web servers carry this level\'s traffic: 3,200 req/s together. This level is about the database.',
     db: 'Four databases is the limit here: one primary and up to three replicas.',
   },
   // Level 2's finished design, now on two XL web servers. The one database is the primary.
@@ -70,7 +71,7 @@ export default {
     { id: 'l2', type: 'lb', x: 510, y: 168, algo: 'rr' },
     { id: 'w1', type: 'web', x: 250, y: 276, size: 'XL' },
     { id: 'w2', type: 'web', x: 510, y: 276, size: 'XL' },
-    { id: 'b', type: 'db', x: 250, y: 384, size: 'XL', kind: 'sql', role: 'primary' },
+    { id: 'b', type: 'db', x: 120, y: 384, size: 'XL', kind: 'sql', role: 'primary' },
   ],
   startEdges: [
     { id: 's1', from: 'u', to: 'd' }, { id: 's2', from: 'u', to: 'l1' }, { id: 's3', from: 'u', to: 'l2' },
@@ -79,7 +80,8 @@ export default {
   ],
   slots: {
     dns: { x: 510, y: 60 }, lb: { x: 510, y: 168 }, web: { x: 510, y: 276 },
-    db: [{ x: 510, y: 384 }, { x: 640, y: 468 }, { x: 120, y: 468 }, { x: 380, y: 468 }],
+    // Replicas beside the primary and under the web servers, so no connection runs under another database.
+    db: [{ x: 640, y: 384 }, { x: 250, y: 468 }, { x: 510, y: 468 }, { x: 120, y: 384 }],
   },
 
   connections: {
@@ -111,8 +113,8 @@ export default {
         servedGoal, latGoal, costGoal(2400),
         { id: 'crash-replica', type: 'exp', text: 'Break it: crash a replica and still serve at least 99%' },
       ],
-      hint: 'Add a database: it becomes a read replica. Connect both web servers to it. The replicas share the 1,350 reads a second evenly, and each one also applies all 150 writes a second the primary makes. Select a replica to see both numbers. Several small replicas or a few big ones: each must stay under 70% busy.',
-      takeaway: 'Reads now spread over the replicas, and the primary only handles writes. When a replica crashed, the other took its reads: slower, but nothing failed. Each replica also applied every write. That was cheap while writes were few.',
+      hint: 'Add a database: it becomes a read replica. Connect both web servers to it. The replicas share the 1,350 reads a second evenly, and each one also applies all 150 writes a second the primary makes. Select a replica to see both numbers. Each replica carries its share of the reads plus every write. Work out how big each must be to stay under 70% busy.',
+      takeaway: 'Reads now spread over the replicas, and the primary only handles writes. When a replica crashed, the others took its reads: slower, but nothing failed. Each replica also applied every write. That was cheap while writes were few.',
     },
     {
       title: 'Writes catch up', ref: 'Replicas and writes', qps: 2000, writes: 0.2, budget: 2800,
@@ -150,7 +152,7 @@ export default {
         servedGoal, latGoal, costGoal(2800),
         { id: 'crash-primary', type: 'exp', text: 'Break it: crash the primary, promote a replica, and serve at least 99%' },
       ],
-      hint: 'Press Crash primary: every write fails, so only 80% is served. Select a replica on the canvas and press Promote to primary in the inspector. Both web servers must already be connected to it.',
+      hint: 'Press Crash primary: every write fails, so only 80% is served. Select a replica on the canvas and press Promote to primary in the inspector. Both web servers must already be connected to it. Then press Restart old primary: it comes back as a replica.',
       takeaway: 'The primary died and the site stayed up: a replica became the new primary and the others kept serving reads. You also saw the cost: the old primary\'s newest writes never reached the replica. Real systems detect the failure and promote a replica automatically, keep replicas close behind, and some wait for one replica to confirm each write.',
     },
   ],
@@ -159,10 +161,11 @@ export default {
   // `expect` is the outcome that must hold for the whole run before it counts.
   experiments: [
     {
-      id: 'crash-replica', kind: 'crash', target: (g) => g.onPath('db').find((n) => n.role === 'replica') || null,
+      // Any replica could fail; the test takes down the one the others can least cover for.
+      id: 'crash-replica', kind: 'crash', targets: (g) => g.onPath('db').filter((n) => n.role === 'replica'),
       label: 'Crash replica', labelOn: 'Restart replica',
       needsDesign: 'Build the design first: add a read replica and connect the web servers to it, then crash it.',
-      on: 'You pulled the plug on a read replica.', onTone: 'bad',
+      on: 'You pulled the plug on the read replica the site can least afford to lose.', onTone: 'bad',
       off: 'Replica restarted. It catches up on the writes it missed, then serves reads again.',
       expect: served99,
       notMet: (m) => `Only ${m.servedPct.toFixed(1)}% served with one replica down: the databases left cannot carry the reads. Add another replica, so the others can cover for one (N + 1).`,
@@ -197,6 +200,7 @@ export default {
     noPrimary: 'Writes have nowhere to go: a web server is connected only to replicas, and replicas refuse writes. Connect it to the primary, or promote a replica.',
     combinedOver: level2.text.combinedOver,
     nosqlOver: level2.text.nosqlOver,
+    oldPrimarySmall: ' It was the primary and is smaller than the other replicas. Keep every database big enough to take over, or promote it back.',
     copiedWrites: (st) => ` ${fmt(st.copied)} of its ${fmt(st.load)} queries/s are writes copied from the primary.`,
     promoted: ({ oldDown, missing, lagSecs }) => (oldDown
       ? `Replica promoted: it is the primary now and takes the writes. The old primary failed before sending its newest writes, and replicas run about ${lagSecs} second behind, so roughly ${fmt(missing)} writes are missing. Teams recover them from the old primary's log with a recovery script.`
@@ -219,7 +223,7 @@ export default {
       { q: '5,000,000 daily users make 30 requests each, and 1 in 10 is a write. Roughly how many writes per second at peak?', o: ['~35', '~174', '~347', '~3,470'], a: 2, e: '5M × 30 ÷ 86,400 ≈ 1,736 req/s on average, so peak ≈ 3,472 req/s. One in ten is a write: ≈ 347 writes/s. ~174 is the average write rate; ~3,470 is every request at peak.', r: 'Estimating QPS' },
       { q: 'At peak, 1,200 reads/s and 300 writes/s go to a primary with three replicas. How many queries/s does each replica handle?', o: ['400', '500', '1,500', '700'], a: 3, e: 'Each replica serves its share of the reads, 1,200 ÷ 3 = 400, and also applies every write the primary makes, 300. That is 700 queries/s each.', r: 'Replica load' },
       { q: 'The primary is 90% busy with writes. Will adding replicas help?', o: ['No: every write still goes to the primary', 'Yes: the replicas share the writes evenly', 'Yes: each replica takes some of the writes', 'Yes, once the replicas catch up with it'], a: 0, e: 'Replicas take reads, not writes. Every write still goes to the one primary, and each replica has to apply it too. To spread writes you split the data over several primaries: sharding.', r: 'Scaling writes' },
-      { q: 'Someone runs a DELETE that wipes the products table by mistake. What do the replicas do?', o: ['Keep the old rows, so you can restore them', 'Delete them too, within about a second', 'Refuse the change and alert the team', 'Delete them only after a full day'], a: 1, e: 'A replica copies every change the primary makes, mistakes included. Replication protects you when a machine fails, not from bad writes. You still need backups.', r: 'Replication is not a backup' },
+      { q: 'Someone runs a DELETE that wipes the products table by mistake. What do the replicas do?', o: ['Keep the old rows, so you can restore them', 'Delete them too, within about a second', 'Refuse the change and alert the team', 'Wait for an admin to approve the change'], a: 1, e: 'A replica copies every change the primary makes, mistakes included. Replication protects you when a machine fails, not from bad writes. You still need backups.', r: 'Replication is not a backup' },
       { q: 'A fire takes out the server room with the primary. The replicas run in another building. What did replication save?', o: ['Nothing, since the primary was lost', 'Only the reads from the last second', 'The data, apart from the newest writes', 'Every write, even those from the last second'], a: 2, e: 'The replicas hold a copy of the data in another place, so it survives. The exception is the writes the primary had not sent yet. Promote a replica and recover what you can.', r: 'Reliability' },
     ],
   },
@@ -228,7 +232,7 @@ export default {
   lessonHtml: `
     <p class="label">Level 3 · The data tier</p>
     <h1>Database replication</h1>
-    <p class="lede">The web tier now survives a crash, but every request still ends at one database. It has a size ceiling, and when it stops, the site stops. In this level you add copies of the database that share the reads, then crash a copy and the original to see what replication protects and what it costs.</p>
+    <p class="lede">The web tier can grow by adding servers, but every request still ends at one database. It has a size ceiling, and when it stops, the site stops. In this level you add copies of the database that share the reads, then crash a copy and the original to see what replication protects and what it costs.</p>
     <div class="goals-box">
       <div><b>You will learn</b>How a primary and its replicas split writes from reads, and what happens when either fails.</div>
       <div><b>You will decide</b>How many replicas, what size, and when to promote one.</div>
@@ -276,8 +280,8 @@ export default {
       <h2>When the primary fails</h2>
       <p class="src">Promoting a replica</p>
       <figure class="fig"><svg id="figPromote" viewBox="0 0 640 260" role="img" aria-label="The old primary is down. A replica has been promoted to be the new primary: web servers send it the writes, and it copies them to the remaining replica, which still serves reads."></svg><figcaption>A replica is promoted to take the old primary's place</figcaption></figure>
-      <p>Writes have nowhere to go, so one replica is <b>promoted</b>: it becomes the new primary and takes the writes. The other replicas copy from it, and a new replica replaces the one that was promoted.</p>
-      <p>The catch is that the promoted replica may be behind. Most setups replicate <b>asynchronously</b>: the primary confirms a write, then sends it on. Writes the old primary confirmed but had not sent yet are missing on the new primary, and have to be recovered from the old one with a recovery script. Some setups wait for one replica to confirm each write: nothing is lost, but every write takes longer.</p>
+      <p>Writes have nowhere to go, so one replica is <b>promoted</b>: it becomes the new primary and takes the writes. The other replicas copy from it, and a new replica replaces the one that was promoted. Keep replicas at least as big as the primary, so any of them can take over.</p>
+      <p>The catch is that the promoted replica may be behind. Most setups replicate <b>asynchronously</b>: the primary confirms a write, then sends it on. Writes the old primary confirmed but had not sent yet are missing on the new primary, and have to be recovered from the old one with a recovery script. Some setups wait for one replica to confirm each write: the newest writes are safe on that replica, but every write takes longer.</p>
       <p>Other layouts exist, such as several primaries that all take writes, or a ring where each server copies from the next. They avoid the promotion step but must settle writes that conflict, which is much harder to get right.</p>
     </section>
 
