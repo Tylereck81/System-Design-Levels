@@ -48,7 +48,6 @@
           <div class="pal-list" id="palList"></div>
           <p class="pal-hint">Drag onto the canvas or tap to add. Connect with the <b>+</b> handle or the inspector.</p>
         </div>
-        <div class="card insp-card" aria-label="Inspector"><div class="insp" id="insp"></div></div>
       </div>
 
       <div class="stage">
@@ -59,6 +58,11 @@
             <span class="label">Break it</span>
           </div>
           <span class="spacer"></span>
+          <div class="zoom" role="group" aria-label="Zoom">
+            <button class="zbtn" id="zoomOut" type="button" aria-label="Zoom out">−</button>
+            <span id="zoomPct">100%</span>
+            <button class="zbtn" id="zoomIn" type="button" aria-label="Zoom in">+</button>
+          </div>
           <button class="btn danger" id="resetBtn">Clear canvas</button>
         </div>
         <div class="canvas-wrap">
@@ -84,6 +88,7 @@
       </div>
 
       <div class="panel">
+        <div class="card insp-card" aria-label="Inspector"><div class="insp" id="insp"></div></div>
         <div class="card mission-card" id="missionCard" tabindex="-1">
           <div class="mtabs" id="mtabs"></div>
           <div class="mission" id="mission"></div>
