@@ -13,6 +13,8 @@ export const crashing = () => activeExps().some(e => e.kind === 'crash');
  */
 export const trafficFactor = () => { const h = dayHour(); return activeExps().filter(e => e.factor).reduce((f, e) => f * e.factor, 1) * (h == null ? 1 : WORKLOAD.day[h]); };
 
+/** True while an experiment has bots send each key's quota right around a window edge. */
+export const botEdge = () => activeExps().some(e => e.botEdge);
 /** Multiplier on the share of uploads from the running experiments (1 when none). */
 export const uploadFactor = () => activeExps().filter(e => e.uploadFactor).reduce((f, e) => f * e.uploadFactor, 1);
 

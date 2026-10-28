@@ -1,7 +1,7 @@
 // Simulation model: load, latency, failures and cost, for any graph of components.
 import { MISSIONS, TXT, PALETTE, S, run, byId } from '../state.js';
-import { COMPONENTS, T, roleOf, isServer, isReplica, isCache, isEdge, isStore, isSticky, scales, sessionsOn, holdsSessions, copiesFor, isLocated, isFar, isGeo, replicates, isQueue, isOffload, shardShares, keyedShards, hitRate, edgeHit, fallsBack, staleSecs, costOf, serverSpec, splitRule } from './components.js';
-import { activeExps, downIds, trafficFactor, uploadFactor, dayShift, textOf, PEAK } from './experiments.js';
+import { COMPONENTS, T, roleOf, isServer, isReplica, isCache, isEdge, isStore, isSticky, scales, sessionsOn, holdsSessions, copiesFor, isLocated, isFar, isGeo, replicates, isQueue, isOffload, shardShares, keyedShards, limiterRule, hitRate, edgeHit, fallsBack, staleSecs, costOf, serverSpec, splitRule } from './components.js';
+import { activeExps, downIds, trafficFactor, uploadFactor, dayShift, botEdge, textOf, PEAK } from './experiments.js';
 
 export { SIZES, T } from './components.js';
 
@@ -24,6 +24,9 @@ const depGroups = (n) => childGroups(n).filter(grp => !isStore(grp[0]) && !isQue
 const offloadGroup = (n) => childGroups(n).find(grp => isOffload(grp[0])) || null;
 const nonRelShare = () => MISSIONS[S.mission].nonRel || 0; // share of queries that need no joins
 const hotShare = () => MISSIONS[S.mission].hot || 0;       // share of queries about a few very popular accounts
+// Bots: a mission's bot = { keys, rate }, API keys each sending `rate` requests a second, on top of the real traffic.
+const botKeys = () => (MISSIONS[S.mission].bot || {}).keys || 0;
+const botRate = () => botKeys() * ((MISSIONS[S.mission].bot || {}).rate || 0);
 const storeGroup = (n) => childGroups(n).find(grp => isStore(grp[0])) || null;
 /** The queue a server publishes uploads to, instead of processing them itself. */
 const queueGroup = (n) => childGroups(n).find(grp => isQueue(grp[0])) || null;
@@ -191,7 +194,7 @@ function cacheAside(caches, flow, down, w) {
  * queue's waiting jobs (none for the monthly cost), and U is the share of pages that are uploads.
  */
 function loadPhase(g, qps, sizing, down, r, day, backlog, U) {
-  const load = new Map(), served = new Map(), writes = new Map(), copied = new Map(), hitOf = new Map(), files = new Map(), pool = new Map();
+  const load = new Map(), served = new Map(), writes = new Map(), copied = new Map(), hitOf = new Map(), files = new Map(), pool = new Map(), bots = new Map();
   let reads = 0, hits = 0, lost = 0; // reads that went to a cache group and how many it answered; pages whose session was lost
   const add = (m, c, f) => m.set(c.id, (m.get(c.id) || 0) + f);
   // Sessions: the share of a pool's pages each server receives, the share landing where sessions are shared, and
@@ -206,6 +209,8 @@ function loadPhase(g, qps, sizing, down, r, day, backlog, U) {
   const pages = F ? qps * (1 - F) : qps, entryParts = entryFlows(g, pages, down);
   for (const [c, f] of entryParts) add(load, c, f);
   if (g.entry.length) notePool(g.entry, g.users, entryParts, pages, 0);
+  const B = botRate();
+  if (B) for (const [c, f] of entryFlows(g, B, down)) { add(load, c, f); add(bots, c, f); }
   const fe = F ? fileEntry(g, down) : null;
   if (F) for (const [c, f] of (fe.edge ? split(fe.group, qps * F, down, g.users) : entryFlows(g, qps * F, down))) { add(load, c, f); add(files, c, f); }
   if (located(g)) {
@@ -235,6 +240,7 @@ function loadPhase(g, qps, sizing, down, r, day, backlog, U) {
     }
     if (COMPONENTS[n.type].consumes) { consume(n, L); continue; }
     if (COMPONENTS[n.type].sharded) { shard(n, L); continue; }
+    if (COMPONENTS[n.type].limits) { limit(n, L); continue; }
     const sp = serverSpec(n);
     const Lf = files.get(n.id) || 0, ownFiles = Lf > 0 && sp.filePer != null; // a server that sends files itself
     // Uploads (a share U of its pages): published to its queue as an ordinary request, or processed here.
@@ -321,6 +327,29 @@ function loadPhase(g, qps, sizing, down, r, day, backlog, U) {
     r.node[n.id] = { load: L, cap: sp.cap, util: out / sp.cap, ms: sp.base, mult: 1, base: sp.base, unit: sp.unit, drop: 0, consumer: true, backlog: b, ...(k ? { copies: k } : {}) };
   }
   /**
+   * A rate limiter: real users' requests pass unless their bursts don't fit (fb); bots get their keys' quota (q) through.
+   * Without a shared counter store, each limiter counts a key's requests on its own, so the key gets its quota once
+   * per limiter. Every request it checks reads its counter in the store; the ones it passes go on.
+   */
+  function limit(n, L) {
+    const sp = serverSpec(n), Lb = bots.get(n.id) || 0, Lr = L - Lb, u = L / sp.cap, d = Math.max(0, 1 - sp.cap / L);
+    const rule = limiterRule(n, !!backlog && botEdge()), sg = storeGroup(n), back = depGroups(n).length > 0; // the monthly cost (no backlog) ignores experiments
+    const peers = g.entry.filter(c => COMPONENTS[c.type].limits && !down.has(c.id)).length || 1;
+    const q = rule.q * (sg ? 1 : peers), B = botRate();
+    const botPass = B ? Math.min(Lb, botKeys() * T.keyLimit * q * Lb / B) : 0;
+    const s = back ? (Lr * (1 - rule.fb) + botPass) * (1 - d) : 0;
+    served.set(n.id, s);
+    const mult = qmul(u);
+    r.node[n.id] = { load: L, cap: sp.cap, util: u, ms: sp.base * mult, mult, base: sp.base, unit: sp.unit, drop: 1 - s / L, limiter: true,
+      realPass: back ? (1 - rule.fb) * (1 - d) : 0, waitMs: rule.wait, falseBlock: rule.fb, bots: Lb, botPass: botPass * (1 - d) };
+    if (!back) r.issue = r.issue || TXT.noBackend || null;
+    r.keyQuota = Math.max(r.keyQuota || 0, q);
+    r.limitShared = r.limitShared !== false && (!!sg || peers === 1); // one limiter needs no shared store
+    r.botThrough += botPass * (1 - d);
+    if (sg) for (const [c, f] of split(sg, L * (1 - d), down, n)) add(load, c, f);
+    for (const grp of depGroups(n)) for (const [c, f] of split(grp, s, down, n)) add(load, c, f);
+  }
+  /**
    * A sharded database: each shard is its own server with its share of the queries. The box reports its busiest shard,
    * the average time of the queries it served, and the share that failed on overloaded shards.
    */
@@ -343,7 +372,7 @@ export function model({ peak = false } = {}) {
   const M = MISSIONS[S.mission];
   const base = M.qps * trafficFactor();
   const qps = peak ? base * PEAK : base * (1 + 0.02 * Math.sin(run.t * 1.7) + 0.01 * Math.sin(run.t * 4.1));
-  const r = { qps, base, servedPct: 0, latency: null, cost: g.cost, spof: 0, node: {}, issue: null, g, down: downIds(), bottleneck: null, hitRate: null, staleSecs: 0, fileStaleSecs: 0, farFileMs: null, lostPct: 0, farPageMs: null, noDataPct: 0, lagWrites: 0, queues: {}, uploadMs: null, jobsIn: 0, jobsOut: 0, backlog: 0, alert: null, maxShardUtil: null, shardCount: 0 };
+  const r = { qps, base, servedPct: 0, latency: null, cost: g.cost, spof: 0, node: {}, issue: null, g, down: downIds(), bottleneck: null, hitRate: null, staleSecs: 0, fileStaleSecs: 0, farFileMs: null, lostPct: 0, farPageMs: null, noDataPct: 0, lagWrites: 0, queues: {}, uploadMs: null, jobsIn: 0, jobsOut: 0, backlog: 0, alert: null, maxShardUtil: null, shardCount: 0, keyQuota: null, botThrough: 0, bots: botRate() };
   if (!g.entry.length) { r.issue = TXT.noWeb; return r; }
   if (g.needsDns && !g.hasDNS) { r.issue = TXT.noDns; return r; }
   r.spof = countSpofs(g);
@@ -375,11 +404,12 @@ export function model({ peak = false } = {}) {
     if (!s || !L || path.has(n.id)) return NONE;
     let passed = flow === L ? s : flow * s / L;   // this path's share of what the server served
     const st = r.node[n.id];
+    if (st.limiter) passed = flow * st.realPass; // real users lose only what doesn't fit their bursts, not the bots' share
     if (fileWalk && st.fileMs != null) return { served: passed, end: t + st.fileMs }; // it sends the file itself
     if (jobWalk && st.jobMs != null) return { served: passed, end: t + st.jobMs }; // it processes the upload itself
     if (isQueue(n)) return { served: passed, end: t + st.ms }; // the job waits for a worker; the request is done
     if (!fileWalk && st.sessionMiss) passed *= 1 - st.sessionMiss; // pages that landed away from their session fail
-    let end0 = t + st.ms;
+    let end0 = t + st.ms + (st.limiter ? st.waitMs : 0);
     const next = new Set(path).add(n.id), groups = depGroups(n);
     if (isEdge(n)) return viaEdge(n, passed, end0, next);
     const qg = jobWalk && queueGroup(n);
@@ -504,6 +534,8 @@ export function sampleRoute(m) {
   const F = fileShare(), file = F > 0 && Math.random() < F; // a file goes to the CDN, or ends at a web server
   // Uploads are rare, so dots show them more often than they happen (one dot in 6) to make the queue visible.
   const job = !file && uploadShare() > 0 && Math.random() < 1 / 6;
+  // Bot requests show as their share of the traffic, at most half of the dots so real ones stay visible.
+  const bot = !file && botRate() > 0 && Math.random() < Math.min(0.5, botRate() / (botRate() + m.qps));
   let group = file ? fileEntry(m.g, m.down).group : m.g.entry, sender = m.g.users, lost = -1, w;
   if (group === m.g.entry && located(m.g)) {
     // A data center is one box: the dot goes there and back, and fails there if it is down, full, or lacks the data.
@@ -545,7 +577,8 @@ export function sampleRoute(m) {
   let failAt = lost;
   for (let i = 1; i < fwd.length && failAt < 0; i++) {
     const st = m.node[fwd[i]];
-    if (!st || st.down || Math.random() < st.drop + (!file && st.sessionMiss || 0)) { failAt = i; break; }
+    const drop = st && st.limiter ? (bot ? 1 - st.botPass / Math.max(st.bots, 1e-9) : 1 - st.realPass) : st ? st.drop + (!file && st.sessionMiss || 0) : 1;
+    if (!st || st.down || Math.random() < drop) { failAt = i; break; }
   }
   return { route: fwd.concat(fwd.slice(0, -1).reverse()), failAt };
 }

@@ -23,6 +23,10 @@ export function observe(m) {
   for (const id in m.node) {
     const st = m.node[id], n = byId(id); if (!n || st.down) continue;
     const nm = nameOf(n);
+    if (st.limiter) {
+      if (st.falseBlock > 0 && TXT.realBlocked) keys.set('fb' + id, [TXT.realBlocked(st.falseBlock), 'bad']);
+      if (st.waitMs > 0 && TXT.queueWait) keys.set('wait' + id, [TXT.queueWait(st.waitMs), 'warn']);
+    }
     if (st.consumer) continue; // a worker that can't keep up leaves jobs waiting in its queue (see below), not failed requests
     if (st.shards) {
       // A sharded database is as good as its busiest shard.
@@ -53,6 +57,7 @@ export function observe(m) {
     const sig = S.nodes.map(n => (n.size || '') + (n.kind || '') + (n.role || '')).join('');
     keys.set('slow' + sig, [`Response time ${fmt(m.latency)} ms misses the ${TARGET_MS} ms goal: ${parts.join(' + ')}. Busy servers make requests wait; give the slowest one more capacity.`, 'warn']);
   }
+  if (m.keyQuota > 1.0001 && TXT.overQuota) keys.set('quota' + m.keyQuota.toFixed(2), [TXT.overQuota(m.keyQuota, m.limitShared), 'warn']);
   for (const [id, q] of Object.entries(m.queues || {})) if (q.in - q.out > 1e-6 && TXT.queueGrowing) keys.set('queue' + id, [TXT.queueGrowing(q, m.alert, run.queues[id]), m.alert ? 'warn' : 'bad']);
   for (const exp of activeExps()) if (exp.note && m.g.entry.length && !crashing()) keys.set('note-' + exp.id, [exp.note(m.base), 'bad']);
   const mx = m.atPeak || m; // outcomes are judged at peak traffic (see sim.js)
