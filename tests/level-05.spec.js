@@ -177,7 +177,7 @@ test.describe('Level 5 · teaching feedback', () => {
     expect((await measure(page)).served).toBeCloseTo(50, 6);
     await page.click('#playBtn');
     await fastForward(page, 3);
-    expect(await state(page, () => window.__sdl.S.exp['crash-cdn'])).toBe(false);
+    expect(await state(page, () => window.__sdl.S.exp[window.__sdl.S.mission]['crash-cdn'])).toBe(false);
     await expect(page.locator('#log')).toContainText('load files from the origin');
     await set(page, id, { fallback: 'origin' });
     await calm(page);
@@ -195,14 +195,14 @@ test.describe('Level 5 · teaching feedback', () => {
     await page.click('#playBtn');
     await page.click('#exp-new-logo');
     await fastForward(page, 3);
-    expect(await state(page, () => window.__sdl.S.exp['new-logo'])).toBe(false);
+    expect(await state(page, () => window.__sdl.S.exp[window.__sdl.S.mission]['new-logo'])).toBe(false);
     await expect(page.locator('#log')).toContainText('old logo for up to 1 hour');
     await page.click('#exp-new-logo'); // stop it, invalidate instead, and ship again
     await set(page, id, { onChange: 'purge' });
     expect((await measure(page)).fileStaleSecs).toBe(3600);
     await page.click('#exp-new-logo');
     await fastForward(page, 3);
-    expect(await state(page, () => window.__sdl.S.exp['new-logo'])).toBe(false);
+    expect(await state(page, () => window.__sdl.S.exp[window.__sdl.S.mission]['new-logo'])).toBe(false);
     await expect(page.locator('#log')).toContainText('browsers that already had it');
     // A 1-minute TTL is fresh enough, but too slow for America.
     await set(page, id, { onChange: 'ttl', ttl: '60' });

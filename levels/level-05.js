@@ -178,7 +178,7 @@ export default {
   ],
 
   // Break-it experiments. A crash takes down the component `target` picks when it starts;
-  // `expect` is the outcome that must hold for the whole run before it counts.
+  // `expect` is the outcome that must hold, at peak traffic, for the whole run before it counts.
   experiments: [
     {
       id: 'crash-cdn', kind: 'crash', target: (g) => g.onPath('cdn')[0] || null,
