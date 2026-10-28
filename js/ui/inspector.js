@@ -2,7 +2,7 @@
 import { fmt } from '../format.js';
 import { $, el, keepFocus } from '../dom.js';
 import { TYPES, OK_PAIRS, pairKey, nameOf, lowerName, edgeInfo, MISSIONS, S, sel, run, byId, setSel, trafficHidden } from '../state.js';
-import { T, COMPONENTS, roleOf, runsAlone, serverSpec, sizesOf, choiceOf } from '../engine/components.js';
+import { T, COMPONENTS, roleOf, runsAlone, serverSpec, sizesOf, choiceOf, isEdge, costOf, monthlyFileGB } from '../engine/components.js';
 import { tryConnect, disconnect, removeSel, promote } from '../engine/interaction.js';
 import { log } from './log.js';
 import { afterDesignChange } from '../main.js';
@@ -105,7 +105,11 @@ function buildInspector() {
   if (roleOf(n) === 'client') {
     const M0 = MISSIONS[S.mission], hid = trafficHidden(M0);
     const live = el('div', 'live');
-    live.innerHTML = `<div><b>${hid ? '?' : fmt(M0.qps * trafficFactor())}</b><span>req/s at peak</span></div><div><b>${T.rtt} ms</b><span>internet round trip</span></div>`;
+    // With users near and far from the data center (TYPES.users.regions), show both round trips.
+    const rg = M0.far && TYPES[n.type].regions;
+    live.innerHTML = `<div><b>${hid ? '?' : fmt(M0.qps * trafficFactor())}</b><span>req/s at peak</span></div>`
+      + (rg ? `<div><b>${T.rtt} ms</b><span>round trip, ${rg.near} (${Math.round(100 * (1 - M0.far))}%)</span></div><div><b>${T.far} ms</b><span>round trip, ${rg.far} (${Math.round(100 * M0.far)}%)</span></div>`
+        : `<div><b>${T.rtt} ms</b><span>internet round trip</span></div>`);
     box.appendChild(live);
   }
   // connections (keyboard- and touch-friendly alternative to dragging)
@@ -134,16 +138,20 @@ export function paintInspectorLive() {
   const live = $('inspLive'); if (!live || !sel || sel.kind !== 'node') return;
   const n = byId(sel.id); if (!n || roleOf(n) !== 'server') return;
   const st = run.mdl && run.everPlayed ? run.mdl.node[n.id] : null;
+  if (!st && isEdge(n)) { live.innerHTML = `<div><b>$${fmt(costOf(n))}</b><span>a month, for ${fmt(monthlyFileGB() / 1000)} TB sent</span></div><div><b>—</b><span>press Play for load</span></div>`; return; }
   if (!st) { live.innerHTML = `<div><b>${fmt(serverSpec(n).cap)}</b><span>capacity, per second</span></div><div><b>—</b><span>press Play for load</span></div>`; return; }
   if (st.standby) { live.innerHTML = `<div><b>standby</b><span>takes no traffic</span></div><div><b>${fmt(st.cap)}</b><span>capacity, ready to take over</span></div>`; return; }
   if (st.down) { live.innerHTML = `<div><b style="color:var(--bad)">down</b><span>serving nothing</span></div><div><b>0</b><span>req/s served</span></div>`; return; }
   if (st.hit != null) {
-    live.innerHTML = `<div><b>${fmt(st.load)}</b><span>reads arriving, per second</span></div><div><b>${Math.round(st.hit * 100)}%</b><span>hit rate</span></div>`
-      + `<div><b>${fmt(st.misses)}</b><span>misses/s sent to the database</span></div><div><b>${st.ms.toFixed(1)} ms</b><span>per lookup</span></div>`;
+    // A cache's words by default; a level can word them for another type (e.g. a CDN's files and origin).
+    const w = { arriving: 'reads arriving, per second', misses: 'misses/s sent to the database', per: 'per lookup', ...TYPES[n.type].live };
+    live.innerHTML = `<div><b>${fmt(st.load)}</b><span>${w.arriving}</span></div><div><b>${Math.round(st.hit * 100)}%</b><span>hit rate</span></div>`
+      + `<div><b>${fmt(st.misses)}</b><span>${w.misses}</span></div><div><b>${st.ms.toFixed(1)} ms</b><span>${w.per}</span></div>`;
     return;
   }
   const pct = Math.round(st.util * 100);
   const col = st.load > st.cap * 1.005 ? 'var(--bad)' : st.util >= 0.8 ? 'var(--warn)' : 'var(--ok)';
-  live.innerHTML = `<div><b>${fmt(st.load)}</b><span>${st.unit} arriving</span></div><div><b>${fmt(st.cap)}</b><span>capacity${st.combined ? ' (code + data)' : ''}</span></div><div><b style="color:${col}">${pct}%</b><span>busy</span></div><div><b>${st.ms.toFixed(st.ms < 10 ? 1 : 0)} ms</b><span>per request (${st.mult.toFixed(1)}× base)</span></div>`
-    + (st.copied ? `<div class="wide"><b>${fmt(st.load - st.copied)} + ${fmt(st.copied)}</b><span>reads + writes copied from the primary</span></div>` : '');
+  live.innerHTML = `<div><b>${fmt(st.load)}</b><span>${st.files ? `${st.unit} of work` : `${st.unit} arriving`}</span></div><div><b>${fmt(st.cap)}</b><span>capacity${st.combined ? ' (code + data)' : ''}</span></div><div><b style="color:${col}">${pct}%</b><span>busy</span></div><div><b>${st.ms.toFixed(st.ms < 10 ? 1 : 0)} ms</b><span>per request (${st.mult.toFixed(1)}× base)</span></div>`
+    + (st.copied ? `<div class="wide"><b>${fmt(st.load - st.copied)} + ${fmt(st.copied)}</b><span>reads + writes copied from the primary</span></div>` : '')
+    + (st.files ? `<div class="wide"><b>${fmt(st.pages)} + ${fmt(st.files)}</b><span>pages + files arriving per second. A file takes ${fmt(100 * serverSpec(n).filePer)}% of a page's work.</span></div>` : '');
 }

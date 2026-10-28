@@ -1,6 +1,6 @@
 // Simulation model: load, latency, failures and cost, for any graph of components.
 import { MISSIONS, TXT, PALETTE, S, run, byId } from '../state.js';
-import { COMPONENTS, T, roleOf, isServer, isReplica, isCache, hitRate, staleSecs, costOf, serverSpec, splitRule } from './components.js';
+import { COMPONENTS, T, roleOf, isServer, isReplica, isCache, isEdge, hitRate, edgeHit, fallsBack, staleSecs, costOf, serverSpec, splitRule } from './components.js';
 import { activeExps, downIds, trafficFactor, textOf, PEAK } from './experiments.js';
 
 export { SIZES, T } from './components.js';
@@ -29,7 +29,8 @@ export function graph() {
   const users = S.nodes.find(n => roleOf(n) === 'client');
   const uo = users ? outs(users.id) : [];
   const dns = uo.find(n => roleOf(n) === 'resolver') || null;
-  const entry = uo.filter(isServer);
+  // entry: the servers Users send pages to. cdn: the CDNs they fetch files from (only where the level has files).
+  const entry = uo.filter(c => isServer(c) && !isEdge(c)), cdn = uo.filter(isEdge);
   const needsDns = PALETTE.some(t => (COMPONENTS[t] || {}).role === 'resolver');
   // web and db: the first web server Users reach, and its database (used by level goals).
   const web = entry.find(n => n.type === 'web') || null;
@@ -37,7 +38,7 @@ export function graph() {
   const cost = S.nodes.reduce((s, n) => s + costOf(n), 0);
   const ready = entry.length > 0 && (!needsDns || !!dns);
   // Goal helpers. They only count servers on the request path, i.e. reachable from Users.
-  const path = serversFrom(entry);
+  const path = serversFrom(entry.concat(cdn));
   const onPath = (type) => path.filter(n => n.type === type);
   const count = (type) => onPath(type).length;
   /** Every server of type `from` on the path reaches a server of type `to` (false when there are none). */
@@ -48,7 +49,7 @@ export function graph() {
   /** How many servers of type `to` on the path server `n` connects to directly. */
   const reached = (n, to) => outs(n.id).filter(c => c.type === to && path.includes(c)).length;
   const next = (n) => outs(n.id);
-  return { users, dns, hasDNS: !!dns, entry, needsDns, ready, web, db, cost, onPath, count, everyReaches, reached, next };
+  return { users, dns, hasDNS: !!dns, entry, cdn, needsDns, ready, web, db, cost, onPath, count, everyReaches, reached, next };
 }
 export const qmul = (u) => (u >= 0.96 ? 25 : 1 / (1 - u));
 
@@ -95,6 +96,17 @@ function share(targets, flow, sender) {
   return targets.map(c => [c, flow / targets.length]);
 }
 const writeShare = () => MISSIONS[S.mission].writes || 0;
+const fileShare = () => MISSIONS[S.mission].files || 0; // share of requests that are static files (the rest are pages)
+const farShare = () => MISSIONS[S.mission].far || 0;    // share of users far from the data center
+/**
+ * Where Users send their file requests: to the CDN while it is up. With no CDN, or a down CDN that falls back,
+ * to the origin like pages; otherwise to the down CDN, where they fail.
+ */
+function fileEntry(g, down) {
+  if (g.cdn.some(c => !down.has(c.id))) return { group: g.cdn, edge: true };
+  if (!g.cdn.length || g.cdn.some(fallsBack)) return { group: g.entry, edge: false };
+  return { group: g.cdn, edge: true };
+}
 /**
  * A group with replicas: writes go to the primary (with no primary in the group they fail), reads to the healthy
  * replicas, or to the primary when none is healthy. Write shares are tagged so the replicas can copy them.
@@ -135,18 +147,20 @@ export function model({ peak = false } = {}) {
   const M = MISSIONS[S.mission];
   const base = M.qps * trafficFactor();
   const qps = peak ? base * PEAK : base * (1 + 0.02 * Math.sin(run.t * 1.7) + 0.01 * Math.sin(run.t * 4.1));
-  const r = { qps, base, servedPct: 0, latency: null, cost: g.cost, spof: 0, node: {}, issue: null, g, down: downIds(), bottleneck: null, hitRate: null, staleSecs: 0 };
+  const r = { qps, base, servedPct: 0, latency: null, cost: g.cost, spof: 0, node: {}, issue: null, g, down: downIds(), bottleneck: null, hitRate: null, staleSecs: 0, fileStaleSecs: 0, farFileMs: null };
   if (!g.entry.length) { r.issue = TXT.noWeb; return r; }
   if (g.needsDns && !g.hasDNS) { r.issue = TXT.noDns; return r; }
   r.spof = countSpofs(g);
   const down = r.down;
 
   // 1. Load: each server serves at most its capacity and passes on only what it served.
-  const load = new Map(), served = new Map(), writes = new Map(), copied = new Map(), hitOf = new Map();
+  const load = new Map(), served = new Map(), writes = new Map(), copied = new Map(), hitOf = new Map(), files = new Map();
   let reads = 0, hits = 0; // reads that went to a cache group, and how many it answered
   const add = (m, c, f) => m.set(c.id, (m.get(c.id) || 0) + f);
-  for (const [c, f] of split(g.entry, qps, down, g.users)) add(load, c, f);
-  for (const n of topoOrder(g.entry)) {
+  const F = fileShare();
+  for (const [c, f] of split(g.entry, F ? qps * (1 - F) : qps, down, g.users)) add(load, c, f);
+  if (F) for (const [c, f] of split(fileEntry(g, down).group, qps * F, down, g.users)) { add(load, c, f); add(files, c, f); }
+  for (const n of topoOrder(g.entry.concat(g.cdn))) {
     const L = load.get(n.id) || 0;
     if (down.has(n.id)) {
       served.set(n.id, 0);
@@ -162,10 +176,23 @@ export function model({ peak = false } = {}) {
       continue;
     }
     const sp = serverSpec(n);
-    const u = (L * sp.per) / sp.cap;
-    const s = Math.min(L, sp.cap / sp.per);
+    const Lf = files.get(n.id) || 0, ownFiles = Lf > 0 && sp.filePer != null; // a server that sends files itself
+    const work = ownFiles ? (L - Lf) * sp.per + Lf * sp.filePer : L * sp.per;
+    const u = work / sp.cap;
+    const s = ownFiles ? (u > 1 ? L / u : L) : Math.min(L, sp.cap / sp.per);
     served.set(n.id, s);
-    const st = { load: L * sp.per, cap: sp.cap, util: u, ms: sp.base * qmul(u), mult: qmul(u), base: sp.base, unit: sp.unit, drop: Math.max(0, 1 - (sp.cap / sp.per) / L) };
+    const st = { load: work, cap: sp.cap, util: u, ms: sp.base * qmul(u), mult: qmul(u), base: sp.base, unit: sp.unit, drop: ownFiles ? 1 - s / L : Math.max(0, 1 - (sp.cap / sp.per) / L) };
+    if (ownFiles) Object.assign(st, { pages: L - Lf, files: Lf, fileMs: sp.fileBase * qmul(u) });
+    if (isEdge(n)) {
+      // A CDN answers what its edges hold and pulls the misses from its origin. With no origin it has nothing to hold.
+      const origin = childGroups(n), h = origin.length ? edgeHit(n) : 0;
+      Object.assign(st, { hit: h, misses: s * (1 - h), drop: origin.length ? 0 : 1 });
+      if (!origin.length) r.issue = r.issue || TXT.noOrigin || null;
+      r.fileStaleSecs = Math.max(r.fileStaleSecs, staleSecs(n));
+      r.node[n.id] = st;
+      for (const grp of origin) for (const [c, f] of split(grp, st.misses, down, n)) { add(load, c, f); add(files, c, f); }
+      continue;
+    }
     if (sp.combined) st.combined = true;
     if ('nosql' in sp) st.nosql = sp.nosql;
     if (COMPONENTS[n.type].forwards && !childGroups(n).length) { st.drop = 1; r.issue = r.issue || TXT.noBackend || null; }
@@ -175,17 +202,19 @@ export function model({ peak = false } = {}) {
     // The bottleneck: the server furthest over its capacity.
     if (st.drop > 0 && (!r.bottleneck || st.util > r.node[r.bottleneck.id].util)) r.bottleneck = { id: n.id, type: n.type };
     const cs = cacheSplit(n);
+    // Files a server sends itself end there; a forwarder passes its files on (fileFrac of each share it sends).
+    const on = ownFiles ? s * (1 - Lf / L) : s, fileFrac = ownFiles ? 0 : Lf / L;
     const send = (grp, flow, w) => {
       if (grp.some(isReplica) && grp.every(isReplica)) r.issue = r.issue || TXT.noPrimary || null;
-      for (const [c, f, kind] of split(grp, flow, down, n, w)) { add(load, c, f); if (kind === 'write') add(writes, c, f); }
+      for (const [c, f, kind] of split(grp, flow, down, n, w)) { add(load, c, f); if (kind === 'write') add(writes, c, f); if (fileFrac) add(files, c, f * fileFrac); }
     };
     if (cs) {
-      const a = cacheAside(cs.caches, s, down, writeShare());
-      reads += s * (1 - writeShare());
+      const a = cacheAside(cs.caches, on, down, writeShare());
+      reads += on * (1 - writeShare());
       for (const [c, f, h] of a.parts) { add(load, c, f); hitOf.set(c.id, h); hits += f * h; }
       for (const grp of cs.others) { send(grp, a.writes, 1); send(grp, a.misses + a.bypass, 0); }
     } else {
-      for (const grp of childGroups(n)) send(grp, s);
+      for (const grp of childGroups(n)) send(grp, on);
     }
     // Each healthy replica applies every write the primary served.
     const wrote = (writes.get(n.id) || 0) * s / L;
@@ -195,7 +224,10 @@ export function model({ peak = false } = {}) {
   // 2. Served requests and response time, following each path.
   //    `flow` is the requests per second arriving along this path, `t` the time spent before this server.
   //    Times are added in path order, so a single chain gives exactly rtt + web + hop + db.
+  //    Each class of request (pages or files, from near or far users) is walked on its own: `fileWalk` says which
+  //    kind, and `extra` is how much longer than the nearby round trip the user's trip to the data center is.
   const NONE = { served: 0, end: null };
+  let fileWalk = false, extra = 0;
   const viaGroup = (grp, flow, t, path, sender, w) => {
     const parts = split(grp, flow, down, sender, w).map(([c, f]) => walk(c, f, t, path)).filter(p => p.served > 0);
     const sv = parts.reduce((a, p) => a + p.served, 0);
@@ -206,8 +238,10 @@ export function model({ peak = false } = {}) {
     const L = load.get(n.id), s = served.get(n.id);
     if (!s || !L || path.has(n.id)) return NONE;
     const passed = flow === L ? s : flow * s / L;   // this path's share of what the server served
+    if (fileWalk && r.node[n.id].fileMs != null) return { served: passed, end: t + r.node[n.id].fileMs }; // it sends the file itself
     const end0 = t + r.node[n.id].ms;
     const next = new Set(path).add(n.id), groups = childGroups(n);
+    if (isEdge(n)) return viaEdge(n, passed, end0, next);
     const cs = cacheSplit(n);
     if (cs) return viaCache(n, cs, passed, end0, next);
     if (!groups.length) return COMPONENTS[n.type].forwards ? NONE : { served: passed, end: end0 };
@@ -248,7 +282,29 @@ export function model({ peak = false } = {}) {
     const ok = results.filter(p => p.served > 0), sv = ok.reduce((x, p) => x + p.served, 0);
     return sv ? { served: sv, end: ok.reduce((x, p) => x + p.served * p.end, 0) / sv } : NONE;
   };
-  const res = viaGroup(g.entry, qps, T.rtt, new Set(), g.users);
+  // A CDN: hits end at the edge. A miss goes on to the origin, which adds the rest of the user's distance to it.
+  const viaEdge = (n, passed, end0, path) => {
+    const h = r.node[n.id].hit, origin = childGroups(n)[0];
+    const miss = origin ? viaGroup(origin, passed * (1 - h), end0 + extra, path, n) : NONE;
+    const sv = passed * h + miss.served;
+    return sv ? { served: sv, end: (passed * h * end0 + miss.served * (miss.end || 0)) / sv } : NONE;
+  };
+  // Pages go to the entry servers. Files go to the CDN while one is up (its edges are near every user), else to the origin.
+  const classes = [], far = farShare();
+  for (const [share, rtt] of [[1 - far, T.rtt], [far, T.far]]) {
+    if (share <= 0) continue;
+    classes.push({ flow: F ? qps * share * (1 - F) : qps * share, file: false, rtt });
+    if (F) classes.push({ flow: qps * share * F, file: true, rtt, far: rtt === T.far });
+  }
+  const results = classes.map((k) => {
+    fileWalk = k.file; extra = k.rtt - T.rtt;
+    const fe = k.file ? fileEntry(g, down) : { group: g.entry, edge: false };
+    const res = viaGroup(fe.group, k.flow, fe.edge ? T.rtt : k.rtt, new Set(), g.users);
+    if (k.far && res.served) r.farFileMs = res.end;
+    return res;
+  });
+  const sv = results.reduce((a, p) => a + p.served, 0);
+  const res = results.length === 1 ? results[0] : { served: sv, end: sv ? results.reduce((a, p) => a + p.served * (p.end || 0), 0) / sv : null };
   if (reads > 0) r.hitRate = hits / reads;
   r.servedPct = 100 * res.served / qps;
   r.latency = res.served > 0 ? res.end : null;
@@ -277,7 +333,8 @@ function countSpofs(g) {
 /** One request's route for the animation: Users → the servers it passes through → back, and where it fails. */
 export function sampleRoute(m) {
   const fwd = [m.g.users.id], seen = new Set();
-  let group = m.g.entry, sender = m.g.users, lost = -1, w;
+  const F = fileShare(), file = F > 0 && Math.random() < F; // a file goes to the CDN, or ends at a web server
+  let group = file ? fileEntry(m.g, m.down).group : m.g.entry, sender = m.g.users, lost = -1, w;
   while (group && group.length) {
     const down = new Set(group.filter(c => m.node[c.id] && m.node[c.id].down).map(c => c.id));
     const shares = split(group, 1, down, sender, w), total = shares.reduce((a, [, f]) => a + f, 0);
@@ -287,6 +344,12 @@ export function sampleRoute(m) {
     if (seen.has(n.id)) break;
     seen.add(n.id); fwd.push(n.id);
     sender = n; w = undefined;
+    if (file) {
+      const st = m.node[n.id];
+      if (st && st.fileMs != null) break; // the web server sends the file
+      if (isEdge(n) && (!st || st.down || st.drop || Math.random() < st.hit)) break; // a hit ends at the edge
+      group = childGroups(n)[0]; continue; // a miss goes on to the origin
+    }
     const cs = cacheSplit(n);
     if (!cs) { group = childGroups(n)[0]; continue; }
     w = Math.random() < writeShare() ? 1 : 0;

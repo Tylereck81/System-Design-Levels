@@ -199,7 +199,7 @@ export default {
 
   quiz: {
     passScore: 8,
-    passText: 'Level 4 is done. Level 5, the CDN, is next. It isn\'t built yet.',
+    passText: 'Level 4 is done. Level 5, CDN for static content, is next: open it from the level menu at the top.',
     failText: (pass) => `You need ${pass} to pass. Reread the lesson sections behind the questions you missed, then try again.`,
     questions: [
       { q: 'A web server uses cache-aside, and the cache does not have product 42. What happens next?', o: ['The cache loads it from the database', 'The request fails, and the shopper retries later', 'The web server reads the DB and caches it', 'It waits for the cache to refresh'], a: 2, e: 'In cache-aside the web server does the work: on a miss it reads the database, stores the answer in the cache, and returns it. The next read of product 42 is a hit.', r: 'Cache-aside' },

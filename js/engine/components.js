@@ -1,5 +1,5 @@
 // Component types: capacity, base time, cost and failure mode for everything on the canvas.
-import { S, byId, WORKLOAD } from '../state.js';
+import { S, byId, WORKLOAD, MISSIONS } from '../state.js';
 
 export const SIZES = {
   S: { cpu: 2, cap: 200, cost: 40 },
@@ -7,7 +7,9 @@ export const SIZES = {
   L: { cpu: 8, cap: 800, cost: 200 },
   XL: { cpu: 16, cap: 1600, cost: 450 },
 };
-export const T = { rtt: 40, web: 20, db: 10, dc: 0.5, dns: 5, nosqlLookup: 3, nosqlLookups: 3, lb: 1, lag: 1, cache: 0.1 }; // lag: seconds a replica runs behind its primary; cache: ms for a lookup in memory
+export const T = { rtt: 40, web: 20, db: 10, dc: 0.5, dns: 5, nosqlLookup: 3, nosqlLookups: 3, lb: 1, lag: 1, cache: 0.1, far: 120, file: 2, cdn: 1 };
+// lag: seconds a replica runs behind its primary; cache: ms for a lookup in memory; far: internet round trip for users far
+// from the data center; file: ms a web server takes to send a static file; cdn: ms for an edge server to answer from its cache
 
 // role: 'client' sends traffic, 'resolver' answers name lookups off the request path,
 //       'server' sits on the request path and has a capacity.
@@ -26,7 +28,12 @@ export const T = { rtt: 40, web: 20, db: 10, dc: 0.5, dns: 5, nosqlLookup: 3, no
 // aside: a cache the sender checks first (cache-aside). Reads it holds are answered there (hit rate from its
 //   memory and TTL, see hitRate); misses and writes go on to the sender's other servers. Keys are split evenly
 //   over the sender's cache servers; a down cache's keys go straight to the database.
+// files: the server sends static files itself (they end there; only pages go on). per = a file's work, as a share of a page's.
+// edge: a CDN. Users send it their file requests (pages still go to the load balancer); it answers what its edges hold
+//   (see edgeHit) and pulls misses from its origin, the servers it connects to. With no origin it holds nothing.
+//   perGB: price of the data it sends, billed on the mission's average file traffic (see costOf).
 // choices: settings the player picks per server, stored as n[key]; each lists its options and a default.
+//   staleBy names the choice whose option says (stale: true) that a changed item is served until its TTL ends.
 // Failure mode for every server: when down it serves nothing; its share moves to healthy peers,
 // and with no healthy peer every request sent to it fails.
 export const COMPONENTS = {
@@ -34,7 +41,7 @@ export const COMPONENTS = {
   dns: { role: 'resolver', cost: T.dns },
   lb: { role: 'server', cap: 5000, base: T.lb, cost: 20, unit: 'req/s', routing: 'standby', forwards: true,
     algos: { rr: { split: 'even' }, wrr: { split: 'capacity' }, lc: { split: 'capacity' } }, defaultAlgo: 'rr' },
-  web: { role: 'server', sized: true, base: T.web, unit: 'req/s', alone: { missing: 'db', capFactor: 0.5, base: T.web + T.db } },
+  web: { role: 'server', sized: true, base: T.web, unit: 'req/s', alone: { missing: 'db', capFactor: 0.5, base: T.web + T.db }, files: { per: T.file / T.web, base: T.file } },
   cache: {
     role: 'server', sized: true, base: T.cache, unit: 'lookups/s', aside: true,
     sizes: {
@@ -45,8 +52,19 @@ export const COMPONENTS = {
     },
     choices: {
       ttl: { options: { 10: { secs: 10 }, 60: { secs: 60 }, 600: { secs: 600 }, 3600: { secs: 3600 } }, default: '60' },
-      onWrite: { options: { ttl: {}, delete: {} }, default: 'ttl' },
+      onWrite: { options: { ttl: { stale: true }, delete: {} }, default: 'ttl' },
     },
+    staleBy: 'onWrite',
+  },
+  cdn: {
+    role: 'server', cap: 100000, base: T.cdn, unit: 'files/s', edge: true, perGB: 0.02,
+    choices: {
+      ttl: { options: { 60: { secs: 60 }, 600: { secs: 600 }, 3600: { secs: 3600 }, 86400: { secs: 86400 } }, default: '60' },
+      // purge clears the edges, but browsers keep their own copy until its TTL ends, so it still counts as stale.
+      onChange: { options: { ttl: { stale: true }, purge: { stale: true }, version: {} }, default: 'ttl' },
+      fallback: { options: { none: {}, origin: { fallback: true } }, default: 'none' },
+    },
+    staleBy: 'onChange',
   },
   db: {
     role: 'server', sized: true, replicated: true,
@@ -61,6 +79,7 @@ export const roleOf = (n) => (COMPONENTS[n.type] || {}).role;
 export const isServer = (n) => roleOf(n) === 'server';
 export const isReplica = (n) => !!(COMPONENTS[n.type] || {}).replicated && n.role === 'replica';
 export const isCache = (n) => !!(COMPONENTS[n.type] || {}).aside;
+export const isEdge = (n) => !!(COMPONENTS[n.type] || {}).edge;
 export const sizesOf = (type) => (COMPONENTS[type] || {}).sizes || SIZES;
 /** The option a server has picked for one of its choices (its default when none is picked). */
 export function choiceOf(n, key) {
@@ -76,17 +95,34 @@ export function choiceOf(n, key) {
  */
 export function hitRate(n, servers) {
   const held = Math.min(1, sizesOf(n.type)[n.size].mem * servers / WORKLOAD.catalogGB);
-  const ttl = COMPONENTS[n.type].choices.ttl.options[choiceOf(n, 'ttl')].secs;
+  const ttl = ttlSecs(n);
   return Math.pow(held, Math.log(0.8) / Math.log(0.2)) * ttl / (ttl + WORKLOAD.readGapSecs);
 }
-/** How long a changed item can still be served from this cache: until its TTL ends, or not at all when writes delete it. */
-export const staleSecs = (n) => (choiceOf(n, 'onWrite') === 'delete' ? 0 : COMPONENTS[n.type].choices.ttl.options[choiceOf(n, 'ttl')].secs);
+const ttlSecs = (n) => COMPONENTS[n.type].choices.ttl.options[choiceOf(n, 'ttl')].secs;
+/**
+ * Share of file requests a CDN's edges answer. Each file is requested at an edge about every `fileGapSecs`; after a miss
+ * the edge keeps it for the TTL, so a share TTL ÷ (TTL + gap) of requests find it there.
+ */
+export const edgeHit = (n) => ttlSecs(n) / (ttlSecs(n) + WORKLOAD.fileGapSecs);
+/** True when pages fetch their files from the origin while this CDN is down. */
+export const fallsBack = (n) => !!COMPONENTS[n.type].choices.fallback.options[choiceOf(n, 'fallback')].fallback;
+/** How long a changed item can still be served: until its TTL ends, or not at all when the change replaces it everywhere. */
+export function staleSecs(n) {
+  const key = COMPONENTS[n.type].staleBy;
+  return COMPONENTS[n.type].choices[key].options[choiceOf(n, key)].stale ? ttlSecs(n) : 0;
+}
 
 /** Monthly cost of one component. */
 export function costOf(n) {
   const c = COMPONENTS[n.type] || {};
   if (c.sized) return n.size ? sizesOf(n.type)[n.size].cost : 0;
+  if (c.perGB) return Math.round(monthlyFileGB() * c.perGB);
   return c.cost || 0;
+}
+/** GB of files sent in a 30-day month. Traffic averages half its peak over a day. */
+export function monthlyFileGB() {
+  const M = MISSIONS[S.mission];
+  return M.qps * (M.files || 0) / 2 * (WORKLOAD.fileKB || 0) * 30 * 86400 / 1e6;
 }
 
 /** True when a server lacks the dependency it normally hands work to, so it does that work itself. */
@@ -101,6 +137,7 @@ export function serverSpec(n) {
   const kind = c.kinds ? c.kinds[n.kind] || c.kinds[Object.keys(c.kinds)[0]] : null;
   const spec = { cap: c.sized ? sizesOf(n.type)[n.size].cap : c.cap, per: 1, base: c.base, unit: c.unit };
   if (kind) Object.assign(spec, { per: kind.per, base: kind.base, unit: kind.unit, nosql: n.kind === 'nosql' });
+  if (c.files) Object.assign(spec, { filePer: c.files.per, fileBase: c.files.base });
   if (runsAlone(n)) Object.assign(spec, { cap: spec.cap * c.alone.capFactor, base: c.alone.base, combined: true });
   return spec;
 }

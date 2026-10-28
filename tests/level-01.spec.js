@@ -471,7 +471,7 @@ test.describe('Level 1 · accessibility', () => {
             await q.locator('.opts button').nth(1).click();
             await q.locator('.qcheck button').click();
           }
-          const results = await new AxeBuilder({ page }).analyze();
+          const results = await new AxeBuilder({ page }).setLegacyMode().analyze();
           expect(results.violations.map((v) => `${tab}: ${v.id} (${v.nodes.length})`)).toEqual([]);
         }
       });
