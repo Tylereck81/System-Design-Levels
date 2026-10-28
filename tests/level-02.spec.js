@@ -232,6 +232,40 @@ test.describe('Level 2 · teaching feedback', () => {
     await expect(page.locator('#log')).toContainText('Database is over capacity');
   });
 
+  test('Mission 3: a standby connected to only some web servers is not ready, and the message names the fix', async ({ page }) => {
+    await freshPage(page, '#level-2/build');
+    await goTo(page, 2);
+    await build(page, { webs: ['M', 'M', 'M', 'M', 'M'], db: 'XL' });
+    await page.evaluate(() => {
+      const s = window.__sdl, S = s.S;
+      s.addNode('lb');
+      const lb = S.nodes.filter((n) => n.type === 'lb').at(-1);
+      s.tryConnect('u', lb.id);
+      for (const w of S.nodes.filter((n) => n.type === 'web').slice(0, 2)) s.tryConnect(lb.id, w.id);
+      s.afterDesignChange();
+    });
+    const goal = page.locator('#goals li', { hasText: 'A standby load balancer is ready' });
+    await expect(goal).toContainText('reaches 2 of 5');
+    await page.click('#playBtn');
+    await expect(goal).toHaveClass(/fail/);
+    await page.click('#exp-crash-lb');
+    await fastForward(page, 2);
+    expect(await state(page, () => window.__sdl.S.exp[2]['crash-lb'])).toBe(false);
+    await expect(page.locator('#log')).toContainText('Connect the standby to every web server: it reaches 2 of 5.');
+    await page.click('#exp-crash-lb');
+    await page.evaluate(() => {
+      const s = window.__sdl, S = s.S, lb = S.nodes.filter((n) => n.type === 'lb').at(-1);
+      for (const w of S.nodes.filter((n) => n.type === 'web')) s.tryConnect(lb.id, w.id);
+    });
+    await expect(goal).toHaveClass(/pass/);
+    await page.click('#playBtn');
+    await fastForward(page, 5);
+    await page.click('#exp-crash-lb');
+    expect(await page.evaluate(() => window.__sdl.model({ peak: true }).servedPct)).toBeGreaterThanOrEqual(99);
+    await fastForward(page, 2);
+    expect(await state(page, () => window.__sdl.S.exp[2]['crash-lb'])).toBe(true);
+  });
+
   test('Mission 3: one load balancer crashed means nothing is served; a standby keeps the site up', async ({ page }) => {
     await freshPage(page, '#level-2/build');
     await goTo(page, 2);

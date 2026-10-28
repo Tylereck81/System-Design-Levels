@@ -10,6 +10,17 @@ const sharedDbGoal = { id: 'shared', type: 'struct', text: 'Every web server use
 const costGoal = (max) => ({ id: 'cost', type: 'struct', text: `Spend at most $${fmt(max)} per month`, test: (g) => g.cost <= max, val: (m, g) => '$' + fmt(g.cost) });
 const served99 = (m) => m.servedPct >= targets.servedPct;
 const TIER = { db: 'database', lb: 'load balancer' }; // names for the bottleneck message
+/**
+ * The load balancer that reaches the fewest web servers on the path, and how many it reaches (of total). Every load
+ * balancer must reach every web server, or the standby can't carry the site when it takes over.
+ */
+function fewestReached(g) {
+  const lbs = g.entry.filter((n) => n.type === 'lb'), total = g.onPath('web').length; // the first one Users reach is active
+  let lb = null, n = Infinity;
+  for (const x of lbs) { const k = g.reached(x, 'web'); if (k < n) { n = k; lb = x; } }
+  return { lb, n: lb ? n : 0, total, standby: !!lb && lbs.length > 1 && lb !== lbs[0] };
+}
+const standbyReady = (g) => { const f = fewestReached(g); return g.count('lb') >= 2 && f.total > 0 && f.n === f.total; };
 
 export default {
   id: 2,
@@ -128,7 +139,10 @@ export default {
       title: 'The load balancer is the new single point of failure', ref: 'Standby pair', qps: 1204, budget: 1000,
       story: 'Every web server now has a spare, but all traffic still enters through one load balancer. If it stops, example.com stops. Add a second load balancer as a standby: the pair send each other heartbeats, and if the active one goes quiet, the standby takes over its public IP.',
       goals: [
-        { id: 'standby', type: 'struct', text: 'A standby load balancer is ready', test: (g) => g.count('lb') >= 2 && g.everyReaches('lb', 'web') },
+        {
+          id: 'standby', type: 'struct', text: 'A standby load balancer is ready, connected to every web server', test: standbyReady,
+          val: (m, g) => { const f = fewestReached(g); return g.count('lb') >= 2 && f.n < f.total ? `reaches ${f.n} of ${f.total}` : ''; },
+        },
         sharedDbGoal,
         servedGoal, latGoal, costGoal(1000),
         { id: 'crash-lb', type: 'exp', text: 'Break it: crash the load balancer and still serve at least 99%' },
@@ -162,7 +176,11 @@ export default {
       on: 'You pulled the plug on the active load balancer.', onTone: 'bad',
       off: 'Load balancer restarted.',
       expect: served99,
-      notMet: (m) => `${m.servedPct.toFixed(0)}% served: every request enters through the load balancer, so it is a single point of failure. Add a standby load balancer connected to every web server.`,
+      notMet: (m) => {
+        const f = fewestReached(m.g);
+        if (m.g.count('lb') >= 2 && f.n < f.total) return `${m.servedPct.toFixed(0)}% served. Connect the ${f.standby ? 'standby' : 'active load balancer'} to every web server: it reaches ${f.n} of ${f.total}.`;
+        return `${m.servedPct.toFixed(0)}% served: every request enters through the load balancer, so it is a single point of failure. Add a standby load balancer connected to every web server.`;
+      },
       issue: 'The load balancer is down and nothing takes over, so every request fails.',
       observed: 'Observed: the standby noticed the missing heartbeats, took over the public IP and kept the site up.',
     },
@@ -188,8 +206,8 @@ export default {
       { q: 'You put a load balancer in front of your web servers. Which IP does DNS now give users\' devices for example.com?', o: ['The private IP of the first web server', 'The load balancer\'s public IP', 'A web server IP picked at random', 'The database server\'s IP'], a: 1, e: 'Devices connect to the load balancer\'s public IP. The load balancer then forwards each request to a web server over the private network, so users never see the web servers.', r: 'Load balancing' },
       { q: 'Why are the web servers on private IPs once a load balancer is in front?', o: ['Only machines inside the network can reach them', 'Private IPs make every request faster', 'So DNS can cache all of their addresses', 'So each server can store more of the data'], a: 0, e: 'A private IP (for example 10.0.0.11) cannot be reached from the internet. Only the load balancer and other servers inside the network can talk to the web servers, which keeps them out of direct reach.', r: 'Private addresses · RFC 1918' },
       { q: 'One of three web servers starts failing its health check. What does the load balancer do?', o: ['Sends that server\'s share to the database', 'Keeps sending it requests until it is fixed', 'Stops using it; the other two share the load', 'Restarts the server and waits for it to return'], a: 2, e: 'The load balancer checks each server regularly and stops sending requests to one that fails. The healthy servers share its traffic until it is fixed or replaced.', r: 'Health checks and failover' },
-      { q: 'Peak traffic is 1,000 req/s and each web server handles 300 req/s. How many servers survive one crash at peak?', o: ['3', '4', '6', '5'], a: 3, e: '1,000 ÷ 300 = 3.3, so 4 servers carry the peak. One more lets you lose any server and still have 4: that is N + 1 = 5.', r: 'N + 1 capacity' },
-      { q: 'What does scaling out give you that scaling up cannot?', o: ['A faster response from each server', 'No ceiling, and no single machine to fail', 'A database that never has to grow', 'Cheaper DNS lookups for every user'], a: 1, e: 'Scaling up stops at the biggest machine you can buy, and that one machine is still a single point of failure. Scaling out adds servers behind a load balancer: no fixed ceiling, and one server can fail without taking the site down.', r: 'Scaling up vs scaling out' },
+      { q: 'Each web server can serve at most 300 req/s. What is the fewest servers that still serve every request at a 1,000 req/s peak after one crashes?', o: ['3', '4', '6', '5'], a: 3, e: '1,000 ÷ 300 = 3.3, so 4 servers carry the peak. One more lets you lose any server and still have 4: that is N + 1 = 5.', r: 'N + 1 capacity' },
+      { q: 'What does scaling out give you that scaling up cannot?', o: ['A faster response from each server', 'No size ceiling, and one server can fail safely', 'A database that never has to grow', 'Cheaper DNS lookups for every user in every country'], a: 1, e: 'Scaling up stops at the biggest machine you can buy, and that one machine is still a single point of failure. Scaling out adds servers behind a load balancer: no fixed ceiling, and one server can fail without taking the site down.', r: 'Scaling up vs scaling out' },
       { q: 'Round robin spreads 600 req/s over one M server (400 req/s) and one S server (200 req/s). What happens?', o: ['Both servers end up 75% busy', 'The M gets 400 req/s and the S gets 200', 'The S gets 300 and drops about 100 of them', 'Nothing fails, since 600 is exactly their capacity'], a: 2, e: 'Round robin gives each server the same share, 300 req/s. The S server can only serve 200, so about 100 requests a second fail (17%) even though the total capacity looks big enough. Use same-size servers, or a weighted method.', r: 'Load-balancing methods' },
       { q: 'A design has one load balancer, three web servers and one database. Which are single points of failure?', o: ['The load balancer and the database', 'Only the database', 'Each of the three web servers', 'None, because there are three servers'], a: 0, e: 'The three web servers back each other up. The load balancer and the database are each the only one of their kind, so either one failing takes the site down.', r: 'Single points of failure' },
       { q: 'How does a standby load balancer know it should take over?', o: ['The web servers elect a new one', 'Users report the errors to it', 'DNS moves the name to its IP', 'It stops getting heartbeats'], a: 3, e: 'The two load balancers send each other heartbeats, small regular "I am alive" signals. When the standby stops hearing them for a few seconds, it takes over the active one\'s public IP.', r: 'Active-passive failover' },
@@ -241,7 +259,7 @@ export default {
     <section>
       <h2>When a web server dies</h2>
       <p class="src">Health checks and failover</p>
-      <p>The load balancer checks each server every few seconds with a small request, a <b>health check</b>. When a server stops answering, the load balancer stops sending it traffic and the healthy servers share its load. Users never notice. You then replace the broken server and the load balancer starts using it again.</p>
+      <p>The load balancer checks each server every few seconds with a small request, a <b>health check</b>. When a server stops answering, the load balancer stops sending it traffic and the healthy servers share its load. Most users never notice. You then replace the broken server and the load balancer starts using it again.</p>
       <p>That only works if the servers that are left can carry the whole peak. Plan for <b>N + 1</b>: N servers to carry the peak, plus one spare. For example, at a peak of 900 req/s with M servers (400 req/s each), 3 servers carry the load (75% busy), so you run 4.</p>
     </section>
 
@@ -274,7 +292,7 @@ export default {
     <section>
       <h2>How this level is simulated</h2>
       <p class="src">Game assumptions</p>
-      <p>With round robin the load balancer gives every healthy web server behind it the same share. With weighted or least connections, each server's share is in proportion to its capacity: in a steady stream of similar requests, least connections settles there too. A crashed server gets no traffic; its share moves to the others at once. A standby load balancer takes no traffic until the active one fails, then takes all of it.</p>
+      <p>With round robin the load balancer gives every healthy web server behind it the same share. With weighted or least connections, each server's share is in proportion to its capacity: under heavy load, with a steady stream of similar requests, least connections settles there too. A crashed server gets no traffic; its share moves to the others at once. A standby load balancer takes no traffic until the active one fails, then takes all of it.</p>
       <p class="assume">Game assumptions: the load balancer handles 5,000 req/s, adds 1 ms per request and costs $20/month. Health checks and the standby's takeover are instant here; in real systems they take a few seconds, and a few requests fail meanwhile. Server sizes, the 40 ms internet round trip, the 0.5 ms hop inside the data center and the database times are the same as in Level 1. A web server not connected to the database keeps its own copy of the data and gets half its capacity.</p>
     </section>
 

@@ -45,7 +45,9 @@ export function graph() {
     const fs = onPath(from);
     return fs.length > 0 && fs.every(n => serversFrom(outs(n.id).filter(isServer)).some(c => c.type === to));
   };
-  return { users, dns, hasDNS: !!dns, entry, needsDns, ready, web, db, cost, onPath, count, everyReaches };
+  /** How many servers of type `to` on the path server `n` connects to directly. */
+  const reached = (n, to) => outs(n.id).filter(c => c.type === to && path.includes(c)).length;
+  return { users, dns, hasDNS: !!dns, entry, needsDns, ready, web, db, cost, onPath, count, everyReaches, reached };
 }
 export const qmul = (u) => (u >= 0.96 ? 25 : 1 / (1 - u));
 
