@@ -179,6 +179,14 @@ export function renderEdges() {
 
 export function renderCanvas(force) { applyMode(); fitView(!!force); renderEdges(); renderNodes(); }
 window.addEventListener('resize', () => { if (S.tab === 'build') renderCanvas(true); });
+// The first render can happen before the page has its layout (e.g. the build tab is still hidden), so fit the view
+// again whenever the canvas's own size changes: phone or desktop mode, and how much of the design area shows.
+let lastSize = '';
+new ResizeObserver(() => {
+  const size = cv.clientWidth + 'x' + cv.clientHeight;
+  if (size === lastSize || !cv.clientWidth || S.tab !== 'build') return;
+  lastSize = size; renderCanvas(true);
+}).observe(cv);
 
 export function paintLive() {
   const m = run.mdl;
