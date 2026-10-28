@@ -17,7 +17,10 @@ export const nodeRefs = {};
 
 export function nodeSub(n) {
   const c = COMPONENTS[n.type];
-  if (TYPES[n.type].subOf) return TYPES[n.type].subOf(n, c.sized ? sizesOf(n.type)[n.size] : null); // e.g. a cache: "8 GB · TTL 10 min"
+  // A level's own label, e.g. a cache: "8 GB · TTL 10 min". It gets the live state, and can return nothing to use the default.
+  const st = run.mdl && run.everPlayed ? run.mdl.node[n.id] : null;
+  const own = TYPES[n.type].subOf && TYPES[n.type].subOf(n, c.sized ? sizesOf(n.type)[n.size] : null, st);
+  if (own) return own;
   if (!c.sized) {
     const { index, count } = standbyPeers(n), standby = index > 0;
     // While the active one is down, the standby carries the traffic: it is the active one now.
@@ -196,7 +199,7 @@ export function paintLive() {
     const down = !!(run.everPlayed && m && crashing() && m.down.has(n.id));
     ref.g.classList.toggle('down', down);
     ref.downG.setAttribute('visibility', down ? 'visible' : 'hidden');
-    if (ref.sub) { const t = nodeSub(n); if (ref.sub.textContent !== t) { ref.sub.textContent = t; fitText(ref.sub); } } // e.g. a standby that took over
+    if (ref.sub) { const t = nodeSub(n); if (ref.sub.textContent !== t) { ref.sub.textContent = t; fitText(ref.sub); } } // e.g. a standby that took over, or an autoscaled group's servers now
     if (st && !st.down) {
       const u = Math.min(1, st.util);
       ref.ubg.setAttribute('visibility', 'visible'); ref.ub.setAttribute('visibility', 'visible');

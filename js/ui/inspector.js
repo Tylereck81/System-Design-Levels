@@ -2,12 +2,12 @@
 import { fmt } from '../format.js';
 import { $, el, keepFocus } from '../dom.js';
 import { TYPES, OK_PAIRS, pairKey, nameOf, lowerName, edgeInfo, MISSIONS, S, sel, run, byId, setSel, trafficHidden } from '../state.js';
-import { T, COMPONENTS, roleOf, runsAlone, serverSpec, sizesOf, choiceOf, isEdge, costOf, monthlyFileGB } from '../engine/components.js';
+import { T, COMPONENTS, roleOf, runsAlone, holdsSessions, scales, dayCopies, serverSpec, sizesOf, choiceOf, isEdge, costOf, monthlyFileGB } from '../engine/components.js';
 import { tryConnect, disconnect, removeSel, promote } from '../engine/interaction.js';
 import { log } from './log.js';
 import { afterDesignChange } from '../main.js';
 import { trafficFactor, downIds } from '../engine/experiments.js';
-import { isStandby } from '../engine/model.js';
+import { graph, isStandby } from '../engine/model.js';
 
 export function renderInspector() {
   keepFocus($('insp'), buildInspector, () => { const b = $('insp'); b.tabIndex = -1; return b; });
@@ -97,6 +97,7 @@ function buildInspector() {
     }
     box.appendChild(seg);
     if (runsAlone(n)) box.appendChild(el('p', 'kind-note', TYPES[n.type].noDbNote));
+    if (holdsSessions(n) && TYPES[n.type].statefulNote) box.appendChild(el('p', 'kind-note', TYPES[n.type].statefulNote));
   }
   if (roleOf(n) === 'server') {
     const live = el('div', 'live'); live.id = 'inspLive'; box.appendChild(live);
@@ -138,6 +139,12 @@ export function paintInspectorLive() {
   const live = $('inspLive'); if (!live || !sel || sel.kind !== 'node') return;
   const n = byId(sel.id); if (!n || roleOf(n) !== 'server') return;
   const st = run.mdl && run.everPlayed ? run.mdl.node[n.id] : null;
+  if (!st && scales(n)) {
+    // An autoscaled group: what it costs, and how many servers it runs over a day, from its load at the peak.
+    const w = graph().peak.get(n.id) || 0, k = dayCopies(w, serverSpec(n).cap);
+    live.innerHTML = `<div><b>$${fmt(costOf(n, w))}</b><span>a month, paid by the hour</span></div><div><b>${Math.min(...k)} to ${Math.max(...k)}</b><span>servers over a day</span></div>`;
+    return;
+  }
   if (!st && isEdge(n)) { live.innerHTML = `<div><b>$${fmt(costOf(n))}</b><span>a month, for ${fmt(monthlyFileGB() / 1000)} TB sent</span></div><div><b>—</b><span>press Play for load</span></div>`; return; }
   if (!st) { live.innerHTML = `<div><b>${fmt(serverSpec(n).cap)}</b><span>capacity, per second</span></div><div><b>—</b><span>press Play for load</span></div>`; return; }
   if (st.standby) { live.innerHTML = `<div><b>standby</b><span>takes no traffic</span></div><div><b>${fmt(st.cap)}</b><span>capacity, ready to take over</span></div>`; return; }
@@ -153,5 +160,7 @@ export function paintInspectorLive() {
   const col = st.load > st.cap * 1.005 ? 'var(--bad)' : st.util >= 0.8 ? 'var(--warn)' : 'var(--ok)';
   live.innerHTML = `<div><b>${fmt(st.load)}</b><span>${st.files ? `${st.unit} of work` : `${st.unit} arriving`}</span></div><div><b>${fmt(st.cap)}</b><span>capacity${st.combined ? ' (code + data)' : ''}</span></div><div><b style="color:${col}">${pct}%</b><span>busy</span></div><div><b>${st.ms.toFixed(st.ms < 10 ? 1 : 0)} ms</b><span>per request (${st.mult.toFixed(1)}× base)</span></div>`
     + (st.copied ? `<div class="wide"><b>${fmt(st.load - st.copied)} + ${fmt(st.copied)}</b><span>reads + writes copied from the primary</span></div>` : '')
-    + (st.files ? `<div class="wide"><b>${fmt(st.pages)} + ${fmt(st.files)}</b><span>pages + files arriving per second. A file takes ${fmt(100 * serverSpec(n).filePer)}% of a page's work.</span></div>` : '');
+    + (st.files ? `<div class="wide"><b>${fmt(st.pages)} + ${fmt(st.files)}</b><span>pages + files arriving per second. A file takes ${fmt(100 * serverSpec(n).filePer)}% of a page's work.</span></div>` : '')
+    + (st.copies ? `<div class="wide"><b>${st.copies} ${st.copies === 1 ? 'server' : 'servers'} now</b><span>of size ${n.size}, each at most ${Math.round(100 * T.scaleAt)}% busy</span></div>` : '')
+    + (st.sessionMiss ? `<div class="wide"><b style="color:var(--bad)">${Math.round(100 * st.sessionMiss)}% of pages</b><span>land here without their session and fail: the cart is on another server</span></div>` : '');
 }

@@ -1,7 +1,7 @@
 // Simulation model: load, latency, failures and cost, for any graph of components.
 import { MISSIONS, TXT, PALETTE, S, run, byId } from '../state.js';
-import { COMPONENTS, T, roleOf, isServer, isReplica, isCache, isEdge, hitRate, edgeHit, fallsBack, staleSecs, costOf, serverSpec, splitRule } from './components.js';
-import { activeExps, downIds, trafficFactor, textOf, PEAK } from './experiments.js';
+import { COMPONENTS, T, roleOf, isServer, isReplica, isCache, isEdge, isStore, isSticky, scales, sessionsOn, holdsSessions, copiesFor, hitRate, edgeHit, fallsBack, staleSecs, costOf, serverSpec, splitRule } from './components.js';
+import { activeExps, downIds, trafficFactor, dayShift, textOf, PEAK } from './experiments.js';
 
 export { SIZES, T } from './components.js';
 
@@ -17,6 +17,9 @@ export function childGroups(n) {
   }
   return [...groups.values()];
 }
+/** The groups a server hands work to, leaving out its session store (every page reads that first, see storeGroup). */
+const depGroups = (n) => childGroups(n).filter(grp => !isStore(grp[0]));
+const storeGroup = (n) => childGroups(n).find(grp => isStore(grp[0])) || null;
 
 /** Servers reachable downstream from `start` (following connections to servers only). */
 function serversFrom(start) {
@@ -35,7 +38,7 @@ export function graph() {
   // web and db: the first web server Users reach, and its database (used by level goals).
   const web = entry.find(n => n.type === 'web') || null;
   const db = web ? (outs(web.id).find(n => n.type === 'db') || null) : null;
-  const cost = S.nodes.reduce((s, n) => s + costOf(n), 0);
+  const cost = S.nodes.reduce((s, n) => s + (scales(n) ? 0 : costOf(n)), 0);
   const ready = entry.length > 0 && (!needsDns || !!dns);
   // Goal helpers. They only count servers on the request path, i.e. reachable from Users.
   const path = serversFrom(entry.concat(cdn));
@@ -49,7 +52,14 @@ export function graph() {
   /** How many servers of type `to` on the path server `n` connects to directly. */
   const reached = (n, to) => outs(n.id).filter(c => c.type === to && path.includes(c)).length;
   const next = (n) => outs(n.id);
-  return { users, dns, hasDNS: !!dns, entry, cdn, needsDns, ready, web, db, cost, onPath, count, everyReaches, reached, next };
+  const g = { users, dns, hasDNS: !!dns, entry, cdn, needsDns, ready, web, db, cost, onPath, count, everyReaches, reached, next, peak: new Map() };
+  // An autoscaled group pays for the servers it runs each hour, so its cost needs its load at the peak (peak).
+  if (S.nodes.some(scales)) {
+    const scratch = { node: {}, issue: null, staleSecs: 0, fileStaleSecs: 0 };
+    loadPhase(g, MISSIONS[S.mission].qps, 1, new Set(), scratch, null);
+    for (const n of S.nodes.filter(scales)) { const w = (scratch.node[n.id] || {}).load || 0; g.peak.set(n.id, w); g.cost += costOf(n, w); }
+  }
+  return g;
 }
 export const qmul = (u) => (u >= 0.96 ? 25 : 1 / (1 - u));
 
@@ -122,7 +132,7 @@ function splitReadsWrites(group, flow, down, sender, w) {
 
 /** A sender's cache group and its other groups, when it has caches (cache-aside); null otherwise. */
 function cacheSplit(n) {
-  const groups = childGroups(n), caches = groups.find(grp => isCache(grp[0]));
+  const groups = depGroups(n), caches = groups.find(grp => isCache(grp[0]));
   return caches ? { caches, others: groups.filter(grp => grp !== caches) } : null;
 }
 /**
@@ -141,24 +151,28 @@ function cacheAside(caches, flow, down, w) {
   return out;
 }
 
-/** The model at this moment, or with `peak` at the top of the traffic's wobble (see PEAK). */
-export function model({ peak = false } = {}) {
-  const g = graph();
-  const M = MISSIONS[S.mission];
-  const base = M.qps * trafficFactor();
-  const qps = peak ? base * PEAK : base * (1 + 0.02 * Math.sin(run.t * 1.7) + 0.01 * Math.sin(run.t * 4.1));
-  const r = { qps, base, servedPct: 0, latency: null, cost: g.cost, spof: 0, node: {}, issue: null, g, down: downIds(), bottleneck: null, hitRate: null, staleSecs: 0, fileStaleSecs: 0, farFileMs: null };
-  if (!g.entry.length) { r.issue = TXT.noWeb; return r; }
-  if (g.needsDns && !g.hasDNS) { r.issue = TXT.noDns; return r; }
-  r.spof = countSpofs(g);
-  const down = r.down;
-
-  // 1. Load: each server serves at most its capacity and passes on only what it served.
-  const load = new Map(), served = new Map(), writes = new Map(), copied = new Map(), hitOf = new Map(), files = new Map();
-  let reads = 0, hits = 0; // reads that went to a cache group, and how many it answered
+/**
+ * Load: each server serves at most its capacity and passes on only what it served. Fills r.node with each server's
+ * state and returns the load and served maps. Autoscaled groups size for the traffic times `sizing` (the hour's
+ * traffic, without its wobble). While a day runs, `day` gives this hour's and the last hour's traffic as shares of
+ * the peak, so a group that shrinks while holding sessions in memory is caught losing them.
+ */
+function loadPhase(g, qps, sizing, down, r, day) {
+  const load = new Map(), served = new Map(), writes = new Map(), copied = new Map(), hitOf = new Map(), files = new Map(), pool = new Map();
+  let reads = 0, hits = 0, lost = 0; // reads that went to a cache group and how many it answered; pages whose session was lost
   const add = (m, c, f) => m.set(c.id, (m.get(c.id) || 0) + f);
+  // Sessions: the share of a pool's pages each server receives, the share landing where sessions are shared, and
+  // whether the sender keeps each user on one server. A down server that held sessions in memory loses its users' sessions.
+  const notePool = (grp, sender, parts, flow, fileFrac) => {
+    if (!sessionsOn() || !flow || !(COMPONENTS[grp[0].type] || {}).stateful) return;
+    const shared = parts.filter(([c]) => !holdsSessions(c)).reduce((a, [, f]) => a + f, 0) / flow;
+    for (const [c, f] of parts) pool.set(c.id, { p: f / flow, shared, sticky: isSticky(sender) });
+    for (const [c, f] of split(grp, flow, new Set(), sender)) if (down.has(c.id) && holdsSessions(c)) lost += f * (1 - fileFrac);
+  };
   const F = fileShare();
-  for (const [c, f] of split(g.entry, F ? qps * (1 - F) : qps, down, g.users)) add(load, c, f);
+  const pages = F ? qps * (1 - F) : qps, entryParts = split(g.entry, pages, down, g.users);
+  for (const [c, f] of entryParts) add(load, c, f);
+  if (g.entry.length) notePool(g.entry, g.users, entryParts, pages, 0);
   if (F) for (const [c, f] of split(fileEntry(g, down).group, qps * F, down, g.users)) { add(load, c, f); add(files, c, f); }
   for (const n of topoOrder(g.entry.concat(g.cdn))) {
     const L = load.get(n.id) || 0;
@@ -178,11 +192,21 @@ export function model({ peak = false } = {}) {
     const sp = serverSpec(n);
     const Lf = files.get(n.id) || 0, ownFiles = Lf > 0 && sp.filePer != null; // a server that sends files itself
     const work = ownFiles ? (L - Lf) * sp.per + Lf * sp.filePer : L * sp.per;
+    const k = scales(n) ? copiesFor(work * sizing, sp.cap) : 0, cap1 = sp.cap; // an autoscaled group runs k servers of this size
+    if (k) sp.cap *= k;
     const u = work / sp.cap;
     const s = ownFiles ? (u > 1 ? L / u : L) : Math.min(L, sp.cap / sp.per);
     served.set(n.id, s);
     const st = { load: work, cap: sp.cap, util: u, ms: sp.base * qmul(u), mult: qmul(u), base: sp.base, unit: sp.unit, drop: ownFiles ? 1 - s / L : Math.max(0, 1 - (sp.cap / sp.per) / L) };
     if (ownFiles) Object.assign(st, { pages: L - Lf, files: Lf, fileMs: sp.fileBase * qmul(u) });
+    if (k) {
+      st.copies = k;
+      // A group that holds sessions in memory loses those on the servers it removes as traffic falls.
+      if (day && holdsSessions(n)) { const was = copiesFor(work * sizing * day.prev / day.now, cap1); if (was > k) lost += (L - Lf) * (was - k) / was; }
+    }
+    // A page finds its session on the server that holds it, or wherever sessions are shared; with a sticky sender, always.
+    const pl = pool.get(n.id);
+    if (pl && !pl.sticky) { const found = holdsSessions(n) ? pl.p / (k || 1) : pl.shared; if (found < 1 - 1e-9) st.sessionMiss = 1 - found; }
     if (isEdge(n)) {
       // A CDN answers what its edges hold and pulls the misses from its origin. With no origin it has nothing to hold.
       const origin = childGroups(n), h = origin.length ? edgeHit(n) : 0;
@@ -206,20 +230,41 @@ export function model({ peak = false } = {}) {
     const on = ownFiles ? s * (1 - Lf / L) : s, fileFrac = ownFiles ? 0 : Lf / L;
     const send = (grp, flow, w) => {
       if (grp.some(isReplica) && grp.every(isReplica)) r.issue = r.issue || TXT.noPrimary || null;
-      for (const [c, f, kind] of split(grp, flow, down, n, w)) { add(load, c, f); if (kind === 'write') add(writes, c, f); if (fileFrac) add(files, c, f * fileFrac); }
+      const parts = split(grp, flow, down, n, w);
+      for (const [c, f, kind] of parts) { add(load, c, f); if (kind === 'write') add(writes, c, f); if (fileFrac) add(files, c, f * fileFrac); }
+      notePool(grp, n, parts, flow, fileFrac);
     };
+    const sg = storeGroup(n);
+    if (sg) send(sg, on); // one session lookup for every page
     if (cs) {
       const a = cacheAside(cs.caches, on, down, writeShare());
       reads += on * (1 - writeShare());
       for (const [c, f, h] of a.parts) { add(load, c, f); hitOf.set(c.id, h); hits += f * h; }
       for (const grp of cs.others) { send(grp, a.writes, 1); send(grp, a.misses + a.bypass, 0); }
     } else {
-      for (const grp of childGroups(n)) send(grp, on);
+      for (const grp of depGroups(n)) send(grp, on);
     }
     // Each healthy replica applies every write the primary served.
     const wrote = (writes.get(n.id) || 0) * s / L;
     if (wrote > 0) for (const c of replicasOf(n)) if (!down.has(c.id)) { add(load, c, wrote); add(copied, c, wrote); }
   }
+  if (sessionsOn()) r.lostPct = 100 * lost / pages;
+  return { load, served, reads, hits };
+}
+
+/** The model at this moment, or with `peak` at the top of the traffic's wobble (see PEAK). */
+export function model({ peak = false } = {}) {
+  const g = graph();
+  const M = MISSIONS[S.mission];
+  const base = M.qps * trafficFactor();
+  const qps = peak ? base * PEAK : base * (1 + 0.02 * Math.sin(run.t * 1.7) + 0.01 * Math.sin(run.t * 4.1));
+  const r = { qps, base, servedPct: 0, latency: null, cost: g.cost, spof: 0, node: {}, issue: null, g, down: downIds(), bottleneck: null, hitRate: null, staleSecs: 0, fileStaleSecs: 0, farFileMs: null, lostPct: 0 };
+  if (!g.entry.length) { r.issue = TXT.noWeb; return r; }
+  if (g.needsDns && !g.hasDNS) { r.issue = TXT.noDns; return r; }
+  r.spof = countSpofs(g);
+  const down = r.down;
+  const F = fileShare();
+  const { load, served, reads, hits } = loadPhase(g, qps, base / qps, down, r, dayShift());
 
   // 2. Served requests and response time, following each path.
   //    `flow` is the requests per second arriving along this path, `t` the time spent before this server.
@@ -237,11 +282,16 @@ export function model({ peak = false } = {}) {
   const walk = (n, flow, t, path) => {
     const L = load.get(n.id), s = served.get(n.id);
     if (!s || !L || path.has(n.id)) return NONE;
-    const passed = flow === L ? s : flow * s / L;   // this path's share of what the server served
-    if (fileWalk && r.node[n.id].fileMs != null) return { served: passed, end: t + r.node[n.id].fileMs }; // it sends the file itself
-    const end0 = t + r.node[n.id].ms;
-    const next = new Set(path).add(n.id), groups = childGroups(n);
+    let passed = flow === L ? s : flow * s / L;   // this path's share of what the server served
+    const st = r.node[n.id];
+    if (fileWalk && st.fileMs != null) return { served: passed, end: t + st.fileMs }; // it sends the file itself
+    if (!fileWalk && st.sessionMiss) passed *= 1 - st.sessionMiss; // pages that landed away from their session fail
+    let end0 = t + st.ms;
+    const next = new Set(path).add(n.id), groups = depGroups(n);
     if (isEdge(n)) return viaEdge(n, passed, end0, next);
+    // Every page reads its session first, then goes on.
+    const sg = !fileWalk && storeGroup(n);
+    if (sg) { const res = viaGroup(sg, passed, end0 + T.dc, next, n); if (!res.served) return NONE; passed = res.served; end0 = res.end; }
     const cs = cacheSplit(n);
     if (cs) return viaCache(n, cs, passed, end0, next);
     if (!groups.length) return COMPONENTS[n.type].forwards ? NONE : { served: passed, end: end0 };
@@ -323,7 +373,7 @@ function countSpofs(g) {
   const spof = new Set();
   const visit = (group, seen) => {
     for (const n of group) {
-      if (group.length === 1) spof.add(n.id);
+      if (group.length === 1 && !COMPONENTS[n.type].managed) spof.add(n.id);
       if (seen.has(n.id)) continue;
       seen.add(n.id);
       for (const grp of childGroups(n)) visit(grp, seen);
@@ -348,6 +398,9 @@ export function sampleRoute(m) {
     if (seen.has(n.id)) break;
     seen.add(n.id); fwd.push(n.id);
     sender = n; w = undefined;
+    // A page reads its session and then its data; the dot shows one of the two.
+    const sg = !file && storeGroup(n);
+    if (sg && Math.random() < 0.5) { group = sg; continue; }
     if (file) {
       const st = m.node[n.id];
       if (st && st.fileMs != null) break; // the web server sends the file
@@ -355,7 +408,7 @@ export function sampleRoute(m) {
       group = childGroups(n)[0]; continue; // a miss goes on to the origin
     }
     const cs = cacheSplit(n);
-    if (!cs) { group = childGroups(n)[0]; continue; }
+    if (!cs) { group = depGroups(n)[0]; continue; }
     w = Math.random() < writeShare() ? 1 : 0;
     const c = cs.caches[Math.floor(Math.random() * cs.caches.length)], st = m.node[c.id];
     if (!w && st && !st.down && Math.random() < (st.hit || 0)) { fwd.push(c.id); break; } // a hit ends at the cache
@@ -364,7 +417,7 @@ export function sampleRoute(m) {
   let failAt = lost;
   for (let i = 1; i < fwd.length && failAt < 0; i++) {
     const st = m.node[fwd[i]];
-    if (!st || st.down || Math.random() < st.drop) { failAt = i; break; }
+    if (!st || st.down || Math.random() < st.drop + (!file && st.sessionMiss || 0)) { failAt = i; break; }
   }
   return { route: fwd.concat(fwd.slice(0, -1).reverse()), failAt };
 }
