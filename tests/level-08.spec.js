@@ -149,12 +149,14 @@ test.describe('Level 8 · teaching feedback', () => {
     expect(r.uploadMs).toBeLessThan(1000);
     expect(r.backlog).toBeGreaterThan(2.5);
     expect(r.alert).toBe(false); // nothing watches the queue
-    expect(await state(page, () => window.__sdl.S.exp['crash-workers'])).toBe(false);
+    expect(await state(page, () => window.__sdl.S.exp[window.__sdl.S.mission]['crash-workers'])).toBe(false);
     await expect(page.locator('#log')).toContainText('nothing alerts anyone');
     await addMonitor(page, q);
     expect((await measure(page)).alert).toBe(true);
     await page.click('#exp-crash-workers');
-    await fastForward(page, 8); // 8 M workers take 1.6 a second, 1 arrives: the backlog drains
+    // 8 M workers take 1.6 a second, 1 arrives: the backlog drains at 0.6 a second. It is larger than 3 when
+    // the clicks above were slow, as the game runs in real time between them.
+    await fastForward(page, (await measure(page)).backlog / 0.6 + 2);
     r = await measure(page);
     expect(r.backlog).toBe(0);
     expect(r.alert).toBe(false);
@@ -173,7 +175,7 @@ test.describe('Level 8 · teaching feedback', () => {
     expect(r.jobsOut).toBeCloseTo(1.6, 6);
     await page.click('#playBtn');
     await fastForward(page, 2);
-    expect(await state(page, () => window.__sdl.S.exp['upload-rush'])).toBe(false);
+    expect(await state(page, () => window.__sdl.S.exp[window.__sdl.S.mission]['upload-rush'])).toBe(false);
     await expect(page.locator('#log')).toContainText('Set the workers to autoscale');
     await set(page, k, { scaling: 'auto', size: 'M' });
     await calm(page);
