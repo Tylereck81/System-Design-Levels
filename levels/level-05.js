@@ -216,7 +216,7 @@ export default {
 
   quiz: {
     passScore: 8,
-    passText: 'Level 5 is done. Level 6, the stateless web tier, is next. It isn\'t built yet.',
+    passText: 'Level 5 is done. Level 6, Stateless web tier and autoscaling, is next: open it from the level menu at the top.',
     failText: (pass) => `You need ${pass} to pass. Reread the lesson sections behind the questions you missed, then try again.`,
     questions: [
       { q: 'In a design like this one, what does the CDN serve?', o: ['Pages built for each shopper', 'Order and payment requests', 'Photos, CSS and JavaScript', 'Database queries'], a: 2, e: 'A CDN keeps copies of static files, the same for every shopper, on edges near them. Pages built per shopper, orders and queries go to your own servers. Some CDNs can cache whole pages too, but that is a separate feature.', r: 'What a CDN does' },

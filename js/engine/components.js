@@ -7,9 +7,10 @@ export const SIZES = {
   L: { cpu: 8, cap: 800, cost: 200 },
   XL: { cpu: 16, cap: 1600, cost: 450 },
 };
-export const T = { rtt: 40, web: 20, db: 10, dc: 0.5, dns: 5, nosqlLookup: 3, nosqlLookups: 3, lb: 1, lag: 1, cache: 0.1, far: 120, file: 2, cdn: 1 };
+export const T = { rtt: 40, web: 20, db: 10, dc: 0.5, dns: 5, nosqlLookup: 3, nosqlLookups: 3, lb: 1, lag: 1, cache: 0.1, far: 120, file: 2, cdn: 1, scaleAt: 0.6, maxCopies: 10 };
 // lag: seconds a replica runs behind its primary; cache: ms for a lookup in memory; far: internet round trip for users far
-// from the data center; file: ms a web server takes to send a static file; cdn: ms for an edge server to answer from its cache
+// from the data center; file: ms a web server takes to send a static file; cdn: ms for an edge server to answer from its cache;
+// scaleAt: how busy the autoscaler lets each server get; maxCopies: the most servers one autoscaled group runs
 
 // role: 'client' sends traffic, 'resolver' answers name lookups off the request path,
 //       'server' sits on the request path and has a capacity.
@@ -32,16 +33,26 @@ export const T = { rtt: 40, web: 20, db: 10, dc: 0.5, dns: 5, nosqlLookup: 3, no
 // edge: a CDN. Users send it their file requests (pages still go to the load balancer); it answers what its edges hold
 //   (see edgeHit) and pulls misses from its origin, the servers it connects to. With no origin it holds nothing.
 //   perGB: price of the data it sends, billed on the mission's average file traffic (see costOf).
+// stateful: in a mission with sessions, the server keeps each user's session (login, cart) in its own memory, unless it
+//   connects to a session store (see holdsSessions). A page that lands on a server without its session fails.
+// store: a session store. Every page its sender serves reads the session there first (one lookup), then goes on.
+// managed: run by a provider on several machines, so it never counts as a single point of failure.
+// algos with sticky: true keep each user on the server they started on, so sessions held in memory are always found.
 // choices: settings the player picks per server, stored as n[key]; each lists its options and a default.
 //   staleBy names the choice whose option says (stale: true) that a changed item is served until its TTL ends.
+//   An option with auto: true makes the server an autoscaled group (see copiesFor).
 // Failure mode for every server: when down it serves nothing; its share moves to healthy peers,
 // and with no healthy peer every request sent to it fails.
 export const COMPONENTS = {
   users: { role: 'client' },
   dns: { role: 'resolver', cost: T.dns },
   lb: { role: 'server', cap: 5000, base: T.lb, cost: 20, unit: 'req/s', routing: 'standby', forwards: true,
-    algos: { rr: { split: 'even' }, wrr: { split: 'capacity' }, lc: { split: 'capacity' } }, defaultAlgo: 'rr' },
-  web: { role: 'server', sized: true, base: T.web, unit: 'req/s', alone: { missing: 'db', capFactor: 0.5, base: T.web + T.db }, files: { per: T.file / T.web, base: T.file } },
+    algos: { rr: { split: 'even' }, wrr: { split: 'capacity' }, lc: { split: 'capacity' }, sticky: { split: 'even', sticky: true } }, defaultAlgo: 'rr' },
+  web: {
+    role: 'server', sized: true, base: T.web, unit: 'req/s', alone: { missing: 'db', capFactor: 0.5, base: T.web + T.db }, files: { per: T.file / T.web, base: T.file },
+    stateful: true, choices: { scaling: { options: { fixed: {}, auto: { auto: true } }, default: 'fixed' } },
+  },
+  session: { role: 'server', cap: 10000, base: T.nosqlLookup, cost: 150, unit: 'lookups/s', store: true, managed: true },
   cache: {
     role: 'server', sized: true, base: T.cache, unit: 'lookups/s', aside: true,
     sizes: {
@@ -80,6 +91,16 @@ export const isServer = (n) => roleOf(n) === 'server';
 export const isReplica = (n) => !!(COMPONENTS[n.type] || {}).replicated && n.role === 'replica';
 export const isCache = (n) => !!(COMPONENTS[n.type] || {}).aside;
 export const isEdge = (n) => !!(COMPONENTS[n.type] || {}).edge;
+export const isStore = (n) => !!(COMPONENTS[n.type] || {}).store;
+export const isSticky = (n) => { const c = n && COMPONENTS[n.type]; return !!(c && c.algos && (c.algos[n.algo] || c.algos[c.defaultAlgo]).sticky); };
+/** True when the server runs as an autoscaled group. */
+export const scales = (n) => { const c = COMPONENTS[n.type] || {}; return !!(c.choices && c.choices.scaling && c.choices.scaling.options[choiceOf(n, 'scaling')].auto); };
+/** True when the mission's pages carry a session (a login and a cart). */
+export const sessionsOn = () => !!MISSIONS[S.mission].sessions;
+/** True when the server keeps sessions in its own memory: a stateful server with no session store to share them. */
+export function holdsSessions(n) {
+  return sessionsOn() && !!(COMPONENTS[n.type] || {}).stateful && !S.edges.some(e => e.from === n.id && isStore(byId(e.to) || {}));
+}
 export const sizesOf = (type) => (COMPONENTS[type] || {}).sizes || SIZES;
 /** The option a server has picked for one of its choices (its default when none is picked). */
 export function choiceOf(n, key) {
@@ -112,9 +133,21 @@ export function staleSecs(n) {
   return COMPONENTS[n.type].choices[key].options[choiceOf(n, key)].stale ? ttlSecs(n) : 0;
 }
 
-/** Monthly cost of one component. */
-export function costOf(n) {
+/**
+ * Servers an autoscaled group runs for `work` requests per second, each `cap` strong: as many as keep each one at most
+ * scaleAt busy, from 1 to maxCopies.
+ */
+export const copiesFor = (work, cap) => Math.min(T.maxCopies, Math.max(1, Math.ceil(work / (T.scaleAt * cap) - 1e-9)));
+/**
+ * The hours of a day an autoscaled group runs, for `work` at the peak: each hour the traffic is the level's day curve
+ * (a share of the peak), and the group runs copiesFor that hour's work. Without a curve, the peak all day.
+ */
+export const dayCopies = (work, cap) => (WORKLOAD.day || [1]).map(f => copiesFor(work * f, cap));
+
+/** Monthly cost of one component. An autoscaled group pays for the servers it runs each hour, given its `work` at the peak. */
+export function costOf(n, work = 0) {
   const c = COMPONENTS[n.type] || {};
+  if (c.sized && scales(n)) { const k = dayCopies(work, serverSpec(n).cap); return Math.round(sizesOf(n.type)[n.size].cost * k.reduce((a, b) => a + b, 0) / k.length); }
   if (c.sized) return n.size ? sizesOf(n.type)[n.size].cost : 0;
   if (c.perGB) return Math.round(monthlyFileGB() * c.perGB);
   return c.cost || 0;

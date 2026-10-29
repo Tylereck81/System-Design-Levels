@@ -24,6 +24,7 @@ export function observe(m) {
     const st = m.node[id], n = byId(id); if (!n || st.down) continue;
     const nm = nameOf(n);
     const copied = st.copied && TXT.copiedWrites ? TXT.copiedWrites(st) : '';
+    if (st.sessionMiss && TXT.sessionMiss) keys.set('sess' + id, [TXT.sessionMiss(nm, st.sessionMiss), 'bad']);
     if (st.load > st.cap * 1.005) {
       overloaded = true;
       const lost = Math.max(1, Math.round((1 - st.cap / st.load) * 100));

@@ -28,6 +28,12 @@ export function drawIcon(type, parent, x, y, scale) {
     // A cloud with three edge servers inside: copies kept near users.
     svgEl('path', { d: 'M6.5 21h14a5 5 0 0 0 .4-10A7.5 7.5 0 0 0 6.6 9.6 5.7 5.7 0 0 0 6.5 21z', class: 'ic-stroke' }, g);
     for (const x of [9, 13.5, 18]) svgEl('circle', { cx: x, cy: 15.5, r: 1.6, class: 'ic-stroke' }, g);
+  } else if (type === 'session') {
+    // A data store with a key on it: values looked up by session ID.
+    svgEl('path', { d: 'M3.5 5v14a9.5 4 0 0 0 19 0V5z', class: 'ic-data' }, g);
+    svgEl('ellipse', { cx: 13, cy: 5, rx: 9.5, ry: 4, class: 'ic-data-top' }, g);
+    svgEl('circle', { cx: 9, cy: 15, r: 2.6, class: 'ic-line', fill: 'none' }, g);
+    svgEl('path', { d: 'M11.6 15h7M16.5 15v2.6', class: 'ic-line' }, g);
   } else if (type === 'db') {
     svgEl('path', { d: 'M3.5 5v14a9.5 4 0 0 0 19 0V5z', class: 'ic-data' }, g);
     svgEl('ellipse', { cx: 13, cy: 5, rx: 9.5, ry: 4, class: 'ic-data-top' }, g);

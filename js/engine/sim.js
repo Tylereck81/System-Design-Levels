@@ -3,7 +3,7 @@ import { MISSIONS, TXT, HOLD, EXPERIMENTS, S, run, save } from '../state.js';
 
 const OBSERVE_SECS = 1.5; // an experiment counts once it has run this long
 import { model, sampleRoute } from './model.js';
-import { anyOn, crashing, expectMet, textOf, activeExps } from './experiments.js';
+import { anyOn, crashing, expectMet, textOf, activeExps, dayHour, stopExp } from './experiments.js';
 import { tagsG, paintLive } from './canvas.js';
 import { dots, spawn, showIpTag, moveDots, setDots } from './dots.js';
 import { renderHUD, setBanner } from '../ui/hud.js';
@@ -22,6 +22,7 @@ export function stopRun(full) {
 
 export function step(dt) {
   run.t += dt;
+  for (const e of activeExps()) if (e.kind === 'day') run.on[e.id].t += dt;
   const m = model(); run.mdl = m; const g = m.g;
   // A running experiment with a required outcome is judged at the top of the traffic's wobble.
   if (activeExps().some(e => e.expect)) m.atPeak = model({ peak: true });
@@ -58,6 +59,7 @@ export function step(dt) {
   const built = g.ready;
   for (const exp of EXPERIMENTS) {
     const k = exp.id;
+    if (exp.kind === 'day') { if (run.on[k]) stepDay(exp, m.atPeak || m, built && M.goals.some(x => x.id === k) && !S.exp[i][k]); continue; }
     if (run.on[k] && built && M.goals.some(x => x.id === k) && !S.exp[i][k]) {
       const mx = m.atPeak || m;
       if (!expectMet(exp, mx)) { run.expT[k] = 0; continue; } // the required outcome must hold the whole time
@@ -69,6 +71,19 @@ export function step(dt) {
       }
     }
   }
+}
+
+const clock = (h) => String(h).padStart(2, '0') + ':00';
+/** A day counts when its outcome held every hour. The first hour it failed is kept and reported when the day ends. */
+function stepDay(exp, m, counts) {
+  const d = run.on[exp.id];
+  if (counts && !d.fail && !expectMet(exp, m)) d.fail = { at: dayHour(), msg: textOf(exp.notMet, m) };
+  if (d.t < exp.secs) return;
+  stopExp(exp);
+  if (counts && !d.fail) { S.exp[S.mission][exp.id] = true; log(textOf(exp.observed, m), 'ok'); checkDone(); save(); renderMission(); }
+  else if (d.fail) log(`The day is over, but it does not count. At ${clock(d.fail.at)}: ${d.fail.msg}`, 'warn');
+  else log(exp.off, 'ok');
+  paintControls();
 }
 
 export function checkDone() {
