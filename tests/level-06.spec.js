@@ -44,7 +44,7 @@ test.describe('Level 6 · playthrough', () => {
     // Mission 1: sticky sessions on the active load balancer, through the inspector.
     await select(page, 'l1');
     await page.locator('#insp').getByRole('button', { name: /^Sticky sessions/ }).click();
-    await expect(page.locator('[data-node="l1"] .node-sub')).toHaveText('sticky');
+    await expect(page.locator('[data-node="l1"] .node-sub')).toHaveText('Active · sticky');
     await page.click('#playBtn');
     await fastForward(page, 5);
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
@@ -178,7 +178,7 @@ test.describe('Level 6 · teaching feedback', () => {
     expect(r.served).toBeCloseTo(100, 6);
     await page.click('#playBtn');
     await fastForward(page, 3);
-    expect(await state(page, () => window.__sdl.S.exp['update-web'])).toBe(false);
+    expect(await state(page, () => window.__sdl.S.exp[window.__sdl.S.mission]['update-web'])).toBe(false);
     await addStore(page);
     await calm(page);
     r = await measure(page);
@@ -196,7 +196,7 @@ test.describe('Level 6 · teaching feedback', () => {
     await page.click('#playBtn');
     await page.click('#exp-run-day');
     await fastForward(page, 25);
-    expect(await state(page, () => window.__sdl.S.exp['run-day'])).toBe(false);
+    expect(await state(page, () => window.__sdl.S.exp[window.__sdl.S.mission]['run-day'])).toBe(false);
     await expect(page.locator('#log')).toContainText('The day is over, but it does not count. At 00:00: The autoscaler removed servers that held carts in memory: 33% of shoppers');
     await expect(page.locator('#exp-run-day')).toHaveText('Run a day');
   });
@@ -217,7 +217,7 @@ test.describe('Level 6 · teaching feedback', () => {
     await at(20.5); // 20:00, the peak
     expect((await measure(page)).copies).toEqual([5, 5]);
     await page.click('#exp-run-day'); // stopping early doesn't count
-    expect(await state(page, () => window.__sdl.S.exp['run-day'])).toBe(false);
+    expect(await state(page, () => window.__sdl.S.exp[window.__sdl.S.mission]['run-day'])).toBe(false);
   });
 
   test('a fixed server cannot follow the day: the bill stays at the peak', async ({ page }) => {
