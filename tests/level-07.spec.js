@@ -139,7 +139,7 @@ test.describe('Level 7 · teaching feedback', () => {
     await page.click('#playBtn');
     await fastForward(page, 2);
     await expect(page.locator('#log')).toContainText('over capacity');
-    expect(await state(page, () => window.__sdl.S.exp['dc-offline'])).toBe(false);
+    expect(await state(page, () => window.__sdl.S.exp[window.__sdl.S.mission]['dc-offline'])).toBe(false);
     await set(page, 'f', { size: 'L' });
     await calm(page);
     r = await measure(page);
