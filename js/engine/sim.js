@@ -16,7 +16,7 @@ import { renderTabs } from '../main.js';
 export function stopRun(full) {
   run.playing = false; run.on = {}; run.hold = 0; run.spawnAcc = 0;
   run.expT = {}; run.active = new Set();
-  if (full) { run.t = 0; run.dnsDone = false; run.dnsFlying = false; run.everPlayed = false; run.mdl = null; }
+  if (full) { run.t = 0; run.dnsDone = false; run.dnsFlying = false; run.everPlayed = false; run.mdl = null; run.queues = {}; }
   dots.forEach(d => d.c.remove()); setDots([]); tagsG.textContent = '';
 }
 
@@ -26,6 +26,9 @@ export function step(dt) {
   const m = model(); run.mdl = m; const g = m.g;
   // A running experiment with a required outcome is judged at the top of the traffic's wobble.
   if (activeExps().some(e => e.expect)) m.atPeak = model({ peak: true });
+  // Queues keep what their workers could not take yet: the backlog grows by the jobs in minus the jobs out.
+  for (const id in run.queues) if (!m.queues[id]) delete run.queues[id];
+  for (const [id, q] of Object.entries(m.queues)) run.queues[id] = Math.max(0, (run.queues[id] || 0) + (q.in - q.out) * dt);
 
   if (g.hasDNS && g.entry.length && !run.dnsDone && !run.dnsFlying && !crashing()) {
     run.dnsFlying = true;

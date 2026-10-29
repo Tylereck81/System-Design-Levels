@@ -7,11 +7,13 @@ export const SIZES = {
   L: { cpu: 8, cap: 800, cost: 200 },
   XL: { cpu: 16, cap: 1600, cost: 450 },
 };
-export const T = { rtt: 40, web: 20, db: 10, dc: 0.5, dns: 5, nosqlLookup: 3, nosqlLookups: 3, lb: 1, lag: 1, cache: 0.1, far: 120, file: 2, cdn: 1, scaleAt: 0.6, maxCopies: 10, dcPage: 50, dcLag: 1 };
+export const T = { rtt: 40, web: 20, db: 10, dc: 0.5, dns: 5, nosqlLookup: 3, nosqlLookups: 3, lb: 1, lag: 1, cache: 0.1, far: 120, file: 2, cdn: 1, scaleAt: 0.6, maxCopies: 10, dcPage: 50, dcLag: 1, job: 20000, publish: 2, drain: 60 };
 // lag: seconds a replica runs behind its primary; cache: ms for a lookup in memory; far: internet round trip for users far
 // from the data center; file: ms a web server takes to send a static file; cdn: ms for an edge server to answer from its cache;
 // scaleAt: how busy the autoscaler lets each server get; maxCopies: the most servers one autoscaled group runs;
-// dcPage: ms a page spends inside a data center; dcLag: seconds data replicated to another data center runs behind
+// dcPage: ms a page spends inside a data center; dcLag: seconds data replicated to another data center runs behind;
+// job: ms of one vCPU to process one uploaded file; publish: ms to put a message on a queue;
+// drain: seconds an autoscaled worker group aims to clear its queue's backlog in
 
 // role: 'client' sends traffic, 'resolver' answers name lookups off the request path,
 //       'server' sits on the request path and has a capacity.
@@ -42,6 +44,13 @@ export const T = { rtt: 40, web: 20, db: 10, dc: 0.5, dns: 5, nosqlLookup: 3, no
 // located: a server in one of the users' regions (its region choice: 'near' or 'far'). DNS with geo: true sends each
 //   region to its own healthy servers; plain DNS hands out every address, so each region spreads over all of them.
 // syncs: a connection to a server of the same type copies data to it (replication), not requests.
+// jobs: in a mission with uploads, the server processes an upload itself (per = its work, as a share of a page's;
+//   base = ms) unless it connects to a queue. Then it only publishes a message there, and the request ends.
+// queue: a message queue. It answers at once; the servers it connects to (consumers) take its jobs later.
+// consumes: a worker. It takes jobs from its queue as fast as its capacity allows; jobs it can't take yet wait
+//   in the queue (the backlog, kept by the simulation loop) instead of failing.
+// role 'monitor': off the request path; it watches the queues it connects to and alerts when one grows.
+// An option with count: n runs n servers of the chosen size (see countOf).
 // algos with sticky: true keep each user on the server they started on, so sessions held in memory are always found.
 // choices: settings the player picks per server, stored as n[key]; each lists its options and a default.
 //   staleBy names the choice whose option says (stale: true) that a changed item is served until its TTL ends.
@@ -55,9 +64,17 @@ export const COMPONENTS = {
     algos: { rr: { split: 'even' }, wrr: { split: 'capacity' }, lc: { split: 'capacity' }, sticky: { split: 'even', sticky: true } }, defaultAlgo: 'rr' },
   web: {
     role: 'server', sized: true, base: T.web, unit: 'req/s', alone: { missing: 'db', capFactor: 0.5, base: T.web + T.db }, files: { per: T.file / T.web, base: T.file },
+    jobs: { per: 2000, base: T.job }, // a web server of a size does as many jobs as a worker of that size
     stateful: true, choices: { scaling: { options: { fixed: {}, auto: { auto: true } }, default: 'fixed' } },
   },
   session: { role: 'server', cap: 10000, base: T.nosqlLookup, cost: 150, unit: 'lookups/s', store: true, managed: true },
+  queue: { role: 'server', cap: 10000, base: T.publish, cost: 50, unit: 'messages/s', queue: true, managed: true },
+  worker: {
+    role: 'server', sized: true, base: T.job, unit: 'jobs/s', consumes: true,
+    sizes: { S: { cpu: 2, cap: 2000 / T.job, cost: 40 }, M: { cpu: 4, cap: 4000 / T.job, cost: 90 }, L: { cpu: 8, cap: 8000 / T.job, cost: 200 }, XL: { cpu: 16, cap: 16000 / T.job, cost: 450 } },
+    choices: { scaling: { options: { 1: { count: 1 }, 2: { count: 2 }, 4: { count: 4 }, 8: { count: 8 }, auto: { auto: true } }, default: '1' } },
+  },
+  monitor: { role: 'monitor', cost: 30 },
   // A whole data center: load balancers, autoscaled web servers, caches, databases and a session store.
   dc: {
     role: 'server', sized: true, base: T.dcPage, unit: 'pages/s', flat: true, located: true, syncs: true, files: { per: T.file / T.web, base: T.file },
@@ -104,6 +121,9 @@ export const isCache = (n) => !!(COMPONENTS[n.type] || {}).aside;
 export const isEdge = (n) => !!(COMPONENTS[n.type] || {}).edge;
 export const isStore = (n) => !!(COMPONENTS[n.type] || {}).store;
 export const isLocated = (n) => !!(COMPONENTS[n.type] || {}).located;
+export const isQueue = (n) => !!(COMPONENTS[n.type] || {}).queue;
+/** How many servers a fixed choice runs (1 unless its scaling option gives a count). */
+export const countOf = (n) => { const c = COMPONENTS[n.type] || {}; return (c.choices && c.choices.scaling && c.choices.scaling.options[choiceOf(n, 'scaling')].count) || 1; };
 /** True for the far region ('far'), false for the near one, for a located server. */
 export const isFar = (n) => choiceOf(n, 'region') === 'far';
 /** True when DNS answers by the user's location (GeoDNS), with health checks. */
@@ -166,7 +186,7 @@ export const dayCopies = (work, cap) => (WORKLOAD.day || [1]).map(f => copiesFor
 export function costOf(n, work = 0) {
   const c = COMPONENTS[n.type] || {};
   if (c.sized && scales(n)) { const k = dayCopies(work, serverSpec(n).cap); return Math.round(sizesOf(n.type)[n.size].cost * k.reduce((a, b) => a + b, 0) / k.length); }
-  if (c.sized) return n.size ? sizesOf(n.type)[n.size].cost : 0;
+  if (c.sized) return n.size ? sizesOf(n.type)[n.size].cost * countOf(n) : 0;
   if (c.perGB) return Math.round(monthlyFileGB() * c.perGB);
   return c.cost || 0;
 }
@@ -189,6 +209,8 @@ export function serverSpec(n) {
   const spec = { cap: c.sized ? sizesOf(n.type)[n.size].cap : c.cap, per: 1, base: c.base, unit: c.unit };
   if (kind) Object.assign(spec, { per: kind.per, base: kind.base, unit: kind.unit, nosql: n.kind === 'nosql' });
   if (c.files) Object.assign(spec, { filePer: c.files.per, fileBase: c.files.base });
+  if (c.jobs) Object.assign(spec, { jobPer: c.jobs.per, jobBase: c.jobs.base });
+  if (countOf(n) > 1) spec.cap *= countOf(n);
   if (c.flat) spec.flat = true;
   if (runsAlone(n)) Object.assign(spec, { cap: spec.cap * c.alone.capFactor, base: c.alone.base, combined: true });
   return spec;

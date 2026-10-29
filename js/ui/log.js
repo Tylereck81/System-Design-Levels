@@ -23,6 +23,7 @@ export function observe(m) {
   for (const id in m.node) {
     const st = m.node[id], n = byId(id); if (!n || st.down) continue;
     const nm = nameOf(n);
+    if (st.consumer) continue; // a worker that can't keep up leaves jobs waiting in its queue (see below), not failed requests
     const copied = st.copied && TXT.copiedWrites ? TXT.copiedWrites(st) : '';
     if (st.sessionMiss && TXT.sessionMiss) keys.set('sess' + id, [TXT.sessionMiss(nm, st.sessionMiss), 'bad']);
     if (st.load > st.cap * 1.005) {
@@ -41,10 +42,11 @@ export function observe(m) {
   }
   if (!overloaded && !anyOn() && m.latency != null && m.latency >= TARGET_MS) {
     const parts = [`${T.rtt} ms network`];
-    for (const id in m.node) { const st = m.node[id], n = byId(id); if (n && !st.down) parts.push(`${lowerName(n)} ${fmt(st.ms)} ms (${Math.round(st.util * 100)}% busy)`); }
+    for (const id in m.node) { const st = m.node[id], n = byId(id); if (n && !st.down && !st.consumer) parts.push(`${lowerName(n)} ${fmt(st.ms)} ms (${Math.round(st.util * 100)}% busy)`); }
     const sig = S.nodes.map(n => (n.size || '') + (n.kind || '') + (n.role || '')).join('');
     keys.set('slow' + sig, [`Response time ${fmt(m.latency)} ms misses the ${TARGET_MS} ms goal: ${parts.join(' + ')}. Busy servers make requests wait; give the slowest one more capacity.`, 'warn']);
   }
+  for (const [id, q] of Object.entries(m.queues || {})) if (q.in - q.out > 1e-6 && TXT.queueGrowing) keys.set('queue' + id, [TXT.queueGrowing(q, m.alert, run.queues[id]), m.alert ? 'warn' : 'bad']);
   for (const exp of activeExps()) if (exp.note && m.g.entry.length && !crashing()) keys.set('note-' + exp.id, [exp.note(m.base), 'bad']);
   const mx = m.atPeak || m; // outcomes are judged at peak traffic (see sim.js)
   for (const exp of activeExps()) if (exp.notMet && !expectMet(exp, mx)) keys.set('notmet-' + exp.id, [textOf(exp.notMet, mx), 'warn']);
