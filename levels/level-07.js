@@ -135,7 +135,7 @@ export default {
         { id: 'dc-offline', type: 'exp', text: 'Break it: take Virginia offline and still serve at least 99%' },
       ],
       hint: 'Use GeoDNS, so it stops handing out Virginia\'s address. Make Frankfurt big enough for both regions. Then connect Virginia to Frankfurt, so Virginia\'s data is copied there.',
-      takeaway: 'Shoppers in America barely noticed: pages took 170 ms instead of 90, and their data was in Frankfurt, apart from the last second of changes that had not crossed the ocean yet. That gap is the price of asynchronous replication. Keep DNS answers short-lived too, so devices pick up the new address quickly.',
+      takeaway: 'Shoppers in America barely noticed: pages took 170 ms instead of 90, and their data was in Frankfurt, apart from the last second of changes that had not crossed the ocean yet. That gap is the price of asynchronous replication. Keep DNS answers short-lived too, so devices pick up the new address quickly. If Frankfurt failed instead, Virginia could not cover: Europe\'s data is not copied there, and an S data center is far too small for 2,000 pages a second. Real setups copy data both ways and size every data center for the full load, or keep a third.',
     },
   ],
 

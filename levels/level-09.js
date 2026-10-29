@@ -175,7 +175,7 @@ export default {
         { id: 'reshard', type: 'exp', text: 'Break it: add one more shard and see how much data moves' },
       ],
       hint: 'Add a NoSQL store and connect both web servers to it. Then press "Add a shard" to see what resharding with % N would move.',
-      takeaway: 'Moving the counters out took 40% of the load off the shards without moving a single row between them. Adding a shard with % N would have moved most of the data. Level 11 shows a way to add servers and move far less.',
+      takeaway: 'Moving the counters out took 40% of the load off the shards without moving a single row between them. Adding a shard with % N would have moved most of the data. A later level shows a way to add servers and move far less.',
     },
   ],
 
@@ -261,7 +261,7 @@ export default {
       <h2>Sharding problems</h2>
       <p class="src">Challenges</p>
       <ul>
-        <li><b>Resharding.</b> When a shard is full, or some shards fill faster than others, you change the sharding function and move data. With <code>% N</code>, changing N moves most rows. Consistent hashing, in Level 11, moves far fewer.</li>
+        <li><b>Resharding.</b> When a shard is full, or some shards fill faster than others, you change the sharding function and move data. With <code>% N</code>, changing N moves most rows. Consistent hashing, in a later level, moves far fewer.</li>
         <li><b>Hotspots</b> (the celebrity problem). A few very popular accounts on one shard can overload it, here three creators with more than 50 million followers each. Give each one a shard of its own, and split one further if needed.</li>
         <li><b>Joins.</b> Rows that belong together may live on different shards, so joins across them are hard. A common workaround is to denormalize: store the data a query needs in one table.</li>
       </ul>
