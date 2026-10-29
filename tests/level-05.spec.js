@@ -215,6 +215,35 @@ test.describe('Level 5 · teaching feedback', () => {
     expect(r.farFileMs).toBeLessThan(60);
   });
 
+  test('a restarted experiment or a changed design logs its advice again', async ({ page }) => {
+    // The log checks every 0.2 s of real time. Paused, each check runs by hand: no check falls between fast clicks.
+    await freshPage(page, '#level-5/build');
+    await goTo(page, 2);
+    const id = await addCdn(page);
+    await page.evaluate(() => { window.__sdl.run.playing = false; });
+    const check = () => page.evaluate(async () => { const { observe } = await import('/js/ui/log.js'); observe(window.__sdl.model()); });
+    const latest = () => page.evaluate(async () => (await import('/js/ui/log.js')).logLines[0].msg);
+    const restart = () => page.evaluate(async () => {
+      const x = await import('/js/engine/experiments.js'), { level } = await import('/js/level.js');
+      const exp = level.experiments.find((e) => e.id === 'new-logo');
+      if (x.isOn(exp.id)) x.stopExp(exp);
+      x.startExp(exp);
+    });
+    await restart();
+    await check();
+    expect(await latest()).toContain('old logo for up to 1 hour');
+    await restart();
+    await page.evaluate(async () => (await import('/js/ui/log.js')).log('Logo shipped again.', ''));
+    await check();
+    expect(await latest()).toContain('old logo for up to 1 hour');
+    await set(page, id, { onChange: 'purge' }); // while it runs
+    await check();
+    expect(await latest()).toContain('browsers that already had it');
+    await set(page, id, { onChange: 'version' }); // fixed: the log says so
+    await check();
+    expect(await latest()).toContain('All good');
+  });
+
   test('request dots: hits end at the CDN, misses go on to a web server', async ({ page }) => {
     await freshPage(page, '#level-5/build');
     const id = await addCdn(page, { ttl: '60' });

@@ -3,7 +3,7 @@ import { fmt } from '../format.js';
 import { $, el } from '../dom.js';
 import { TARGET_MS, TXT, S, run, byId, nameOf, lowerName } from '../state.js';
 import { T, serverSpec } from '../engine/components.js';
-import { activeExps, anyOn, crashing, expectMet, textOf } from '../engine/experiments.js';
+import { activeExps, anyOn, crashing, expectMet, textOf, notMetKey } from '../engine/experiments.js';
 
 export let logLines = [];
 
@@ -56,9 +56,10 @@ export function observe(m) {
   for (const [id, q] of Object.entries(m.queues || {})) if (q.in - q.out > 1e-6 && TXT.queueGrowing) keys.set('queue' + id, [TXT.queueGrowing(q, m.alert, run.queues[id]), m.alert ? 'warn' : 'bad']);
   for (const exp of activeExps()) if (exp.note && m.g.entry.length && !crashing()) keys.set('note-' + exp.id, [exp.note(m.base), 'bad']);
   const mx = m.atPeak || m; // outcomes are judged at peak traffic (see sim.js)
-  for (const exp of activeExps()) if (exp.notMet && !expectMet(exp, mx)) keys.set('notmet-' + exp.id, [textOf(exp.notMet, mx), 'warn']);
+  for (const exp of activeExps()) if (exp.notMet && !expectMet(exp, mx)) keys.set(notMetKey(exp.id), [textOf(exp.notMet, mx), 'warn']);
   const seen = new Set();
-  for (const [k, [msg, tone]] of keys) if (!run.active.has(k) && !seen.has(msg)) { seen.add(msg); log(msg, tone); }
+  for (const [k, [msg, tone]] of keys) if ((!run.active.has(k) || run.relog.has(k)) && !seen.has(msg)) { seen.add(msg); log(msg, tone); }
+  run.relog.clear();
   const hadProblems = run.active.size > 0;
   run.active = new Set(keys.keys());
   if (hadProblems && keys.size === 0 && m.latency != null) log(`All good: ${m.servedPct.toFixed(1)}% served, ${fmt(m.latency)} ms average.`, 'ok');
