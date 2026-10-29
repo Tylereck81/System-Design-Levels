@@ -154,7 +154,7 @@ test.describe('Level 10 · teaching feedback', () => {
     await set(page, id, { algo: 'fixed', bucket: '12' });
     await page.click('#playBtn');
     await fastForward(page, 2);
-    expect(await state(page, () => window.__sdl.S.exp['edge-burst'])).toBe(false);
+    expect(await state(page, () => window.__sdl.S.exp[window.__sdl.S.mission]['edge-burst'])).toBe(false);
     await expect(page.locator('#log')).toContainText('Each key gets 120 requests a minute through, not 60.');
     await expect(page.locator('#log')).not.toContainText('counter store');
   });
