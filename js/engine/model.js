@@ -1,17 +1,18 @@
 // Simulation model: load, latency, failures and cost, for any graph of components.
 import { MISSIONS, TXT, PALETTE, S, run, byId } from '../state.js';
-import { COMPONENTS, T, roleOf, isServer, isReplica, isCache, isEdge, isStore, isSticky, scales, sessionsOn, holdsSessions, copiesFor, hitRate, edgeHit, fallsBack, staleSecs, costOf, serverSpec, splitRule } from './components.js';
+import { COMPONENTS, T, roleOf, isServer, isReplica, isCache, isEdge, isStore, isSticky, scales, sessionsOn, holdsSessions, copiesFor, isLocated, isFar, isGeo, replicates, hitRate, edgeHit, fallsBack, staleSecs, costOf, serverSpec, splitRule } from './components.js';
 import { activeExps, downIds, trafficFactor, dayShift, textOf, PEAK } from './experiments.js';
 
 export { SIZES, T } from './components.js';
 
 const outs = (id) => S.edges.filter(e => e.from === id).map(e => byId(e.to)).filter(Boolean);
+/** Servers `n` sends requests to. A connection that copies data between servers of a type that syncs carries none. */
+const sendsTo = (n) => outs(n.id).filter(c => isServer(c) && !(c.type === n.type && (COMPONENTS[n.type] || {}).syncs));
 
 /** Downstream servers of a node, grouped by type (peers of the same type share the load). */
 export function childGroups(n) {
   const groups = new Map();
-  for (const c of outs(n.id)) {
-    if (!isServer(c)) continue;
+  for (const c of sendsTo(n)) {
     if (!groups.has(c.type)) groups.set(c.type, []);
     groups.get(c.type).push(c);
   }
@@ -69,7 +70,7 @@ function replicasOf(n) {
   return S.nodes.filter(c => c.type === n.type && isReplica(c));
 }
 /** Servers that come after `n`: the ones it sends to, and the replicas that copy its writes. */
-const after = (n) => outs(n.id).filter(isServer).concat(replicasOf(n));
+const after = (n) => sendsTo(n).concat(replicasOf(n));
 
 /** Every server reachable from Users, in an order where each comes after all servers that send to it. */
 function topoOrder(entry) {
@@ -117,6 +118,28 @@ function fileEntry(g, down) {
   if (!g.cdn.length || g.cdn.some(fallsBack)) return { group: g.entry, edge: false };
   return { group: g.cdn, edge: true };
 }
+/**
+ * Where one region's users enter when the entry servers are located (data centers): [server, share, rtt, noData].
+ * GeoDNS sends a region to its own healthy servers, or to the healthy ones elsewhere when it has none; plain DNS hands
+ * out every address, so the region spreads evenly over all of them, down or not. Away from its own region a request
+ * takes the far round trip, and its page needs the data of its region's servers copied there, or it fails.
+ */
+function regionEntry(g, down, far) {
+  const mine = (n) => isFar(n) === far, home = g.entry.filter(mine);
+  let to = g.entry;
+  if (isGeo(g.dns)) { const up = g.entry.filter(n => !down.has(n.id)), own = up.filter(mine); to = own.length ? own : (up.length ? up : g.entry); }
+  return to.map(n => { const away = !mine(n); return [n, 1 / to.length, away ? T.far : T.rtt, away && home.length > 0 && !home.some(h => replicates(h, n))]; });
+}
+const located = (g) => g.entry.some(isLocated);
+const regions = () => [[false, 1 - farShare()], [true, farShare()]].filter(([, sh]) => sh > 0);
+/** A flow from Users split over the entry servers: by region when they are located, else evenly. */
+function entryFlows(g, flow, down) {
+  if (!located(g)) return split(g.entry, flow, down, g.users);
+  const out = [];
+  for (const [far, sh] of regions()) for (const [c, f] of regionEntry(g, down, far)) out.push([c, flow * sh * f]);
+  return out;
+}
+
 /**
  * A group with replicas: writes go to the primary (with no primary in the group they fail), reads to the healthy
  * replicas, or to the primary when none is healthy. Write shares are tagged so the replicas can copy them.
@@ -170,10 +193,20 @@ function loadPhase(g, qps, sizing, down, r, day) {
     for (const [c, f] of split(grp, flow, new Set(), sender)) if (down.has(c.id) && holdsSessions(c)) lost += f * (1 - fileFrac);
   };
   const F = fileShare();
-  const pages = F ? qps * (1 - F) : qps, entryParts = split(g.entry, pages, down, g.users);
+  const pages = F ? qps * (1 - F) : qps, entryParts = entryFlows(g, pages, down);
   for (const [c, f] of entryParts) add(load, c, f);
   if (g.entry.length) notePool(g.entry, g.users, entryParts, pages, 0);
-  if (F) for (const [c, f] of split(fileEntry(g, down).group, qps * F, down, g.users)) { add(load, c, f); add(files, c, f); }
+  const fe = F ? fileEntry(g, down) : null;
+  if (F) for (const [c, f] of (fe.edge ? split(fe.group, qps * F, down, g.users) : entryFlows(g, qps * F, down))) { add(load, c, f); add(files, c, f); }
+  if (located(g)) {
+    // Pages served away from their region's data fail; when a region's own servers are all down, the others serve it
+    // from replicated data, which runs dcLag seconds behind (the writes of those seconds had not arrived yet).
+    for (const [far, sh] of regions()) {
+      const parts = regionEntry(g, down, far), home = g.entry.filter(n => isFar(n) === far);
+      for (const [, f, , noData] of parts) if (noData) r.noDataPct += 100 * sh * f * pages / qps;
+      if (home.length && home.every(n => down.has(n.id))) r.lagWrites += parts.filter(p => !p[3] && !down.has(p[0].id)).reduce((a, p) => a + p[1], 0) * pages * sh * writeShare() * T.dcLag;
+    }
+  }
   for (const n of topoOrder(g.entry.concat(g.cdn))) {
     const L = load.get(n.id) || 0;
     if (down.has(n.id)) {
@@ -197,8 +230,9 @@ function loadPhase(g, qps, sizing, down, r, day) {
     const u = work / sp.cap;
     const s = ownFiles ? (u > 1 ? L / u : L) : Math.min(L, sp.cap / sp.per);
     served.set(n.id, s);
-    const st = { load: work, cap: sp.cap, util: u, ms: sp.base * qmul(u), mult: qmul(u), base: sp.base, unit: sp.unit, drop: ownFiles ? 1 - s / L : Math.max(0, 1 - (sp.cap / sp.per) / L) };
-    if (ownFiles) Object.assign(st, { pages: L - Lf, files: Lf, fileMs: sp.fileBase * qmul(u) });
+    const mult = sp.flat ? 1 : qmul(u);
+    const st = { load: work, cap: sp.cap, util: u, ms: sp.base * mult, mult, base: sp.base, unit: sp.unit, drop: ownFiles ? 1 - s / L : Math.max(0, 1 - (sp.cap / sp.per) / L) };
+    if (ownFiles) Object.assign(st, { pages: L - Lf, files: Lf, fileMs: sp.fileBase * mult });
     if (k) {
       st.copies = k;
       // A group that holds sessions in memory loses those on the servers it removes as traffic falls.
@@ -258,7 +292,7 @@ export function model({ peak = false } = {}) {
   const M = MISSIONS[S.mission];
   const base = M.qps * trafficFactor();
   const qps = peak ? base * PEAK : base * (1 + 0.02 * Math.sin(run.t * 1.7) + 0.01 * Math.sin(run.t * 4.1));
-  const r = { qps, base, servedPct: 0, latency: null, cost: g.cost, spof: 0, node: {}, issue: null, g, down: downIds(), bottleneck: null, hitRate: null, staleSecs: 0, fileStaleSecs: 0, farFileMs: null, lostPct: 0 };
+  const r = { qps, base, servedPct: 0, latency: null, cost: g.cost, spof: 0, node: {}, issue: null, g, down: downIds(), bottleneck: null, hitRate: null, staleSecs: 0, fileStaleSecs: 0, farFileMs: null, lostPct: 0, farPageMs: null, noDataPct: 0, lagWrites: 0 };
   if (!g.entry.length) { r.issue = TXT.noWeb; return r; }
   if (g.needsDns && !g.hasDNS) { r.issue = TXT.noDns; return r; }
   r.spof = countSpofs(g);
@@ -346,10 +380,18 @@ export function model({ peak = false } = {}) {
     classes.push({ flow: F ? qps * share * (1 - F) : qps * share, file: false, rtt });
     if (F) classes.push({ flow: qps * share * F, file: true, rtt, far: rtt === T.far });
   }
+  // With located entry servers, each region goes where its DNS sends it, with that trip's round trip.
+  const viaRegion = (k) => {
+    const far = k.rtt === T.far, parts = regionEntry(g, down, far).filter(p => k.file || !p[3]).map(([n, sh, rtt]) => walk(n, k.flow * sh, rtt, new Set())).filter(p => p.served > 0);
+    const sv = parts.reduce((a, p) => a + p.served, 0);
+    const res = sv ? { served: sv, end: parts.reduce((a, p) => a + p.served * p.end, 0) / sv } : NONE;
+    if (far && !k.file && res.served) r.farPageMs = res.end;
+    return res;
+  };
   const results = classes.map((k) => {
     fileWalk = k.file; extra = k.rtt - T.rtt;
     const fe = k.file ? fileEntry(g, down) : { group: g.entry, edge: false };
-    const res = viaGroup(fe.group, k.flow, fe.edge ? T.rtt : k.rtt, new Set(), g.users);
+    const res = !fe.edge && located(g) ? viaRegion(k) : viaGroup(fe.group, k.flow, fe.edge ? T.rtt : k.rtt, new Set(), g.users);
     if (k.far && res.served) r.farFileMs = res.end;
     return res;
   });
@@ -389,6 +431,13 @@ export function sampleRoute(m) {
   const fwd = [m.g.users.id], seen = new Set();
   const F = fileShare(), file = F > 0 && Math.random() < F; // a file goes to the CDN, or ends at a web server
   let group = file ? fileEntry(m.g, m.down).group : m.g.entry, sender = m.g.users, lost = -1, w;
+  if (group === m.g.entry && located(m.g)) {
+    // A data center is one box: the dot goes there and back, and fails there if it is down, full, or lacks the data.
+    let pick = Math.random();
+    const parts = regionEntry(m.g, m.down, Math.random() < farShare()), [n, , , noData] = parts.find(([, f]) => (pick -= f) < 0) || parts[parts.length - 1];
+    const st = m.node[n.id];
+    return { route: [m.g.users.id, n.id, m.g.users.id], failAt: !st || st.down || (!file && noData) || Math.random() < st.drop ? 1 : -1 };
+  }
   while (group && group.length) {
     const down = new Set(group.filter(c => m.node[c.id] && m.node[c.id].down).map(c => c.id));
     const shares = split(group, 1, down, sender, w), total = shares.reduce((a, [, f]) => a + f, 0);

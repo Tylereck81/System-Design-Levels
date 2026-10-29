@@ -84,14 +84,14 @@ function buildInspector() {
   }
   if (COMPONENTS[n.type].sized) {
     const SIZES = sizesOf(n.type), mem = (k) => SIZES[k].mem;
-    box.appendChild(el('p', 'label', mem('S') ? 'Memory (scale up)' : 'Server size (scale up)'));
+    box.appendChild(el('p', 'label', TYPES[n.type].sizeLabel || (mem('S') ? 'Memory (scale up)' : 'Server size (scale up)')));
     const seg = el('div', 'seg');
     for (const k of Object.keys(SIZES)) {
       const b = el('button'); b.type = 'button'; b.dataset.focusKey = 'size-' + k; b.setAttribute('aria-pressed', n.size === k ? 'true' : 'false');
       const what = mem(k) ? `${mem(k)} GB` : `${fmt(SIZES[k].cap)}/s`;
-      b.innerHTML = `<b>${k}</b> <span>${what}</span><br><span>$${SIZES[k].cost}</span>`;
-      b.title = mem(k) ? `${mem(k)} GB memory · $${SIZES[k].cost}/month` : `${SIZES[k].cpu} vCPU · ${fmt(SIZES[k].cap)} requests/s · $${SIZES[k].cost}/month`;
-      b.setAttribute('aria-label', `${k} ${what}, $${SIZES[k].cost} a month`);
+      b.innerHTML = `<b>${k}</b> <span>${what}</span><br><span>$${fmt(SIZES[k].cost)}</span>`;
+      b.title = mem(k) ? `${mem(k)} GB memory · $${fmt(SIZES[k].cost)}/month` : SIZES[k].cpu ? `${SIZES[k].cpu} vCPU · ${fmt(SIZES[k].cap)} requests/s · $${fmt(SIZES[k].cost)}/month` : `${fmt(SIZES[k].cap)}/s · $${fmt(SIZES[k].cost)}/month`;
+      b.setAttribute('aria-label', `${k} ${what}, $${fmt(SIZES[k].cost)} a month`);
       b.onclick = () => { n.size = k; afterDesignChange(); };
       seg.appendChild(b);
     }

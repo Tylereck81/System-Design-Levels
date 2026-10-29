@@ -34,6 +34,10 @@ export function drawIcon(type, parent, x, y, scale) {
     svgEl('ellipse', { cx: 13, cy: 5, rx: 9.5, ry: 4, class: 'ic-data-top' }, g);
     svgEl('circle', { cx: 9, cy: 15, r: 2.6, class: 'ic-line', fill: 'none' }, g);
     svgEl('path', { d: 'M11.6 15h7M16.5 15v2.6', class: 'ic-line' }, g);
+  } else if (type === 'dc') {
+    // A building with server racks: a whole data center.
+    svgEl('rect', { x: 1, y: 1, width: 25, height: 22, rx: 2, class: 'ic-stroke' }, g);
+    for (const x of [5, 15]) { svgEl('rect', { x, y: 5, width: 7, height: 15, rx: 1, class: 'ic-web' }, g); svgEl('path', { d: `M${x + 1.8} 9h3.4M${x + 1.8} 13h3.4`, class: 'ic-line' }, g); }
   } else if (type === 'db') {
     svgEl('path', { d: 'M3.5 5v14a9.5 4 0 0 0 19 0V5z', class: 'ic-data' }, g);
     svgEl('ellipse', { cx: 13, cy: 5, rx: 9.5, ry: 4, class: 'ic-data-top' }, g);

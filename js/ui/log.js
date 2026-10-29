@@ -35,7 +35,7 @@ export function observe(m) {
       const bigger = S.nodes.some(x => x.type === n.type && x.id !== n.id && x.role === 'replica' && serverSpec(x).cap > serverSpec(n).cap);
       if (n.wasPrimary && n.role === 'replica' && bigger && TXT.oldPrimarySmall) extra += TXT.oldPrimarySmall;
       keys.set('over' + id, [`${nm} is over capacity: ${fmt(st.load)} ${st.unit} arriving, ${fmt(st.cap)} max. About ${lost}% of requests fail.${extra}`, 'bad']);
-    } else if (st.util >= 0.7) {
+    } else if (st.util >= 0.7 && st.mult > 1) {
       keys.set('busy' + id, [`${nm} is ${Math.min(100, Math.round(st.util * 100))}% busy. Requests wait in line, so each one takes ${st.mult.toFixed(1)}× its normal time.${copied}`, 'warn']);
     }
   }

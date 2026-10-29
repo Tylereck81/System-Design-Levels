@@ -7,10 +7,11 @@ export const SIZES = {
   L: { cpu: 8, cap: 800, cost: 200 },
   XL: { cpu: 16, cap: 1600, cost: 450 },
 };
-export const T = { rtt: 40, web: 20, db: 10, dc: 0.5, dns: 5, nosqlLookup: 3, nosqlLookups: 3, lb: 1, lag: 1, cache: 0.1, far: 120, file: 2, cdn: 1, scaleAt: 0.6, maxCopies: 10 };
+export const T = { rtt: 40, web: 20, db: 10, dc: 0.5, dns: 5, nosqlLookup: 3, nosqlLookups: 3, lb: 1, lag: 1, cache: 0.1, far: 120, file: 2, cdn: 1, scaleAt: 0.6, maxCopies: 10, dcPage: 50, dcLag: 1 };
 // lag: seconds a replica runs behind its primary; cache: ms for a lookup in memory; far: internet round trip for users far
 // from the data center; file: ms a web server takes to send a static file; cdn: ms for an edge server to answer from its cache;
-// scaleAt: how busy the autoscaler lets each server get; maxCopies: the most servers one autoscaled group runs
+// scaleAt: how busy the autoscaler lets each server get; maxCopies: the most servers one autoscaled group runs;
+// dcPage: ms a page spends inside a data center; dcLag: seconds data replicated to another data center runs behind
 
 // role: 'client' sends traffic, 'resolver' answers name lookups off the request path,
 //       'server' sits on the request path and has a capacity.
@@ -37,6 +38,10 @@ export const T = { rtt: 40, web: 20, db: 10, dc: 0.5, dns: 5, nosqlLookup: 3, no
 //   connects to a session store (see holdsSessions). A page that lands on a server without its session fails.
 // store: a session store. Every page its sender serves reads the session there first (one lookup), then goes on.
 // managed: run by a provider on several machines, so it never counts as a single point of failure.
+// flat: the time inside stays at its base up to full capacity (the servers inside scale out to keep it there).
+// located: a server in one of the users' regions (its region choice: 'near' or 'far'). DNS with geo: true sends each
+//   region to its own healthy servers; plain DNS hands out every address, so each region spreads over all of them.
+// syncs: a connection to a server of the same type copies data to it (replication), not requests.
 // algos with sticky: true keep each user on the server they started on, so sessions held in memory are always found.
 // choices: settings the player picks per server, stored as n[key]; each lists its options and a default.
 //   staleBy names the choice whose option says (stale: true) that a changed item is served until its TTL ends.
@@ -45,7 +50,7 @@ export const T = { rtt: 40, web: 20, db: 10, dc: 0.5, dns: 5, nosqlLookup: 3, no
 // and with no healthy peer every request sent to it fails.
 export const COMPONENTS = {
   users: { role: 'client' },
-  dns: { role: 'resolver', cost: T.dns },
+  dns: { role: 'resolver', cost: T.dns, choices: { routing: { options: { rr: {}, geo: { geo: true } }, default: 'rr' } } },
   lb: { role: 'server', cap: 5000, base: T.lb, cost: 20, unit: 'req/s', routing: 'standby', forwards: true,
     algos: { rr: { split: 'even' }, wrr: { split: 'capacity' }, lc: { split: 'capacity' }, sticky: { split: 'even', sticky: true } }, defaultAlgo: 'rr' },
   web: {
@@ -53,6 +58,12 @@ export const COMPONENTS = {
     stateful: true, choices: { scaling: { options: { fixed: {}, auto: { auto: true } }, default: 'fixed' } },
   },
   session: { role: 'server', cap: 10000, base: T.nosqlLookup, cost: 150, unit: 'lookups/s', store: true, managed: true },
+  // A whole data center: load balancers, autoscaled web servers, caches, databases and a session store.
+  dc: {
+    role: 'server', sized: true, base: T.dcPage, unit: 'pages/s', flat: true, located: true, syncs: true, files: { per: T.file / T.web, base: T.file },
+    sizes: { S: { cap: 800, cost: 700 }, M: { cap: 1600, cost: 1200 }, L: { cap: 2400, cost: 1700 } },
+    choices: { region: { options: { near: {}, far: {} }, default: 'near' } },
+  },
   cache: {
     role: 'server', sized: true, base: T.cache, unit: 'lookups/s', aside: true,
     sizes: {
@@ -92,6 +103,13 @@ export const isReplica = (n) => !!(COMPONENTS[n.type] || {}).replicated && n.rol
 export const isCache = (n) => !!(COMPONENTS[n.type] || {}).aside;
 export const isEdge = (n) => !!(COMPONENTS[n.type] || {}).edge;
 export const isStore = (n) => !!(COMPONENTS[n.type] || {}).store;
+export const isLocated = (n) => !!(COMPONENTS[n.type] || {}).located;
+/** True for the far region ('far'), false for the near one, for a located server. */
+export const isFar = (n) => choiceOf(n, 'region') === 'far';
+/** True when DNS answers by the user's location (GeoDNS), with health checks. */
+export const isGeo = (dns) => !!dns && !!(COMPONENTS[dns.type].choices || {}).routing && COMPONENTS[dns.type].choices.routing.options[choiceOf(dns, 'routing')].geo === true;
+/** True when `a` copies its data to `b` (a connection between two servers of a type that syncs). */
+export const replicates = (a, b) => a.type === b.type && !!(COMPONENTS[a.type] || {}).syncs && S.edges.some(e => e.from === a.id && e.to === b.id);
 export const isSticky = (n) => { const c = n && COMPONENTS[n.type]; return !!(c && c.algos && (c.algos[n.algo] || c.algos[c.defaultAlgo]).sticky); };
 /** True when the server runs as an autoscaled group. */
 export const scales = (n) => { const c = COMPONENTS[n.type] || {}; return !!(c.choices && c.choices.scaling && c.choices.scaling.options[choiceOf(n, 'scaling')].auto); };
@@ -171,6 +189,7 @@ export function serverSpec(n) {
   const spec = { cap: c.sized ? sizesOf(n.type)[n.size].cap : c.cap, per: 1, base: c.base, unit: c.unit };
   if (kind) Object.assign(spec, { per: kind.per, base: kind.base, unit: kind.unit, nosql: n.kind === 'nosql' });
   if (c.files) Object.assign(spec, { filePer: c.files.per, fileBase: c.files.base });
+  if (c.flat) spec.flat = true;
   if (runsAlone(n)) Object.assign(spec, { cap: spec.cap * c.alone.capFactor, base: c.alone.base, combined: true });
   return spec;
 }

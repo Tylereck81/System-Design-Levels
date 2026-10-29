@@ -45,12 +45,12 @@ test.describe('App shell · level picker, routing, saved progress', () => {
   });
 
   test('an unknown level falls back to Level 1 and fixes the address', async ({ page }) => {
-    await freshPage(page, '#level-9/quiz');
+    await freshPage(page, '#level-99/quiz');
     await expect(page.locator('#lvlChip')).toHaveText('Level 1 / 21');
     await expect(page.locator('#view-quiz')).toBeVisible();
     await expect(page).toHaveURL(/#quiz$/);
     // Changing the address to an unknown level while playing does not reload the page.
-    await page.evaluate(() => { window.__notReloaded = true; location.hash = '#level-7/build'; });
+    await page.evaluate(() => { window.__notReloaded = true; location.hash = '#level-99/build'; });
     await expect(page.locator('#view-build')).toBeVisible();
     await expect(page).toHaveURL(/#build$/);
     expect(await page.evaluate(() => window.__notReloaded)).toBe(true);

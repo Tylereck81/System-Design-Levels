@@ -205,7 +205,7 @@ export default {
 
   quiz: {
     passScore: 8,
-    passText: 'Level 6 is done. Level 7, multiple data centers, is next. It isn\'t built yet.',
+    passText: 'Level 6 is done. Level 7, Multiple data centers, is next: open it from the level menu at the top.',
     failText: (pass) => `You need ${pass} to pass. Reread the lesson sections behind the questions you missed, then try again.`,
     questions: [
       { q: 'What makes a web server stateful?', o: ['It runs on a private IP address in the data center', 'It remembers client data between requests', 'It reads data from a database', 'It sits behind a load balancer'], a: 1, e: 'A stateful server keeps client data, such as a session, from one request to the next. A stateless server keeps nothing between requests and fetches what it needs from a shared store.', r: 'State and sessions' },

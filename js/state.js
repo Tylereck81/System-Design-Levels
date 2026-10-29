@@ -14,7 +14,7 @@ export const pairKey = (a, b) => [a, b].sort().join('|');
 /** A component's display name: its role's name when the level gives roles (e.g. "Read replica"). */
 /** A component's name inside a sentence: its role's lowercase name when the level gives one (e.g. "primary database"). */
 export const lowerName = (n) => { const t = TYPES[n.type], r = t.roles && n.role && t.roles[n.role]; return (r && r.lower) || nameOf(n).toLowerCase(); };
-export const nameOf = (n) => { const t = TYPES[n.type], r = t.roles && n.role && t.roles[n.role]; return r ? r.name : t.name; };
+export const nameOf = (n) => { const t = TYPES[n.type], r = t.roles && n.role && t.roles[n.role]; return r ? r.name : t.nameOf ? t.nameOf(n) : t.name; };
 /** Label and description of the connection a → b; a level can word it by the receiver's role. */
 export const edgeInfo = (a, b) => {
   const info = OK_PAIRS[pairKey(a.type, b.type)], byRole = info && info.byRole && b.role && info.byRole[b.role];
@@ -94,7 +94,7 @@ export function load(data) {
   if (!['lesson', 'build', 'quiz'].includes(S.tab)) S.tab = 'lesson';
   for (const n of S.nodes) {
     const c = COMPONENTS[n.type], t = TYPES[n.type];
-    if (c.sized && !n.size) n.size = 'S';
+    if (c.sized && !(c.sizes || SIZES)[n.size]) n.size = 'S';
     if (c.kinds && !Object.keys(c.kinds).includes(n.kind)) n.kind = t.kinds ? null : Object.keys(c.kinds)[0];
     if (c.algos && !c.algos[n.algo]) n.algo = c.defaultAlgo;
     for (const k in c.choices || {}) if (!c.choices[k].options[n[k]]) n[k] = c.choices[k].default;
