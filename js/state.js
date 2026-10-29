@@ -53,7 +53,7 @@ export let sel = null;          // {kind:'node'|'edge', id}
 export let connectFrom = null;  // tap-to-connect source id
 export let refocus = null;      // node id to give keyboard focus after re-render
 export const qsel = {};         // quiz selection before "Check"
-export const run = { queues: {}, playing: false, t: 0, on: {}, hold: 0, dnsDone: false, dnsFlying: false, spawnAcc: 0, mdl: null, uiAcc: 1, expT: {}, active: new Set(), everPlayed: false, errored: false };
+export const run = { queues: {}, playing: false, t: 0, on: {}, hold: 0, dnsDone: false, dnsFlying: false, spawnAcc: 0, mdl: null, uiAcc: 1, expT: {}, active: new Set(), relog: new Set(), everPlayed: false, errored: false };
 
 export function validState(src) {
   if (!src || typeof src !== 'object' || !Array.isArray(src.nodes) || !Array.isArray(src.edges)) return false;

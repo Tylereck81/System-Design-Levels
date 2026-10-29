@@ -54,7 +54,12 @@ export function startExp(exp, g, served) {
   }
   return true;
 }
-export const stopExp = (exp) => { delete run.on[exp.id]; };
+/** The log's key for an experiment's "not met" message, which it logs once while the key stays active. */
+export const notMetKey = (id) => 'notmet-' + id;
+/** Stop an experiment. Its next run logs its message again, even if no log check ran in between. */
+export const stopExp = (exp) => { delete run.on[exp.id]; run.relog.add(notMetKey(exp.id)); };
+/** Log every running experiment's message again at the next check: a changed design may change the advice. */
+export const relogNotMet = () => { for (const e of EXPERIMENTS) run.relog.add(notMetKey(e.id)); };
 
 /** Stop crash experiments whose component no longer exists. */
 export function dropMissingCrashes() {

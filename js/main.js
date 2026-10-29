@@ -5,6 +5,7 @@ import { model, sampleRoute } from './engine/model.js';
 import { renderCanvas } from './engine/canvas.js';
 import { renderPalette, addNode, tryConnect } from './engine/interaction.js';
 import { step, frame } from './engine/sim.js';
+import { relogNotMet } from './engine/experiments.js';
 import { renderHUD, setBanner } from './ui/hud.js';
 import { renderInspector } from './ui/inspector.js';
 import { switchMission, renderMission } from './ui/mission.js';
@@ -79,6 +80,7 @@ export function afterDesignChange({ keepResults = false } = {}) {
   // and its break-it results, unless the change is an operation an experiment asks for (promoting a replica)
   if (!keepResults) clearOpenResults();
   run.hold = 0;
+  relogNotMet(); // a running experiment's advice may change with the design
   afterChange(true);
 }
 
