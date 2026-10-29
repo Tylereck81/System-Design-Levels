@@ -7,13 +7,14 @@ export const SIZES = {
   L: { cpu: 8, cap: 800, cost: 200 },
   XL: { cpu: 16, cap: 1600, cost: 450 },
 };
-export const T = { rtt: 40, web: 20, db: 10, dc: 0.5, dns: 5, nosqlLookup: 3, nosqlLookups: 3, lb: 1, lag: 1, cache: 0.1, far: 120, file: 2, cdn: 1, scaleAt: 0.6, maxCopies: 10, dcPage: 50, dcLag: 1, job: 20000, publish: 2, drain: 60 };
+export const T = { rtt: 40, web: 20, db: 10, dc: 0.5, dns: 5, nosqlLookup: 3, nosqlLookups: 3, lb: 1, lag: 1, cache: 0.1, far: 120, file: 2, cdn: 1, scaleAt: 0.6, maxCopies: 10, dcPage: 50, dcLag: 1, job: 20000, publish: 2, drain: 60, bigCountry: 0.42, newest: 0.5 };
 // lag: seconds a replica runs behind its primary; cache: ms for a lookup in memory; far: internet round trip for users far
 // from the data center; file: ms a web server takes to send a static file; cdn: ms for an edge server to answer from its cache;
 // scaleAt: how busy the autoscaler lets each server get; maxCopies: the most servers one autoscaled group runs;
 // dcPage: ms a page spends inside a data center; dcLag: seconds data replicated to another data center runs behind;
 // job: ms of one vCPU to process one uploaded file; publish: ms to put a message on a queue;
-// drain: seconds an autoscaled worker group aims to clear its queue's backlog in
+// drain: seconds an autoscaled worker group aims to clear its queue's backlog in;
+// bigCountry: share of queries from the largest country; newest: share of queries on the newest accounts' range
 
 // role: 'client' sends traffic, 'resolver' answers name lookups off the request path,
 //       'server' sits on the request path and has a capacity.
@@ -51,6 +52,8 @@ export const T = { rtt: 40, web: 20, db: 10, dc: 0.5, dns: 5, nosqlLookup: 3, no
 //   in the queue (the backlog, kept by the simulation loop) instead of failing.
 // role 'monitor': off the request path; it watches the queues it connects to and alerts when one grows.
 // An option with count: n runs n servers of the chosen size (see countOf).
+// sharded: one box for a database split into shards (see shardShares): each holds part of the data, by a shard key.
+// offload: a store that takes the mission's non-relational share of a server's queries (nonRel) off its database.
 // algos with sticky: true keep each user on the server they started on, so sessions held in memory are always found.
 // choices: settings the player picks per server, stored as n[key]; each lists its options and a default.
 //   staleBy names the choice whose option says (stale: true) that a changed item is served until its TTL ends.
@@ -63,7 +66,7 @@ export const COMPONENTS = {
   lb: { role: 'server', cap: 5000, base: T.lb, cost: 20, unit: 'req/s', routing: 'standby', forwards: true,
     algos: { rr: { split: 'even' }, wrr: { split: 'capacity' }, lc: { split: 'capacity' }, sticky: { split: 'even', sticky: true } }, defaultAlgo: 'rr' },
   web: {
-    role: 'server', sized: true, base: T.web, unit: 'req/s', alone: { missing: 'db', capFactor: 0.5, base: T.web + T.db }, files: { per: T.file / T.web, base: T.file },
+    role: 'server', sized: true, base: T.web, unit: 'req/s', alone: { missing: ['db', 'shards'], capFactor: 0.5, base: T.web + T.db }, files: { per: T.file / T.web, base: T.file },
     jobs: { per: 2000, base: T.job }, // a web server of a size does as many jobs as a worker of that size
     stateful: true, choices: { scaling: { options: { fixed: {}, auto: { auto: true } }, default: 'fixed' } },
   },
@@ -75,6 +78,15 @@ export const COMPONENTS = {
     choices: { scaling: { options: { 1: { count: 1 }, 2: { count: 2 }, 4: { count: 4 }, 8: { count: 8 }, auto: { auto: true } }, default: '1' } },
   },
   monitor: { role: 'monitor', cost: 30 },
+  shards: {
+    role: 'server', sized: true, base: T.db, unit: 'queries/s', sharded: true,
+    choices: {
+      count: { options: { 2: { count: 2 }, 3: { count: 3 }, 4: { count: 4 }, 8: { count: 8 } }, default: '2' },
+      key: { options: { account: {}, country: {}, date: {} }, default: 'account' },
+      hot: { options: { stay: {}, own: { own: 3 } }, default: 'stay' },
+    },
+  },
+  nosql: { role: 'server', cap: 20000, base: T.nosqlLookup, cost: 200, unit: 'lookups/s', offload: true, managed: true },
   // A whole data center: load balancers, autoscaled web servers, caches, databases and a session store.
   dc: {
     role: 'server', sized: true, base: T.dcPage, unit: 'pages/s', flat: true, located: true, syncs: true, files: { per: T.file / T.web, base: T.file },
@@ -122,6 +134,26 @@ export const isEdge = (n) => !!(COMPONENTS[n.type] || {}).edge;
 export const isStore = (n) => !!(COMPONENTS[n.type] || {}).store;
 export const isLocated = (n) => !!(COMPONENTS[n.type] || {}).located;
 export const isQueue = (n) => !!(COMPONENTS[n.type] || {}).queue;
+export const isOffload = (n) => !!(COMPONENTS[n.type] || {}).offload;
+/** Shards the shard key spreads data over (N in key % N), and all shards, including one per hot account given its own. */
+export const keyedShards = (n) => COMPONENTS[n.type].choices.count.options[choiceOf(n, 'count')].count;
+export const shardCount = (n) => keyedShards(n) + (COMPONENTS[n.type].choices.hot.options[choiceOf(n, 'hot')].own || 0);
+/**
+ * Share of a sharded box's queries each shard gets. A share H of the queries are about a few hot accounts.
+ * By account_id % N the other queries spread evenly; by country the largest country (bigCountry) can't be split; by
+ * sign-up date the newest accounts' range gets `newest`. The hot accounts all land on the first shard (with the largest
+ * country, or the oldest dates), unless each gets a shard of its own.
+ */
+export function shardShares(n, H) {
+  const ch = COMPONENTS[n.type].choices, N = ch.count.options[choiceOf(n, 'count')].count, own = ch.hot.options[choiceOf(n, 'hot')].own || 0;
+  const key = choiceOf(n, 'key'), rest = 1 - H;
+  let shares = Array.from({ length: N }, () => rest / N);
+  if (key === 'country') shares = shares.map((_, i) => rest * (i === 0 ? Math.max(T.bigCountry, 1 / N) : (1 - Math.max(T.bigCountry, 1 / N)) / (N - 1)));
+  if (key === 'date') shares = shares.map((_, i) => rest * (i === N - 1 ? Math.max(T.newest, 1 / N) : (1 - Math.max(T.newest, 1 / N)) / (N - 1)));
+  if (own) return shares.concat(Array.from({ length: own }, () => H / own));
+  shares[0] += H;
+  return shares;
+}
 /** How many servers a fixed choice runs (1 unless its scaling option gives a count). */
 export const countOf = (n) => { const c = COMPONENTS[n.type] || {}; return (c.choices && c.choices.scaling && c.choices.scaling.options[choiceOf(n, 'scaling')].count) || 1; };
 /** True for the far region ('far'), false for the near one, for a located server. */
@@ -185,6 +217,7 @@ export const dayCopies = (work, cap) => (WORKLOAD.day || [1]).map(f => copiesFor
 /** Monthly cost of one component. An autoscaled group pays for the servers it runs each hour, given its `work` at the peak. */
 export function costOf(n, work = 0) {
   const c = COMPONENTS[n.type] || {};
+  if (c.sharded) return n.size ? sizesOf(n.type)[n.size].cost * shardCount(n) : 0;
   if (c.sized && scales(n)) { const k = dayCopies(work, serverSpec(n).cap); return Math.round(sizesOf(n.type)[n.size].cost * k.reduce((a, b) => a + b, 0) / k.length); }
   if (c.sized) return n.size ? sizesOf(n.type)[n.size].cost * countOf(n) : 0;
   if (c.perGB) return Math.round(monthlyFileGB() * c.perGB);
@@ -199,7 +232,7 @@ export function monthlyFileGB() {
 /** True when a server lacks the dependency it normally hands work to, so it does that work itself. */
 export function runsAlone(n) {
   const a = (COMPONENTS[n.type] || {}).alone;
-  return !!a && !S.edges.some(e => e.from === n.id && (byId(e.to) || {}).type === a.missing);
+  return !!a && !S.edges.some(e => e.from === n.id && [].concat(a.missing).includes((byId(e.to) || {}).type));
 }
 
 /** Capacity and work per request for a server, given its size, kind and dependencies. */

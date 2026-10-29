@@ -169,6 +169,7 @@ export function paintInspectorLive() {
     + (st.copied ? `<div class="wide"><b>${fmt(st.load - st.copied)} + ${fmt(st.copied)}</b><span>reads + writes copied from the primary</span></div>` : '')
     + (st.files ? `<div class="wide"><b>${fmt(st.pages)} + ${fmt(st.files)}</b><span>pages + files arriving per second. A file takes ${fmt(100 * serverSpec(n).filePer)}% of a page's work.</span></div>` : '')
     + (st.copies ? `<div class="wide"><b>${st.copies} ${st.copies === 1 ? 'server' : 'servers'} now</b><span>of size ${n.size}, each at most ${Math.round(100 * T.scaleAt)}% busy</span></div>` : '')
+    + (st.shards ? `<div class="wide"><b>${st.shards.map(x => fmt(x.load)).join(' · ')}</b><span>queries/s on each shard; the busiest sets the % busy</span></div>` : '')
     + (run.queues[n.id] != null ? `<div class="wide"><b>${fmt(run.queues[n.id])} jobs</b><span>waiting for a worker</span></div>` : '')
     + (st.uploads ? `<div class="wide"><b>${st.jobMs != null ? (st.jobMs / 1000).toFixed(0) + ' s' : 'published'}</b><span>per upload${st.jobMs != null ? ', processed here before it answers' : ' to the queue, then answered'}</span></div>` : '')
     + (st.sessionMiss ? `<div class="wide"><b style="color:var(--bad)">${Math.round(100 * st.sessionMiss)}% of pages</b><span>land here without their session and fail: the cart is on another server</span></div>` : '');

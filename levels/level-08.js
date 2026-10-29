@@ -218,7 +218,7 @@ export default {
 
   quiz: {
     passScore: 8,
-    passText: 'Level 8 is done. Level 9, sharding the database, is next. It isn\'t built yet.',
+    passText: 'Level 8 is done. Level 9, Scale the data tier with sharding, is next: open it from the level menu at the top.',
     failText: (pass) => `You need ${pass} to pass. Reread the lesson sections behind the questions you missed, then try again.`,
     questions: [
       { q: 'What does a message queue do between web servers and workers?', o: ['Answers database queries faster', 'Holds jobs until a worker takes them', 'Spreads incoming requests over the web servers', 'Caches finished files near users'], a: 1, e: 'Producers publish messages to the queue, and consumers take them when they are ready. The queue buffers the work in between.', r: 'Message queue' },

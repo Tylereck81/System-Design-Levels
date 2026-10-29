@@ -34,6 +34,18 @@ export function drawIcon(type, parent, x, y, scale) {
     svgEl('ellipse', { cx: 13, cy: 5, rx: 9.5, ry: 4, class: 'ic-data-top' }, g);
     svgEl('circle', { cx: 9, cy: 15, r: 2.6, class: 'ic-line', fill: 'none' }, g);
     svgEl('path', { d: 'M11.6 15h7M16.5 15v2.6', class: 'ic-line' }, g);
+  } else if (type === 'shards') {
+    // Three small databases side by side: one table split across servers.
+    for (const x of [0, 9.5, 19]) {
+      svgEl('path', { d: `M${x} 7v12a4 2 0 0 0 8 0V7z`, class: 'ic-data' }, g);
+      svgEl('ellipse', { cx: x + 4, cy: 7, rx: 4, ry: 2, class: 'ic-data-top' }, g);
+    }
+  } else if (type === 'nosql') {
+    // Key and value pairs: data looked up by key.
+    for (const y of [3, 10.5, 18]) {
+      svgEl('rect', { x: 1, y, width: 9, height: 5, rx: 1, class: 'ic-data' }, g);
+      svgEl('rect', { x: 12, y, width: 14, height: 5, rx: 1, class: 'ic-stroke' }, g);
+    }
   } else if (type === 'queue') {
     // Messages lined up in a pipe, oldest first.
     svgEl('rect', { x: 0, y: 6, width: 27, height: 12, rx: 3, class: 'ic-stroke' }, g);
