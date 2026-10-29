@@ -151,9 +151,11 @@ test.describe('Level 9 · teaching feedback', () => {
     await freshPage(page, '#level-9/build');
     await goTo(page, 0);
     await addShards(page, { key: 'country' });
+    // The first log check, by hand at t = 0: in play it can come late, when the traffic's wobble has added 2%.
+    await page.evaluate(async () => { const { observe } = await import('/js/ui/log.js'); window.__sdl.run.t = 0; observe(window.__sdl.model()); });
+    await expect(page.locator('#log')).toContainText('its busiest shard is 79% busy');
     await page.click('#playBtn');
     await fastForward(page, 1);
-    await expect(page.locator('#log')).toContainText('its busiest shard is 79% busy');
     await expect(page.locator('#goals li', { hasText: 'No database shard above 70% busy' })).toHaveClass(/fail/);
   });
 

@@ -129,7 +129,7 @@ export default {
     },
     {
       title: 'An update at 10:00', ref: 'Stateless web tier', qps: 4000, writes: 0.2, files: 0.5, far: 0.3, sessions: true, budget: BUDGET,
-      story: 'You deploy a new version at 10:00, when traffic is 2,400 req/s: one web server leaves the pool while it restarts. Every shopper on it must keep their cart and stay logged in.',
+      story: 'You deploy a new version at 10:00, when traffic is 2,160 req/s: one web server leaves the pool while it restarts. Every shopper on it must keep their cart and stay logged in.',
       goals: [
         servedGoal, latGoal, spofGoal, costGoal(BUDGET),
         { id: 'update-web', type: 'exp', text: 'Break it: take a web server out; no shopper loses their cart' },
@@ -170,11 +170,11 @@ export default {
   // while it runs. A day plays 24 hours in `secs` seconds. `expect` is the outcome that must hold.
   experiments: [
     {
-      id: 'update-web', kind: 'crash', factor: 0.6, hud: 'at 10:00',
+      id: 'update-web', kind: 'crash', factor: day[10], hud: 'at 10:00', // the day curve's traffic at 10:00
       target: (g) => g.onPath('web').sort((a, b) => a.x - b.x || a.y - b.y)[0] || null, // the leftmost one
       label: 'Take a web server out', labelOn: 'Put it back',
       needsDesign: 'Build the design first: the load balancer needs web servers to take one out.',
-      on: 'A web server is out of the pool for the update. Traffic is 2,400 req/s.', onTone: 'bad',
+      on: 'A web server is out of the pool for the update. Traffic is 2,160 req/s.', onTone: 'bad',
       off: 'The web server is back in the pool.',
       expect: (m) => served99(m) && kept(m),
       notMet: (m) => (!kept(m)

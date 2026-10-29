@@ -170,8 +170,9 @@ test.describe('Level 6 · teaching feedback', () => {
     await sticky(page);
     await page.click('#playBtn');
     await page.click('#exp-update-web');
-    await expect(page.locator('#hud')).toContainText('2,400');
+    await expect(page.locator('#hud')).toContainText('2,160'); // the day curve at 10:00
     await expect(page.locator('#hud')).toContainText('at 10:00');
+    await expect(page.locator('#log')).toContainText('Traffic is 2,160 req/s.');
     await calm(page);
     let r = await measure(page);
     expect(r.lost).toBeCloseTo(50, 6);
