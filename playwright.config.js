@@ -14,7 +14,13 @@ export default defineConfig({
     baseURL: `http://localhost:${PORT}`,
     trace: 'retain-on-failure',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } } }],
+  // npm test (and CI) runs Chromium; npm run test:webkit runs the same tests in WebKit.
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } } },
+    // Playwright's WebKit on Windows runs the game at about 15 frames a second and each click takes over a second,
+    // so its long playthroughs get more time.
+    { name: 'webkit', use: { ...devices['Desktop Safari'], viewport: { width: 1440, height: 900 } }, timeout: 90000, expect: { timeout: 10000 } },
+  ],
   webServer: {
     command: `npx serve -l ${PORT} .`,
     url: `http://localhost:${PORT}`,

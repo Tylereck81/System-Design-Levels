@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "start": "serve -l 4173 .",
-    "test": "playwright test",
+    "test": "playwright test --project=chromium",
+    "test:webkit": "playwright test --project=webkit",
     "test:ui": "playwright test --ui"
   },
   "devDependencies": {

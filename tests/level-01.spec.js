@@ -169,8 +169,8 @@ test.describe('Level 1 · robustness', () => {
     await page.evaluate(() => { for (const n of window.__sdl.S.nodes) { if (n.size) n.size = 'L'; if (n.type === 'db') n.kind = 'sql'; } window.__sdl.afterDesignChange(); });
     await page.click('#playBtn');
     await fastForward(page, 5);
-    await page.click('#exp-crash');
-    await page.click('#exp-spike'); // starting the spike ends the crash
+    // Both clicks in one step, so no simulated time passes between them, however slow the browser's clicks are.
+    await page.evaluate(() => { document.getElementById('exp-crash').click(); document.getElementById('exp-spike').click(); }); // starting the spike ends the crash
     await expect(page.locator('#exp-crash')).toHaveAttribute('aria-pressed', 'false');
     await expect(page.locator('#exp-spike')).toHaveAttribute('aria-pressed', 'true');
     expect(await logText(page)).toContain('Web server restarted.');
