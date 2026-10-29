@@ -7,14 +7,16 @@ export const SIZES = {
   L: { cpu: 8, cap: 800, cost: 200 },
   XL: { cpu: 16, cap: 1600, cost: 450 },
 };
-export const T = { rtt: 40, web: 20, db: 10, dc: 0.5, dns: 5, nosqlLookup: 3, nosqlLookups: 3, lb: 1, lag: 1, cache: 0.1, far: 120, file: 2, cdn: 1, scaleAt: 0.6, maxCopies: 10, dcPage: 50, dcLag: 1, job: 20000, publish: 2, drain: 60, bigCountry: 0.42, newest: 0.5 };
+export const T = { rtt: 40, web: 20, db: 10, dc: 0.5, dns: 5, nosqlLookup: 3, nosqlLookups: 3, lb: 1, lag: 1, cache: 0.1, far: 120, file: 2, cdn: 1, scaleAt: 0.6, maxCopies: 10, dcPage: 50, dcLag: 1, job: 20000, publish: 2, drain: 60, bigCountry: 0.42, newest: 0.5, keyLimit: 1, burst: 12, burstSecs: 2 };
 // lag: seconds a replica runs behind its primary; cache: ms for a lookup in memory; far: internet round trip for users far
 // from the data center; file: ms a web server takes to send a static file; cdn: ms for an edge server to answer from its cache;
 // scaleAt: how busy the autoscaler lets each server get; maxCopies: the most servers one autoscaled group runs;
 // dcPage: ms a page spends inside a data center; dcLag: seconds data replicated to another data center runs behind;
 // job: ms of one vCPU to process one uploaded file; publish: ms to put a message on a queue;
 // drain: seconds an autoscaled worker group aims to clear its queue's backlog in;
-// bigCountry: share of queries from the largest country; newest: share of queries on the newest accounts' range
+// bigCountry: share of queries from the largest country; newest: share of queries on the newest accounts' range;
+// keyLimit: requests per second an API key may send on average (60 a minute); burst: requests a real user sends in
+// burstSecs seconds while typing a search
 
 // role: 'client' sends traffic, 'resolver' answers name lookups off the request path,
 //       'server' sits on the request path and has a capacity.
@@ -54,6 +56,8 @@ export const T = { rtt: 40, web: 20, db: 10, dc: 0.5, dns: 5, nosqlLookup: 3, no
 // An option with count: n runs n servers of the chosen size (see countOf).
 // sharded: one box for a database split into shards (see shardShares): each holds part of the data, by a shard key.
 // offload: a store that takes the mission's non-relational share of a server's queries (nonRel) off its database.
+// limits: a rate limiter. It checks each request against its API key's quota (see limiterRule), answers the excess with
+//   429, and forwards the rest. Connected to a store, it keeps its counters there, shared with the other limiters.
 // algos with sticky: true keep each user on the server they started on, so sessions held in memory are always found.
 // choices: settings the player picks per server, stored as n[key]; each lists its options and a default.
 //   staleBy names the choice whose option says (stale: true) that a changed item is served until its TTL ends.
@@ -86,6 +90,15 @@ export const COMPONENTS = {
       hot: { options: { stay: {}, own: { own: 3 } }, default: 'stay' },
     },
   },
+  limiter: {
+    role: 'server', cap: 6000, base: T.lb, cost: 100, unit: 'req/s', forwards: true, limits: true,
+    choices: {
+      algo: { options: { token: {}, leaky: {}, fixed: {}, slog: {}, scount: {} }, default: 'token' },
+      bucket: { options: { 4: { size: 4 }, 12: { size: 12 }, 60: { size: 60 } }, default: '4' },
+      refill: { options: { 1: { rate: 1 }, 5: { rate: 5 } }, default: '1' },
+    },
+  },
+  counter: { role: 'server', cap: 50000, base: T.cache, cost: 60, unit: 'ops/s', store: true, managed: true },
   nosql: { role: 'server', cap: 20000, base: T.nosqlLookup, cost: 200, unit: 'lookups/s', offload: true, managed: true },
   // A whole data center: load balancers, autoscaled web servers, caches, databases and a session store.
   dc: {
@@ -135,6 +148,24 @@ export const isStore = (n) => !!(COMPONENTS[n.type] || {}).store;
 export const isLocated = (n) => !!(COMPONENTS[n.type] || {}).located;
 export const isQueue = (n) => !!(COMPONENTS[n.type] || {}).queue;
 export const isOffload = (n) => !!(COMPONENTS[n.type] || {}).offload;
+/**
+ * What a rate limiter's algorithm does, per API key:
+ * q: the requests a key gets through in any rolling minute, as a multiple of the limit (60). Token and leaking buckets
+ *   pass `refill` a second; at a window edge a token bucket also passes its whole bucket, and a fixed window passes
+ *   its quota on both sides of the edge (2×). Sliding windows and the leaking bucket's fixed outflow stay at 1.
+ * fb: the share of a real user's requests blocked. A user types a search: `burst` requests in `burstSecs` seconds.
+ *   A bucket holds `size` and refills `rate` a second, so a burst bigger than size + rate × burstSecs is cut.
+ * wait: ms a real request waits in a leaking bucket's queue, which sends requests on at its fixed rate.
+ */
+export function limiterRule(n, edge) {
+  const ch = COMPONENTS[n.type].choices, algo = choiceOf(n, 'algo');
+  const size = ch.bucket.options[choiceOf(n, 'bucket')].size, rate = ch.refill.options[choiceOf(n, 'refill')].rate;
+  const fb = Math.max(0, T.burst - size - rate * T.burstSecs) / T.burst;
+  if (algo === 'token') return { q: edge ? (size + 60 * rate * T.keyLimit) / 60 : rate, fb, wait: 0 };
+  if (algo === 'leaky') return { q: rate, fb, wait: Math.max(0, 1000 * (T.burst / rate - T.burstSecs) / 2) };
+  if (algo === 'fixed') return { q: edge ? 2 : 1, fb: 0, wait: 0 };
+  return { q: 1, fb: 0, wait: 0 }; // sliding window log or counter
+}
 /** Shards the shard key spreads data over (N in key % N), and all shards, including one per hot account given its own. */
 export const keyedShards = (n) => COMPONENTS[n.type].choices.count.options[choiceOf(n, 'count')].count;
 export const shardCount = (n) => keyedShards(n) + (COMPONENTS[n.type].choices.hot.options[choiceOf(n, 'hot')].own || 0);

@@ -34,6 +34,13 @@ export function drawIcon(type, parent, x, y, scale) {
     svgEl('ellipse', { cx: 13, cy: 5, rx: 9.5, ry: 4, class: 'ic-data-top' }, g);
     svgEl('circle', { cx: 9, cy: 15, r: 2.6, class: 'ic-line', fill: 'none' }, g);
     svgEl('path', { d: 'M11.6 15h7M16.5 15v2.6', class: 'ic-line' }, g);
+  } else if (type === 'limiter') {
+    // A funnel: only so much gets through.
+    svgEl('path', { d: 'M1 3h25l-9.5 10v7.5l-6 3V13z', class: 'ic-stroke' }, g);
+  } else if (type === 'counter') {
+    // A counter in memory: +1.
+    svgEl('rect', { x: 0, y: 4, width: 27, height: 16, rx: 3, class: 'ic-data' }, g);
+    svgEl('path', { d: 'M6 12h6M9 9v6M17 9.5l2.5-1.5v8', class: 'ic-line', fill: 'none' }, g);
   } else if (type === 'shards') {
     // Three small databases side by side: one table split across servers.
     for (const x of [0, 9.5, 19]) {
