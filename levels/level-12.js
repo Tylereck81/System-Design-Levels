@@ -28,7 +28,7 @@ export default {
   saveVersion: 1,
   targets,
   // The day's traffic curve (for the autoscaled web servers). recentShare: reads whose key was written so recently that
-  // the write is still spreading. partitionFar: the users cut off with a third of the replicas in a network partition.
+  // the write is still spreading. partitionFar: the users cut off with floor(N / 3) of each key's replicas in a network partition.
   workload: { day: level6.workload.day, recentShare: 0.2, partitionFar: 0.3 },
 
   components: {
@@ -170,11 +170,11 @@ export default {
       id: 'partition', kind: 'event', partition: true,
       label: 'Split the network', labelOn: 'Heal the network',
       needsDesign: 'Build the design first: the web servers need the key-value store.',
-      on: 'The network splits: 30% of users and a third of each key\'s replicas are cut off from the rest.', onTone: 'bad',
+      on: 'The network splits: 30% of users and one replica of each key are cut off from the rest.', onTone: 'bad',
       off: 'The network is healed. Replicas catch up with the writes they missed.',
       expect: (m) => (m.mission === CART ? served99(m) : fresh(m)),
       notMet: (m) => (m.mission === CART
-        ? `Only ${m.servedPct.toFixed(1)}% served: ${pct(m.kvFailPct)} of requests fail on the cut-off side, which can't reach W replicas. Use a sloppy quorum.`
+        ? `Only ${m.servedPct.toFixed(1)}% served: ${pct(m.kvFailPct)} of requests fail where their side of the partition can't reach W replicas. Use a sloppy quorum.`
         : `${pct(m.kvStalePct)} of reads return an old seat map. ${m.kvFailPct > 0 ? '' : 'Both sides keep answering, so each misses the other\'s bookings. '}Keep W + R > N with a strict quorum, so the cut-off side fails instead.`),
       observed: (m) => (m.mission === CART
         ? `Observed: the network split, and ${m.servedPct.toFixed(1)}% of requests were still served. ${pct(m.kvStalePct)} of cart reads missed a change from the other side.`
@@ -185,11 +185,20 @@ export default {
   // Messages the engine shows for this level's design.
   text: {
     ...level2.text,
-    kvNote: (kv) => (kv.failed > 0
-      ? `${(100 * kv.failed).toFixed(0)}% of requests fail: on the cut-off side they can't reach ${kv.W} replicas to write or ${kv.R} to read (strict quorum).`
-      : kv.stale > 0
-        ? `${(100 * kv.stale).toFixed(1)}% of reads return an old value: W + R = ${kv.W + kv.R}, not more than N = ${kv.N}, so a read can miss every replica the latest write has reached.`
-        : null),
+    kvNote: (kv) => {
+      if (kv.failed > 0) {
+        // A share of 1 means neither side of the partition has enough replicas; less means only the cut-off side.
+        const where = (share, what, q) => (share > 0.999
+          ? ` ${what} fail on both sides: neither has ${q} replicas.`
+          : ` ${what} fail on the cut-off side: it can't reach ${q} replicas.`);
+        return `${(100 * kv.failed).toFixed(0)}% of requests fail (strict quorum).`
+          + (kv.writeFail > 0 ? where(kv.writeFail, 'Writes', kv.W) : '') + (kv.readFail > 0 ? where(kv.readFail, 'Reads', kv.R) : '');
+      }
+      if (!(kv.stale > 0)) return null;
+      return `${(100 * kv.stale).toFixed(1)}% of reads return an old value: ` + (kv.W + kv.R > kv.N
+        ? 'in the partition both sides keep answering, so a read can miss writes made on the other side.'
+        : `W + R = ${kv.W + kv.R}, not more than N = ${kv.N}, so a read can miss every replica the latest write has reached.`);
+    },
     levelComplete: 'Level 12 complete. Take the quiz.',
   },
 
@@ -198,15 +207,15 @@ export default {
     passText: 'Level 12 is done. Level 13, Unique ID generator, is next. It isn\'t built yet.',
     failText: level10.quiz.failText,
     questions: [
-      { q: 'Why can\'t a real distributed store be "CA" (consistent and available, but not partition tolerant)?', o: ['Disks are too slow to keep up', 'Networks do fail', 'Consistency needs a single server', 'CA systems cost too much to run'], a: 1, e: 'Networks fail, so a distributed system must keep working through partitions. When one happens, it has to give up either consistency (answer from old data) or availability (return errors).', r: 'CAP theorem' },
-      { q: 'N = 3, W = 2, R = 2. Why does every read see the latest write?', o: ['Read and write sets overlap', 'Every replica is written before the reply', 'Reads always go to the leader', 'The coordinator caches every value'], a: 0, e: 'Any 2 replicas read share at least one with the 2 that took the write, because 2 + 2 > 3. The read returns the newest version among them.', r: 'Quorum consensus' },
-      { q: 'You need fast reads and every read current. Which setting, with N = 3?', o: ['W = 1, R = 1', 'W = 2, R = 1', 'W = 3, R = 1', 'W = 1, R = 3'], a: 2, e: 'R = 1 answers from the fastest replica; W + R > N then needs W = 3. Writes wait for the slowest replica. W = 1, R = 3 is consistent too, but optimizes writes instead.', r: 'Quorum consensus' },
-      { q: 'A seat map store is cut off by a partition. What does a CP store do on the cut-off side?', o: ['Answers from the replica it can reach', 'Waits until the network heals, then answers', 'Asks the client to merge versions', 'Returns errors'], a: 3, e: 'A CP system keeps consistency by refusing requests it can\'t confirm with a quorum, so the cut-off side is unavailable until the network heals.', r: 'CAP theorem' },
-      { q: 'What do a sloppy quorum and hinted handoff do?', o: ['Stand-ins keep data, then hand it back', 'Writes are dropped until the quorum returns', 'Reads go only to the coordinator', 'Each key keeps fewer replicas'], a: 0, e: 'With a sloppy quorum the first W (or R) healthy nodes on the ring take the request, even if they aren\'t the key\'s replicas. They keep the data with a hint and hand it back when the replica returns. Available, but reads can miss writes.', r: 'Handling failures' },
+      { q: 'Why can\'t a real distributed store be "CA" (consistent and available, but not partition tolerant)?', o: ['Disks are too slow to keep up', 'Consistency needs a single server', 'CA systems cost too much to run', 'Networks do fail'], a: 3, e: 'Networks fail, so a distributed system must keep working through partitions. When one happens, it has to give up either consistency (answer from old data) or availability (return errors).', r: 'CAP theorem' },
+      { q: 'N = 3, W = 2, R = 2. Why does every read see the latest write?', o: ['Every replica is written before the reply', 'Reads always go to the leader', 'Read and write sets overlap', 'The coordinator caches every value'], a: 2, e: 'Any 2 replicas read share at least one with the 2 that took the write, because 2 + 2 > 3. The read returns the newest version among them.', r: 'Quorum consensus' },
+      { q: 'You need fast reads and every read current. Which setting, with N = 3?', o: ['W = 1, R = 1', 'W = 3, R = 1', 'W = 2, R = 1', 'W = 1, R = 3'], a: 1, e: 'R = 1 answers from the fastest replica; W + R > N then needs W = 3. Writes wait for the slowest replica. W = 1, R = 3 is consistent too, but optimizes writes instead.', r: 'Quorum consensus' },
+      { q: 'A seat map store is cut off by a partition. What does a CP store do on the cut-off side?', o: ['Returns errors', 'Answers from the replica it can reach', 'Waits until the network heals, then answers', 'Asks the client to merge versions'], a: 0, e: 'A CP system keeps consistency by refusing requests it can\'t confirm with a quorum, so the cut-off side is unavailable until the network heals.', r: 'CAP theorem' },
+      { q: 'What do a sloppy quorum and hinted handoff do?', o: ['Writes are dropped until the quorum returns', 'Reads go only to the coordinator', 'Each key keeps fewer replicas', 'Stand-ins keep data, then hand it back'], a: 3, e: 'With a sloppy quorum the first W (or R) healthy nodes on the ring take the request, even if they aren\'t the key\'s replicas. They keep the data with a hint and hand it back when the replica returns. Available, but reads can miss writes.', r: 'Handling failures' },
       { q: 'Versions with vector clocks [A:2, B:1] and [A:2, C:1]. What is their relationship?', o: ['The first came after the second', 'They conflict', 'They are the same version', 'The second came after the first'], a: 1, e: 'Neither has all counters at least as big as the other: B:1 is only in the first, C:1 only in the second. Both changed the same [A:2] version independently, so they conflict and must be merged.', r: 'Inconsistency resolution' },
-      { q: 'How do nodes learn that a node has failed, without every node pinging every other?', o: ['The coordinator checks each node every second', 'Clients report failed requests', 'A central server tracks every node', 'Gossip: heartbeats spread to random nodes'], a: 3, e: 'Each node bumps its heartbeat counter and sends its membership list to a few random nodes, which pass it on. A node whose heartbeat stops rising for a while is marked down.', r: 'Handling failures' },
+      { q: 'How do nodes learn that a node has failed, without every node pinging every other?', o: ['Gossip: heartbeats spread to random nodes', 'The coordinator checks each node every second', 'Clients report failed requests', 'A central server tracks every node'], a: 0, e: 'Each node bumps its heartbeat counter and sends its membership list to a few random nodes, which pass it on. A node whose heartbeat stops rising for a while is marked down.', r: 'Handling failures' },
       { q: 'Two replicas of keys 1–16 differ in one key. How does a Merkle tree help?', o: ['It stores every key twice', 'It encrypts the keys', 'It finds which bucket to sync', 'It sorts every key on disk by its hash'], a: 2, e: 'Each bucket of keys has a hash, and each parent hashes its children. Compare roots, then go down only where hashes differ: you sync one bucket, not all 16 keys.', r: 'Handling failures' },
-      { q: 'On a write, where does the data go first?', o: ['A commit log', 'An SSTable on disk', 'The bloom filter', 'The read cache'], a: 0, e: 'The write is appended to the commit log, then stored in memory; when memory fills, it is flushed to an SSTable on disk. The log means a crash loses nothing that was confirmed.', r: 'Write and read paths' },
+      { q: 'On a write, where does the data go first?', o: ['An SSTable on disk', 'The bloom filter', 'A commit log', 'The read cache'], a: 2, e: 'The write is appended to the commit log, then stored in memory; when memory fills, it is flushed to an SSTable on disk. The log means a crash loses nothing that was confirmed.', r: 'Write and read paths' },
       { q: '200 million carts, 10 KB each, N = 3. About how much storage?', o: ['2 TB', '6 TB', '600 GB', '60 TB'], a: 1, e: '200 million × 10 KB = 2 TB of carts, and each is stored 3 times: 6 TB.', r: 'Numbers to carry into the interview' },
     ],
   },
@@ -285,7 +294,7 @@ export default {
     <section>
       <h2>How this level is simulated</h2>
       <p class="src">Game assumptions</p>
-      <p>The replicas of a key reply in 2, 4, 10, 12 and 20 ms: the first two share the coordinator's zone, the others are further away. A request waits for the W-th or R-th fastest. 20% of reads come so soon after a write to their key that the write is still spreading; a read then misses it if none of its R replicas has it yet. In a network partition, 30% of users and a third of each key's replicas (one of three) are cut off from the rest.</p>
+      <p>The replicas of a key reply in 2, 4, 10, 12 and 20 ms: the first two share the coordinator's zone, the others are further away. A request waits for the W-th or R-th fastest. 20% of reads come so soon after a write to their key that the write is still spreading; a read then misses it if none of its R replicas has it yet. In a network partition, 30% of users and one replica of each key are cut off from the rest.</p>
       <p class="assume">Game assumptions: $150 a month per replica; a read picks its R replicas at random among the N; the store answers 20,000 requests a second. With a sloppy quorum, writes and reads always find stand-in nodes on their own side.</p>
     </section>
 

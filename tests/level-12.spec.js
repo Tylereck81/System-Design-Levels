@@ -20,6 +20,8 @@ const set = (page, props) => page.evaluate((p) => { Object.assign(window.__sdl.S
 /** The partition without the clock: the model while the network is split. */
 const split = (page, on = true) => page.evaluate((o) => { window.__sdl.run.on = o ? { partition: {} } : {}; }, on);
 const click = (page, key) => page.locator(`#insp [data-focus-key="${key}"]`).click();
+/** Pause the simulation, so the panels stay still while a slow browser clicks through them. */
+const pause = (page) => page.evaluate(() => { if (window.__sdl.run.playing) window.__sdl.togglePlay(); });
 
 test.describe('Level 12 · playthrough', () => {
   test('all three missions can be completed', async ({ page }) => {
@@ -42,6 +44,7 @@ test.describe('Level 12 · playthrough', () => {
     await expect(page.locator('#log')).toContainText('no read returned an old seat map');
     await page.click('#exp-partition');
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
+    await pause(page);
 
     // Mission 2: a sloppy quorum keeps carts working through the partition.
     await page.click('#mission .complete button');
@@ -54,6 +57,7 @@ test.describe('Level 12 · playthrough', () => {
     await expect(page.locator('#log')).toContainText('of requests were still served');
     await page.click('#exp-partition');
     expect(await state(page, () => window.__sdl.S.done[1])).toBe(true);
+    await pause(page);
 
     // Mission 3: fast reads: R = 1, so W = N, with a strict quorum.
     await page.click('#mission .complete button');
@@ -169,6 +173,27 @@ test.describe('Level 12 · teaching feedback', () => {
     await page.click('#playBtn');
     await fastForward(page, 1);
     await expect(page.locator('#goals li', { hasText: 'confirmed by at least 2 replicas' })).toHaveClass(/fail/);
+  });
+
+  test('a sloppy quorum with W + R > N: the log blames the partition, not W + R', async ({ page }) => {
+    await freshPage(page, '#level-12/build');
+    await goTo(page, 1);
+    await set(page, { w: '2', r: '2', mode: 'sloppy' });
+    await page.click('#exp-partition');
+    await fastForward(page, 2);
+    await expect(page.locator('#log')).toContainText('8.4% of reads return an old value: in the partition both sides keep answering');
+    expect(await logText(page)).not.toContain('not more than N');
+  });
+
+  test('W = 3 with a strict quorum: the log says writes fail on both sides', async ({ page }) => {
+    await freshPage(page, '#level-12/build');
+    await goTo(page, 2);
+    await set(page, { w: '3', r: '1' });
+    await page.click('#exp-partition');
+    await fastForward(page, 2);
+    // The larger side has 2 of the 3 replicas, so no side can write; the 5% of requests that are writes fail.
+    await expect(page.locator('#log')).toContainText('5% of requests fail (strict quorum). Writes fail on both sides: neither has 3 replicas.');
+    expect(await logText(page)).not.toContain('cut-off side');
   });
 
   test('the inspector shows the waits, old values and failures', async ({ page }) => {
