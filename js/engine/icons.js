@@ -24,6 +24,10 @@ export function drawIcon(type, parent, x, y, scale) {
     svgEl('rect', { x: 4, y: 4, width: 18, height: 16, rx: 2, class: 'ic-stroke' }, g);
     svgEl('path', { d: 'M8.5 0.5v3.5M13 0.5v3.5M17.5 0.5v3.5M8.5 20v3.5M13 20v3.5M17.5 20v3.5', class: 'ic-stroke' }, g);
     svgEl('rect', { x: 9, y: 9, width: 8, height: 6, rx: 1, class: 'ic-stroke' }, g);
+  } else if (type === 'ring') {
+    // A ring with servers on it: keys hashed around a circle.
+    svgEl('circle', { cx: 13, cy: 12, r: 9, class: 'ic-stroke' }, g);
+    for (const [x, y] of [[13, 3], [21, 15.5], [5, 15.5]]) svgEl('rect', { x: x - 3, y: y - 3, width: 6, height: 6, rx: 1, class: 'ic-data' }, g);
   } else if (type === 'cdn') {
     // A cloud with three edge servers inside: copies kept near users.
     svgEl('path', { d: 'M6.5 21h14a5 5 0 0 0 .4-10A7.5 7.5 0 0 0 6.6 9.6 5.7 5.7 0 0 0 6.5 21z', class: 'ic-stroke' }, g);

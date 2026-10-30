@@ -1,7 +1,7 @@
 // Simulation model: load, latency, failures and cost, for any graph of components.
 import { MISSIONS, TXT, PALETTE, S, run, byId } from '../state.js';
-import { COMPONENTS, T, roleOf, isServer, isReplica, isCache, isEdge, isStore, isSticky, scales, sessionsOn, holdsSessions, copiesFor, isLocated, isFar, isGeo, replicates, isQueue, isOffload, shardShares, keyedShards, limiterRule, hitRate, edgeHit, fallsBack, staleSecs, costOf, serverSpec, splitRule } from './components.js';
-import { activeExps, downIds, trafficFactor, uploadFactor, dayShift, botEdge, textOf, PEAK } from './experiments.js';
+import { COMPONENTS, T, roleOf, isServer, isReplica, isCache, isEdge, isStore, isSticky, scales, sessionsOn, holdsSessions, copiesFor, isLocated, isFar, isGeo, replicates, isQueue, isOffload, isClustered, clusterSize, clusterLayout, clusterHit, shardShares, keyedShards, limiterRule, hitRate, edgeHit, fallsBack, staleSecs, costOf, serverSpec, splitRule } from './components.js';
+import { activeExps, downIds, trafficFactor, uploadFactor, dayShift, botEdge, resizeBy, textOf, PEAK } from './experiments.js';
 
 export { SIZES, T } from './components.js';
 
@@ -175,11 +175,16 @@ function cacheSplit(n) {
  * hit share; its misses go on to the database after the lookup. A down cache's keys skip it (bypass).
  * Writes skip the caches. Returns the cache parts [cache, reads, hit rate] and the flows that go on.
  */
+/** A cache cluster's hit rate now. Right after a resize, every moved key misses once: its new server doesn't hold it yet. */
+function clusterReadHit(c) {
+  const lay = clusterLayout(c, resizeBy());
+  return clusterHit(c, lay.shares) * (1 - lay.moved);
+}
 function cacheAside(caches, flow, down, w) {
   const each = flow * (1 - w) / caches.length, out = { parts: [], writes: flow * w, misses: 0, bypass: 0 };
   for (const c of caches) {
     if (down.has(c.id)) { out.bypass += each; continue; }
-    const h = hitRate(c, caches.length);
+    const h = isClustered(c) ? clusterReadHit(c) : hitRate(c, caches.length);
     out.parts.push([c, each, h]);
     out.misses += each * (1 - h);
   }
@@ -240,6 +245,7 @@ function loadPhase(g, qps, sizing, down, r, day, backlog, U) {
     }
     if (COMPONENTS[n.type].consumes) { consume(n, L); continue; }
     if (COMPONENTS[n.type].sharded) { shard(n, L); continue; }
+    if (COMPONENTS[n.type].clustered) { cluster(n, L); continue; }
     if (COMPONENTS[n.type].limits) { limit(n, L); continue; }
     const sp = serverSpec(n);
     const Lf = files.get(n.id) || 0, ownFiles = Lf > 0 && sp.filePer != null; // a server that sends files itself
@@ -364,6 +370,20 @@ function loadPhase(g, qps, sizing, down, r, day, backlog, U) {
     r.maxShardUtil = Math.max(r.maxShardUtil || 0, util);
     r.shardCount = (r.shardCount || 0) + keyedShards(n);
   }
+  /**
+   * A cache cluster: each server gets the lookups for its share of the keys. The box reports its busiest server, the
+   * share of keys that moved in a resize, and the spread: how far the busiest server is above the average.
+   */
+  function cluster(n, L) {
+    const sp = serverSpec(n), lay = clusterLayout(n, resizeBy()), N = lay.names.length;
+    const servers = lay.names.map((name) => { const l = L * lay.shares[name], u = l / sp.cap; return { name, share: lay.shares[name], load: l, util: u, drop: Math.max(0, 1 - sp.cap / l) }; });
+    const ok = servers.reduce((a, x) => a + x.share * (1 - x.drop), 0), util = Math.max(...servers.map((x) => x.util));
+    const h = hitOf.get(n.id) || 0, spread = Math.max(...servers.map((x) => x.share)) * N - 1, mult = qmul(util);
+    served.set(n.id, L * ok);
+    r.node[n.id] = { load: L, cap: sp.cap * N, util, ms: sp.base * mult, mult, base: sp.base, unit: sp.unit, drop: 1 - ok, hit: h, misses: L * (1 - h), servers, moved: lay.moved, spread };
+    r.ringMoved = Math.max(r.ringMoved || 0, lay.moved);
+    r.ringSpread = Math.max(r.ringSpread || 0, spread);
+  }
 }
 
 /** The model at this moment, or with `peak` at the top of the traffic's wobble (see PEAK). */
@@ -372,7 +392,7 @@ export function model({ peak = false } = {}) {
   const M = MISSIONS[S.mission];
   const base = M.qps * trafficFactor();
   const qps = peak ? base * PEAK : base * (1 + 0.02 * Math.sin(run.t * 1.7) + 0.01 * Math.sin(run.t * 4.1));
-  const r = { qps, base, servedPct: 0, latency: null, cost: g.cost, spof: 0, node: {}, issue: null, g, down: downIds(), bottleneck: null, hitRate: null, staleSecs: 0, fileStaleSecs: 0, farFileMs: null, lostPct: 0, farPageMs: null, noDataPct: 0, lagWrites: 0, queues: {}, uploadMs: null, jobsIn: 0, jobsOut: 0, backlog: 0, alert: null, maxShardUtil: null, shardCount: 0, keyQuota: null, botThrough: 0, bots: botRate() };
+  const r = { qps, base, servedPct: 0, latency: null, cost: g.cost, spof: 0, node: {}, issue: null, g, down: downIds(), bottleneck: null, hitRate: null, staleSecs: 0, fileStaleSecs: 0, farFileMs: null, lostPct: 0, farPageMs: null, noDataPct: 0, lagWrites: 0, queues: {}, uploadMs: null, jobsIn: 0, jobsOut: 0, backlog: 0, alert: null, maxShardUtil: null, shardCount: 0, ringMoved: null, ringSpread: null, keyQuota: null, botThrough: 0, bots: botRate() };
   if (!g.entry.length) { r.issue = TXT.noWeb; return r; }
   if (g.needsDns && !g.hasDNS) { r.issue = TXT.noDns; return r; }
   r.spof = countSpofs(g);
@@ -517,7 +537,7 @@ function countSpofs(g) {
   const spof = new Set();
   const visit = (group, seen) => {
     for (const n of group) {
-      if (group.length === 1 && !COMPONENTS[n.type].managed) spof.add(n.id);
+      if (group.length === 1 && !COMPONENTS[n.type].managed && !(isClustered(n) && clusterSize(n) > 1)) spof.add(n.id);
       if (seen.has(n.id)) continue;
       seen.add(n.id);
       for (const grp of childGroups(n)) visit(grp, seen);
