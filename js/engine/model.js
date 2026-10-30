@@ -171,16 +171,16 @@ function cacheSplit(n) {
   const groups = depGroups(n), caches = groups.find(grp => isCache(grp[0]));
   return caches ? { caches, others: groups.filter(grp => grp !== caches) } : null;
 }
-/**
- * Cache-aside: reads go to the caches first, keys split evenly over all of them. Each healthy cache answers its
- * hit share; its misses go on to the database after the lookup. A down cache's keys skip it (bypass).
- * Writes skip the caches. Returns the cache parts [cache, reads, hit rate] and the flows that go on.
- */
 /** A cache cluster's hit rate now. Right after a resize, every moved key misses once: its new server doesn't hold it yet. */
 function clusterReadHit(c) {
   const lay = clusterLayout(c, resizeBy());
   return clusterHit(c, lay.shares) * (1 - lay.moved);
 }
+/**
+ * Cache-aside: reads go to the caches first, keys split evenly over all of them. Each healthy cache answers its
+ * hit share; its misses go on to the database after the lookup. A down cache's keys skip it (bypass).
+ * Writes skip the caches. Returns the cache parts [cache, reads, hit rate] and the flows that go on.
+ */
 function cacheAside(caches, flow, down, w) {
   const each = flow * (1 - w) / caches.length, out = { parts: [], writes: flow * w, misses: 0, bypass: 0 };
   for (const c of caches) {

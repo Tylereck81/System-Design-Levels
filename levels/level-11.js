@@ -138,14 +138,14 @@ export default {
         ],
         fallback: 'Not quite. Take 20 hash values in a row (0 to 19), and count those where % 5 and % 4 pick the same server.',
       },
-      story: 'Profiles are cached on five servers, picked by hash(key) % 5. Server C is about to fail. With % 4, almost every key gets a new server, which doesn\'t hold it yet: the database gets nearly every read at once. Place keys so that losing C moves only C\'s keys.',
+      story: 'Profiles are cached on five servers, picked by hash(key) % 5. Server C is about to fail. With % 4, most keys (4 in 5) get a new server, which doesn\'t hold them yet: the database gets most reads at once. Place keys so that losing C moves only C\'s keys.',
       goals: [
         { id: 'est', type: 'gate', text: 'Estimate the keys that move when C fails' },
         servedGoal, latGoal, costGoal(BUDGET),
         { id: 'lose-c', type: 'exp', text: `Break it: server C fails; at most ${Math.round(MOVE_MAX * 100)}% of keys move` },
       ],
       hint: 'Select the cache cluster and set Hashing to a hash ring. On a ring a key goes to the first server clockwise, so when C leaves, only C\'s keys move: to the next server.',
-      takeaway: 'Only C\'s keys moved, and the database carried their misses. With hash % N almost every key moves when N changes. On a ring, only the keys of the server that left.',
+      takeaway: 'Only C\'s keys moved, and the database carried their misses. With hash % N most keys move when N changes: (N − 1) / N of them. On a ring, only the keys of the server that left. But C\'s arc was small: with one point per server, E owns 61% of the ring, so had E failed, 61% of the keys would have moved, all to one server. Mission 2 fixes that.',
     },
     {
       title: 'One more server for the sale', ref: 'Virtual nodes', qps: 2000, writes: 0.05, budget: BUDGET,
@@ -159,7 +159,7 @@ export default {
     },
     {
       title: 'The sale doubles the reads', ref: 'k/n keys move', qps: 4000, writes: 0.05, budget: SALE_BUDGET,
-      story: 'The sale doubles the traffic: 4,000 requests a second, of which 3,800 read a profile. If server C fails now, its fifth of the keys misses all at once: 3,800 × 98% hits × 1/5 ≈ 745 more reads a second, on top of the 270 the database already gets. It takes 800. The budget allows no more cache memory than 5 L servers have: 40 GB.',
+      story: 'The sale doubles the traffic: 4,000 requests a second, of which 3,800 read a profile. If server C fails now, its fifth of the keys misses all at once: 3,800 × 98% hits × 1/5 ≈ 745 more reads a second, on top of the 270 the database already gets, and the four servers left hold only 32 GB of the 40, so they miss more too: over 1,000 reads a second. It takes 800. The budget allows no more cache memory than 5 L servers have: 40 GB.',
       goals: [
         servedGoal, latGoal, spreadGoal, costGoal(SALE_BUDGET),
         { id: 'lose-c', type: 'exp', text: 'Break it: server C fails during the sale; at least 99% served' },
@@ -287,7 +287,7 @@ export default {
     <section>
       <h2>Numbers to carry into the interview</h2>
       <p class="src">Capacity estimates</p>
-      <p><b>Keys that move</b> when n servers become n − 1: with hash % n, about all of them ((n − 1) / n); on a ring, 1 / n.</p>
+      <p><b>Keys that move</b> when n servers become n − 1: with hash % n, most of them ((n − 1) / n); on a ring, 1 / n.</p>
       <p><b>The miss storm</b> = reads × hit rate × share of keys moved. 3,800 × 98% × 1/5 ≈ 745 extra reads a second.</p>
       <p><b>The spread</b> with v virtual nodes per server: about 1 ÷ √v. 100 → 10%.</p>
     </section>

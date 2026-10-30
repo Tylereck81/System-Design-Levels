@@ -15,11 +15,11 @@ export const trafficFactor = () => { const h = dayHour(); return activeExps().fi
 
 /** True while an experiment has bots send each key's quota right around a window edge. */
 export const botEdge = () => activeExps().some(e => e.botEdge);
-/** Multiplier on the share of uploads from the running experiments (1 when none). */
 /** True while a running experiment splits the network in two. */
 export const partitioned = () => activeExps().some(e => e.partition);
 /** Servers the running experiments add to (+1) or take from (−1) a cache cluster. */
 export const resizeBy = () => activeExps().reduce((d, e) => d + (e.resize || 0), 0);
+/** Multiplier on the share of uploads from the running experiments (1 when none). */
 export const uploadFactor = () => activeExps().filter(e => e.uploadFactor).reduce((f, e) => f * e.uploadFactor, 1);
 
 /** The hour (0–23) of the running day experiment, which plays 24 hours in `secs` seconds; null when no day runs. */
