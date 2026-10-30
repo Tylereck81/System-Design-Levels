@@ -1,7 +1,8 @@
 // Simulation model: load, latency, failures and cost, for any graph of components.
-import { MISSIONS, TXT, PALETTE, S, run, byId } from '../state.js';
-import { COMPONENTS, T, roleOf, isServer, isReplica, isCache, isEdge, isStore, isSticky, scales, sessionsOn, holdsSessions, copiesFor, isLocated, isFar, isGeo, replicates, isQueue, isOffload, isClustered, clusterSize, clusterLayout, clusterHit, shardShares, keyedShards, limiterRule, hitRate, edgeHit, fallsBack, staleSecs, costOf, serverSpec, splitRule } from './components.js';
-import { activeExps, downIds, trafficFactor, uploadFactor, dayShift, botEdge, resizeBy, textOf, PEAK } from './experiments.js';
+import { MISSIONS, TXT, PALETTE, S, run, byId, WORKLOAD } from '../state.js';
+import { quorumOutcome } from './quorum.js';
+import { COMPONENTS, T, roleOf, isServer, isReplica, isCache, isEdge, isStore, isSticky, scales, sessionsOn, holdsSessions, copiesFor, isLocated, isFar, isGeo, replicates, isQueue, isOffload, isQuorum, quorumOf, isClustered, clusterSize, clusterLayout, clusterHit, shardShares, keyedShards, limiterRule, hitRate, edgeHit, fallsBack, staleSecs, costOf, serverSpec, splitRule } from './components.js';
+import { activeExps, downIds, trafficFactor, uploadFactor, dayShift, botEdge, resizeBy, partitioned, textOf, PEAK } from './experiments.js';
 
 export { SIZES, T } from './components.js';
 
@@ -246,6 +247,7 @@ function loadPhase(g, qps, sizing, down, r, day, backlog, U) {
     if (COMPONENTS[n.type].consumes) { consume(n, L); continue; }
     if (COMPONENTS[n.type].sharded) { shard(n, L); continue; }
     if (COMPONENTS[n.type].clustered) { cluster(n, L); continue; }
+    if (COMPONENTS[n.type].quorum) { kvStore(n, L); continue; }
     if (COMPONENTS[n.type].limits) { limit(n, L); continue; }
     const sp = serverSpec(n);
     const Lf = files.get(n.id) || 0, ownFiles = Lf > 0 && sp.filePer != null; // a server that sends files itself
@@ -384,6 +386,21 @@ function loadPhase(g, qps, sizing, down, r, day, backlog, U) {
     r.ringMoved = Math.max(r.ringMoved || 0, lay.moved);
     r.ringSpread = Math.max(r.ringSpread || 0, spread);
   }
+  /**
+   * A replicated key-value store: a request takes as long as the W-th (write) or R-th (read) replica to reply. In a
+   * network partition, requests a side can't get a quorum for fail (strict quorum); reads can be stale.
+   */
+  function kvStore(n, L) {
+    const q = quorumOf(n), w = writeShare(), c = COMPONENTS[n.type];
+    const o = quorumOutcome(q, { recent: WORKLOAD.recentShare || 0, far: WORKLOAD.partitionFar || 0, partition: partitioned() });
+    const failed = (1 - w) * o.readFail + w * o.writeFail, ms = (1 - w) * o.readMs + w * o.writeMs;
+    served.set(n.id, L * (1 - failed));
+    r.node[n.id] = { load: L, cap: c.cap, util: L / c.cap, ms, mult: 1, base: ms, unit: c.unit, drop: failed, kv: { ...q, ...o, failed } };
+    r.kvStalePct = 100 * o.stale;
+    r.kvQuorum = { N: q.N, W: q.W, R: q.R, sloppy: q.sloppy };
+    r.kvReadMs = o.readMs;
+    r.kvFailPct = 100 * failed;
+  }
 }
 
 /** The model at this moment, or with `peak` at the top of the traffic's wobble (see PEAK). */
@@ -392,7 +409,7 @@ export function model({ peak = false } = {}) {
   const M = MISSIONS[S.mission];
   const base = M.qps * trafficFactor();
   const qps = peak ? base * PEAK : base * (1 + 0.02 * Math.sin(run.t * 1.7) + 0.01 * Math.sin(run.t * 4.1));
-  const r = { qps, base, servedPct: 0, latency: null, cost: g.cost, spof: 0, node: {}, issue: null, g, down: downIds(), bottleneck: null, hitRate: null, staleSecs: 0, fileStaleSecs: 0, farFileMs: null, lostPct: 0, farPageMs: null, noDataPct: 0, lagWrites: 0, queues: {}, uploadMs: null, jobsIn: 0, jobsOut: 0, backlog: 0, alert: null, maxShardUtil: null, shardCount: 0, ringMoved: null, ringSpread: null, keyQuota: null, botThrough: 0, bots: botRate() };
+  const r = { mission: S.mission, qps, base, servedPct: 0, latency: null, cost: g.cost, spof: 0, node: {}, issue: null, g, down: downIds(), bottleneck: null, hitRate: null, staleSecs: 0, fileStaleSecs: 0, farFileMs: null, lostPct: 0, farPageMs: null, noDataPct: 0, lagWrites: 0, queues: {}, uploadMs: null, jobsIn: 0, jobsOut: 0, backlog: 0, alert: null, maxShardUtil: null, shardCount: 0, ringMoved: null, ringSpread: null, kvStalePct: null, kvReadMs: null, kvFailPct: null, kvQuorum: null, keyQuota: null, botThrough: 0, bots: botRate() };
   if (!g.entry.length) { r.issue = TXT.noWeb; return r; }
   if (g.needsDns && !g.hasDNS) { r.issue = TXT.noDns; return r; }
   r.spof = countSpofs(g);
@@ -537,7 +554,7 @@ function countSpofs(g) {
   const spof = new Set();
   const visit = (group, seen) => {
     for (const n of group) {
-      if (group.length === 1 && !COMPONENTS[n.type].managed && !(isClustered(n) && clusterSize(n) > 1)) spof.add(n.id);
+      if (group.length === 1 && !COMPONENTS[n.type].managed && !(isClustered(n) && clusterSize(n) > 1) && !(isQuorum(n) && quorumOf(n).N > 1)) spof.add(n.id);
       if (seen.has(n.id)) continue;
       seen.add(n.id);
       for (const grp of childGroups(n)) visit(grp, seen);

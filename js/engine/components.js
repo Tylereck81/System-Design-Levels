@@ -60,6 +60,8 @@ export const T = { rtt: 40, web: 20, db: 10, dc: 0.5, dns: 5, nosqlLookup: 3, no
 // clustered: one box for a cache cluster of `count` servers. Keys are placed by its hashing choice (see clusterLayout);
 //   each server's memory holds part of its own keys (see clusterHit). Read like a cache (aside), it is a single point
 //   of failure only with one server: a lost server's keys move to the others.
+// quorum: a replicated key-value store, one box for its nodes and coordinator. Each key is kept on N replicas; a write
+//   waits for W of them and a read for R (see quorumOutcome). Its cost is per replica (cost × N).
 // limits: a rate limiter. It checks each request against its API key's quota (see limiterRule), answers the excess with
 //   429, and forwards the rest. Connected to a store, it keeps its counters there, shared with the other limiters.
 // algos with sticky: true keep each user on the server they started on, so sessions held in memory are always found.
@@ -115,6 +117,15 @@ export const COMPONENTS = {
       hashing: { options: { mod: { mod: true }, ring: { vnodes: 1 }, v10: { vnodes: 10 }, v100: { vnodes: 100 }, v500: { vnodes: 500 } }, default: 'mod' },
     },
   },
+  kv: {
+    role: 'server', cap: 20000, base: 2, cost: 150, unit: 'requests/s', quorum: true,
+    choices: {
+      n: { options: { 1: { n: 1 }, 3: { n: 3 }, 5: { n: 5 } }, default: '3' },
+      w: { options: { 1: { q: 1 }, 2: { q: 2 }, 3: { q: 3 }, 4: { q: 4 }, 5: { q: 5 } }, default: '1' },
+      r: { options: { 1: { q: 1 }, 2: { q: 2 }, 3: { q: 3 }, 4: { q: 4 }, 5: { q: 5 } }, default: '1' },
+      mode: { options: { strict: {}, sloppy: { sloppy: true } }, default: 'strict' },
+    },
+  },
   counter: { role: 'server', cap: 50000, base: T.cache, cost: 60, unit: 'ops/s', store: true, managed: true },
   nosql: { role: 'server', cap: 20000, base: T.nosqlLookup, cost: 200, unit: 'lookups/s', offload: true, managed: true },
   // A whole data center: load balancers, autoscaled web servers, caches, databases and a session store.
@@ -165,6 +176,12 @@ export const isStore = (n) => !!(COMPONENTS[n.type] || {}).store;
 export const isLocated = (n) => !!(COMPONENTS[n.type] || {}).located;
 export const isQueue = (n) => !!(COMPONENTS[n.type] || {}).queue;
 export const isOffload = (n) => !!(COMPONENTS[n.type] || {}).offload;
+export const isQuorum = (n) => !!(COMPONENTS[n.type] || {}).quorum;
+/** A key-value store's replicas (N), write and read quorums (W, R, at most N) and whether its quorum is sloppy. */
+export function quorumOf(n) {
+  const ch = COMPONENTS[n.type].choices, N = ch.n.options[choiceOf(n, 'n')].n;
+  return { N, W: Math.min(N, ch.w.options[choiceOf(n, 'w')].q), R: Math.min(N, ch.r.options[choiceOf(n, 'r')].q), sloppy: !!ch.mode.options[choiceOf(n, 'mode')].sloppy };
+}
 export const isClustered = (n) => !!(COMPONENTS[n.type] || {}).clustered;
 /** Servers in a cache cluster. */
 export const clusterSize = (n) => COMPONENTS[n.type].choices.count.options[choiceOf(n, 'count')].count;
@@ -291,6 +308,7 @@ export function costOf(n, work = 0) {
   const c = COMPONENTS[n.type] || {};
   if (c.sharded) return n.size ? sizesOf(n.type)[n.size].cost * shardCount(n) : 0;
   if (c.clustered) return n.size ? sizesOf(n.type)[n.size].cost * clusterSize(n) : 0;
+  if (c.quorum) return c.cost * quorumOf(n).N;
   if (c.sized && scales(n)) { const k = dayCopies(work, serverSpec(n).cap); return Math.round(sizesOf(n.type)[n.size].cost * k.reduce((a, b) => a + b, 0) / k.length); }
   if (c.sized) return n.size ? sizesOf(n.type)[n.size].cost * countOf(n) : 0;
   if (c.perGB) return Math.round(monthlyFileGB() * c.perGB);

@@ -27,6 +27,7 @@ export function observe(m) {
       if (st.falseBlock > 0 && TXT.realBlocked) keys.set('fb' + id, [TXT.realBlocked(st.falseBlock), 'bad']);
       if (st.waitMs > 0 && TXT.queueWait) keys.set('wait' + id, [TXT.queueWait(st.waitMs), 'warn']);
     }
+    if (st.kv && TXT.kvNote) { const t = TXT.kvNote(st.kv); if (t) keys.set('kv' + id + t, [t, st.kv.failed > 0 ? 'bad' : 'warn']); }
     if (st.consumer) continue; // a worker that can't keep up leaves jobs waiting in its queue (see below), not failed requests
     if (st.shards) {
       // A sharded database is as good as its busiest shard.

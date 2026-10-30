@@ -24,6 +24,13 @@ export function drawIcon(type, parent, x, y, scale) {
     svgEl('rect', { x: 4, y: 4, width: 18, height: 16, rx: 2, class: 'ic-stroke' }, g);
     svgEl('path', { d: 'M8.5 0.5v3.5M13 0.5v3.5M17.5 0.5v3.5M8.5 20v3.5M13 20v3.5M17.5 20v3.5', class: 'ic-stroke' }, g);
     svgEl('rect', { x: 9, y: 9, width: 8, height: 6, rx: 1, class: 'ic-stroke' }, g);
+  } else if (type === 'kv') {
+    // Three key-value pairs, each kept on several nodes.
+    for (const y of [2, 10, 18]) {
+      svgEl('rect', { x: 0, y, width: 8, height: 5, rx: 1, class: 'ic-data' }, g);
+      svgEl('rect', { x: 10, y, width: 7, height: 5, rx: 1, class: 'ic-stroke' }, g);
+      svgEl('rect', { x: 19, y, width: 7, height: 5, rx: 1, class: 'ic-stroke' }, g);
+    }
   } else if (type === 'ring') {
     // A ring with servers on it: keys hashed around a circle.
     svgEl('circle', { cx: 13, cy: 12, r: 9, class: 'ic-stroke' }, g);
