@@ -211,7 +211,7 @@ export default {
 
   quiz: {
     passScore: 8,
-    passText: 'Level 10 is done. Level 11, consistent hashing, is next. It isn\'t built yet.',
+    passText: 'Level 10 is done. Level 11, Consistent hashing, is next: open it from the level menu at the top.',
     failText: (pass) => `You need ${pass} to pass. Reread the lesson sections behind the questions you missed, then try again.`,
     questions: [
       { q: 'Which is NOT a reason to rate limit an API?', o: ['Stop a flood from starving everyone else', 'Cut costs, such as paid third-party calls', 'Keep bots from overloading the servers', 'Make each request faster for real users'], a: 3, e: 'Rate limiting prevents resource starvation from denial-of-service floods, cuts costs, and protects servers from overload. It doesn\'t speed up the requests it lets through; at best it keeps the servers from slowing down.', r: 'Why rate limit' },
