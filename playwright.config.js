@@ -22,7 +22,7 @@ export default defineConfig({
     { name: 'webkit', use: { ...devices['Desktop Safari'], viewport: { width: 1440, height: 900 } }, timeout: 90000, expect: { timeout: 10000 } },
   ],
   webServer: {
-    command: `npx serve -l ${PORT} .`,
+    command: `node tests/serve.mjs ${PORT}`,
     url: `http://localhost:${PORT}`,
     reuseExistingServer: false,
   },
