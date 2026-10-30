@@ -13,4 +13,5 @@ export const LEVELS = [
   { id: 9, title: 'Scale the data tier with sharding', load: () => import('./level-09.js') },
   { id: 10, title: 'Rate limiter', load: () => import('./level-10.js') },
   { id: 11, title: 'Consistent hashing', load: () => import('./level-11.js') },
+  { id: 12, title: 'Distributed key-value store', load: () => import('./level-12.js') },
 ];

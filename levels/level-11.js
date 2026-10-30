@@ -207,7 +207,7 @@ export default {
 
   quiz: {
     passScore: 8,
-    passText: 'Level 11 is done. Level 12, Distributed key-value store, is next. It isn\'t built yet.',
+    passText: 'Level 11 is done. Level 12, Distributed key-value store, is next: open it from the level menu at the top.',
     failText: level10.quiz.failText,
     questions: [
       { q: 'Six cache servers use hash(key) % 6. One fails and the cluster switches to % 5. Roughly what share of keys get a new server?', o: ['About 1/6', 'About 5/6', 'About 1/5', 'All of them'], a: 1, e: 'A key keeps its server only when % 6 and % 5 still pick the same one: 5 of every 30 hash values in a row, 1 in 6. So 5/6 of the keys move, not just the failed server\'s sixth. Their new servers don\'t hold them yet, so they all miss at once: a cache-miss storm.', r: 'The rehashing problem' },
