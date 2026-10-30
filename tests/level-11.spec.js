@@ -1,0 +1,350 @@
+import { test, expect } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
+import { freshPage, fastForward, state, logText, reloadGame, trackErrors } from './helpers.js';
+
+// Level 11: Consistent hashing.
+// The level starts inside one data center: Users ('u'), DNS ('d'), one load balancer ('l'), two autoscaled groups of
+// L web servers ('w1', 'w2'), a cache cluster of five L servers placed by hash % 5 ('k') and an L database ('b').
+// Every page reads one profile; 5% are edits.
+
+const goTo = (page, i) => page.evaluate((k) => {
+  const S = window.__sdl.S;
+  for (let j = 0; j < k; j++) { S.done[j] = true; S.verified[j] = true; }
+  S.mission = k; S.est = true; window.__sdl.afterChange(true);
+}, i);
+const measure = (page) => page.evaluate(() => {
+  const m = window.__sdl.model(), k = m.node.k || {}, b = m.node.b || {};
+  return { served: m.servedPct, latency: m.latency, cost: m.cost, moved: m.ringMoved, spread: m.ringSpread, hit: k.hit, db: b.load, spof: m.spof, servers: (k.servers || []).map((x) => x.name).join('') };
+});
+const calm = (page) => page.evaluate(() => { const s = window.__sdl; s.run.playing = false; s.run.t = 0; });
+const select = async (page, id) => { await page.focus(`[data-node="${id}"]`); await page.keyboard.press('Enter'); };
+const set = (page, id, props) => page.evaluate(([i, p]) => { Object.assign(window.__sdl.S.nodes.find((n) => n.id === i), p); window.__sdl.afterDesignChange(); }, [id, props]);
+/** Run a Break-it experiment's resize without the clock: the model right after the move. */
+const during = (page, id) => page.evaluate((e) => { window.__sdl.run.on = { [e]: {} }; }, id);
+
+// The cache's hit rate with every key in memory: profiles stay an hour and are read about once a minute each.
+const FRESH = 3600 / 3660;
+const A = Math.log(0.8) / Math.log(0.2);
+
+test.describe('Level 11 · playthrough', () => {
+  test('all three missions can be completed', async ({ page }) => {
+    const errors = trackErrors(page);
+    await freshPage(page, '#level-11/build');
+    await expect(page.locator('#lvlChip')).toHaveText('Level 11 / 21');
+
+    // Mission 1: estimate, then a hash ring (through the inspector), then server C fails.
+    await page.fill('#estIn', '80');
+    await page.click('#estBtn');
+    await select(page, 'k');
+    await page.locator('#insp [data-focus-key="hashing-ring"]').click();
+    await expect(page.locator('[data-node="k"] .node-sub')).toHaveText('5 × 8 GB · ring');
+    expect((await measure(page)).cost).toBe(1291);
+    await page.click('#playBtn');
+    await fastForward(page, 5);
+    await page.click('#exp-lose-c');
+    await fastForward(page, 2);
+    await expect(page.locator('#log')).toContainText('only 9.4% of the keys moved');
+    await page.click('#exp-lose-c');
+    expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
+
+    // Mission 2: 500 virtual nodes, then a server joins.
+    await page.click('#mission .complete button');
+    await select(page, 'k');
+    await page.locator('#insp [data-focus-key="hashing-v500"]').click();
+    await page.click('#playBtn');
+    await fastForward(page, 5);
+    await page.click('#exp-add-server');
+    await fastForward(page, 2);
+    await expect(page.locator('#log')).toContainText('the new server took 16.0% of the keys');
+    await page.click('#exp-add-server');
+    expect(await state(page, () => window.__sdl.S.done[1])).toBe(true);
+
+    // Mission 3: ten M servers instead of five L, then C fails during the sale.
+    await page.click('#mission .complete button');
+    await select(page, 'k');
+    await page.locator('#insp [data-focus-key="count-10"]').click();
+    await page.locator('#insp [data-focus-key="size-M"]').click();
+    expect((await measure(page)).cost).toBe(1659);
+    await page.click('#playBtn');
+    await fastForward(page, 5);
+    await page.click('#exp-lose-c');
+    await fastForward(page, 2);
+    await page.click('#exp-lose-c');
+    expect(await state(page, () => window.__sdl.S.done)).toEqual([true, true, true]);
+    expect(await logText(page)).toContain('Level 11 complete');
+
+    await reloadGame(page);
+    expect(await state(page, () => window.__sdl.S.done)).toEqual([true, true, true]);
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('Level 11 · numbers', () => {
+  test('hash % N: even, all keys held; losing C moves 80%, adding a server 5/6', async ({ page }) => {
+    await freshPage(page, '#level-11/build');
+    await calm(page);
+    let r = await measure(page);
+    expect(r.cost).toBe(1291);
+    expect(r.spread).toBeCloseTo(0, 9);
+    expect(r.moved).toBe(0);
+    expect(r.hit).toBeCloseTo(FRESH, 9); // 5 × 8 GB holds the whole 40 GB catalog
+    expect(r.db).toBeCloseTo(100 + 1900 * (1 - FRESH), 6); // edits + misses
+    expect(r.spof).toBe(2); // the load balancer and the database; a cluster of five is not one
+    await during(page, 'lose-c');
+    r = await measure(page);
+    expect(r.servers).toBe('ABDE');
+    expect(r.moved).toBeCloseTo(0.8, 9);
+    // Four servers hold 32 of 40 GB (80/20 rule), and 80% of the keys just moved.
+    expect(r.hit).toBeCloseTo(Math.pow(0.8, A) * FRESH * 0.2, 9);
+    expect(r.served).toBeLessThan(99);
+    await during(page, 'add-server');
+    r = await measure(page);
+    expect(r.servers).toBe('ABCDEF');
+    expect(r.moved).toBeCloseTo(5 / 6, 9);
+  });
+
+  test('ring shares and moved keys come from the hash', async ({ page }) => {
+    await freshPage(page, '#level-11/build');
+    await calm(page);
+    const cases = [
+      // hashing, spread now, moved when C fails, moved when F joins, spread after F joins
+      ['ring', 2.059, 0.094, 0.266, 1.075],
+      ['v10', 0.284, 0.181, 0.151, 0.251],
+      ['v100', 0.163, 0.233, 0.160, 0.084],
+      ['v500', 0.044, 0.203, 0.160, 0.044],
+    ];
+    for (const [hashing, spread, lose, add, after] of cases) {
+      await set(page, 'k', { hashing });
+      await page.evaluate(() => { window.__sdl.run.on = {}; });
+      expect([hashing, (await measure(page)).spread]).toEqual([hashing, expect.closeTo(spread, 3)]);
+      await during(page, 'lose-c');
+      expect([hashing, (await measure(page)).moved]).toEqual([hashing, expect.closeTo(lose, 3)]);
+      await during(page, 'add-server');
+      const r = await measure(page);
+      expect([hashing, r.moved, r.spread]).toEqual([hashing, expect.closeTo(add, 3), expect.closeTo(after, 3)]);
+    }
+    // One point per server: E holds 61% of the keys but has a fifth of the memory, so it keeps fewer of them.
+    await set(page, 'k', { hashing: 'ring' });
+    await page.evaluate(() => { window.__sdl.run.on = {}; });
+    const r = await measure(page);
+    expect(r.hit).toBeLessThan(0.9);
+    expect(r.db).toBeGreaterThan(2 * (100 + 1900 * (1 - FRESH)));
+  });
+
+  test('the sale: five L servers lose too many keys at once; ten M servers, same memory and cost, do not', async ({ page }) => {
+    await freshPage(page, '#level-11/build');
+    await goTo(page, 2);
+    await set(page, 'k', { hashing: 'v500' });
+    await calm(page);
+    expect((await measure(page)).served).toBeCloseTo(100, 6);
+    await during(page, 'lose-c');
+    let r = await measure(page);
+    expect(r.served).toBeLessThan(99);
+    expect(r.db).toBeGreaterThan(800);
+    await set(page, 'k', { count: '10', size: 'M' });
+    await page.evaluate(() => { window.__sdl.run.on = {}; });
+    r = await measure(page);
+    expect(r.cost).toBe(1659);
+    expect(r.spread).toBeLessThan(0.1);
+    await during(page, 'lose-c');
+    r = await measure(page);
+    expect(r.moved).toBeCloseTo(0.105, 3);
+    expect(r.served).toBeCloseTo(100, 6);
+    // Eight L servers survive too, but cost more than the sale's budget.
+    await set(page, 'k', { count: '8', size: 'L' });
+    await page.evaluate(() => { window.__sdl.run.on = {}; });
+    expect((await measure(page)).cost).toBeGreaterThan(1700);
+  });
+
+  test('levels without a cache cluster ignore the new rules', async ({ page }) => {
+    await freshPage(page, '#level-10/build');
+    const r = await page.evaluate(() => { const m = window.__sdl.model(); return { moved: m.ringMoved, spread: m.ringSpread, cost: m.cost }; });
+    expect(r.moved).toBeNull();
+    expect(r.spread).toBeNull();
+    expect(r.cost).toBe(2283);
+  });
+});
+
+test.describe('Level 11 · teaching feedback', () => {
+  test('losing C under hash % N: the log says how many keys moved and what to do', async ({ page }) => {
+    await freshPage(page, '#level-11/build');
+    await goTo(page, 0);
+    await page.click('#playBtn');
+    await page.click('#exp-lose-c');
+    await fastForward(page, 2);
+    expect(await state(page, () => window.__sdl.S.exp[window.__sdl.S.mission]['lose-c'])).toBe(false);
+    await expect(page.locator('#log')).toContainText('80.0% of the keys moved to another server');
+    await expect(page.locator('#log')).toContainText('Set the hashing to a hash ring');
+  });
+
+  test('a ring with one point per server is uneven; the spread goal needs many virtual nodes', async ({ page }) => {
+    await freshPage(page, '#level-11/build');
+    await goTo(page, 1);
+    const spreadGoal = page.locator('#goals li', { hasText: 'above the average' });
+    for (const [hashing, ok] of [['ring', false], ['v100', false], ['v500', true]]) {
+      await set(page, 'k', { hashing });
+      await page.click('#playBtn');
+      await fastForward(page, 1);
+      await expect(spreadGoal).toHaveClass(ok ? /pass/ : /fail/);
+      await page.click('#playBtn');
+    }
+    await set(page, 'k', { hashing: 'ring' });
+    await page.click('#playBtn');
+    await page.click('#exp-add-server');
+    await fastForward(page, 2);
+    await expect(page.locator('#log')).toContainText('26.6% of the keys moved to another server');
+  });
+
+  test('the sale with five L servers: the log blames the database and suggests smaller servers', async ({ page }) => {
+    await freshPage(page, '#level-11/build');
+    await goTo(page, 2);
+    await set(page, 'k', { hashing: 'v500' });
+    await page.click('#playBtn');
+    await page.click('#exp-lose-c');
+    await fastForward(page, 2);
+    await expect(page.locator('#log')).toContainText('use more, smaller cache servers');
+  });
+
+  test('the inspector shows the ring, each server\'s share, and the move', async ({ page }) => {
+    await freshPage(page, '#level-11/build');
+    await goTo(page, 0);
+    await select(page, 'k');
+    await expect(page.locator('#ringView')).toContainText('No ring: hash(key) % 5 picks the server.');
+    await expect(page.locator('#ringView .ring-bars .row')).toHaveCount(5);
+    await page.locator('#insp [data-focus-key="hashing-ring"]').click();
+    await expect(page.locator('#ringView svg line.tick')).toHaveCount(5);
+    await expect(page.locator('#ringView svg text.lbl')).toHaveCount(5);
+    await page.locator('#insp [data-focus-key="hashing-v10"]').click();
+    await expect(page.locator('#ringView svg line.tick')).toHaveCount(50);
+    await page.click('#playBtn');
+    await page.click('#exp-add-server');
+    await expect(page.locator('#ringView .ring-bars .row')).toHaveCount(6);
+    await expect(page.locator('#ringView')).toContainText('Server F joined: 15.1% of keys moved.');
+    await expect(page.locator('#ringView svg line.tick.new')).toHaveCount(10);
+    await expect(page.locator('#inspLive')).toContainText('hit rate');
+  });
+
+  test('request dots: hits end at the cache cluster, misses go on to the database', async ({ page }) => {
+    await freshPage(page, '#level-11/build');
+    const routes = await page.evaluate(() => { const s = window.__sdl, m = s.model(); return Array.from({ length: 600 }, () => s.sampleRoute(m).route); });
+    const viaCache = routes.filter((r) => r.includes('k'));
+    expect(viaCache.length).toBeGreaterThan(400);
+    expect(routes.filter((r) => r.includes('b')).length).toBeGreaterThan(0);
+  });
+
+  test('cluster settings survive a reload; bad saved settings load as the defaults', async ({ page }) => {
+    await freshPage(page, '#level-11/build');
+    await set(page, 'k', { count: '8', hashing: 'v100', size: 'M' });
+    await reloadGame(page);
+    const get = () => state(page, () => { const n = window.__sdl.S.nodes.find((x) => x.id === 'k'); return [n.count, n.hashing, n.size]; });
+    expect(await get()).toEqual(['8', 'v100', 'M']);
+    await page.evaluate(() => {
+      const saved = JSON.parse(localStorage.getItem('sdl-level11-v1'));
+      Object.assign(saved.nodes.find((n) => n.id === 'k'), { count: '7', hashing: 'magic' });
+      localStorage.setItem('sdl-level11-v1', JSON.stringify(saved));
+    });
+    await reloadGame(page);
+    expect(await get()).toEqual(['5', 'mod', 'M']);
+  });
+
+  test('the estimate accepts 80% and gives specific hints', async ({ page }) => {
+    await freshPage(page, '#level-11/build');
+    for (const [v, hint] of [['20', 'C\'s own keys'], ['25', 'Not a quarter'], ['0.8', 'Type it as a percentage']]) {
+      await page.fill('#estIn', v);
+      await page.click('#estBtn');
+      await expect(page.locator('#estFb')).toContainText(hint);
+    }
+    await page.fill('#estIn', '80%');
+    await page.click('#estBtn');
+    expect(await state(page, () => window.__sdl.S.est)).toBe(true);
+  });
+
+  test('the lesson rings are drawn from the game\'s hash', async ({ page }) => {
+    await freshPage(page, '#level-11/lesson');
+    await expect(page.locator('#figRing rect.ic-data')).toHaveCount(4);
+    await expect(page.locator('#figRing')).toContainText('user:17 → A');
+    await expect(page.locator('#figRing')).toContainText('user:3311 → C');
+    await expect(page.locator('#figAdd')).toContainText('user:3311 → E (was C)');
+    await expect(page.locator('#figAdd path.d-arc')).toHaveCount(1);
+  });
+});
+
+test.describe('Level 11 · quiz', () => {
+  test('answer key is balanced and not guessable by length', async ({ page }) => {
+    await freshPage(page, '#level-11/quiz');
+    const source = await (await page.request.get('/levels/level-11.js')).text();
+    const questions = [...source.matchAll(/o: \[(.*?)\], a: (\d)/g)];
+    expect(questions).toHaveLength(10);
+    const counts = [0, 0, 0, 0];
+    let longestIsRight = 0;
+    for (const [, opts, a] of questions) {
+      counts[+a]++;
+      const options = [...opts.matchAll(/'((?:[^'\\]|\\.)*)'/g)].map((m) => m[1]);
+      expect(options).toHaveLength(4);
+      const longest = options.reduce((best, o, i) => (o.length > options[best].length ? i : best), 0);
+      if (longest === +a) longestIsRight++;
+    }
+    expect(Math.max(...counts)).toBeLessThanOrEqual(3);
+    expect(longestIsRight).toBe(0);
+    await expect(page.locator('#quizLabel')).toHaveText('Level 11 quiz · 10 questions · 8 to pass');
+  });
+});
+
+test.describe('Level 11 · layout and accessibility', () => {
+  test('keyboard only: finish Mission 1', async ({ page }) => {
+    await freshPage(page, '#level-11/build');
+    const enter = async (selector) => { await page.focus(selector); await page.keyboard.press('Enter'); };
+    await page.focus('#estIn');
+    await page.keyboard.type('80');
+    await page.keyboard.press('Enter');
+    expect(await state(page, () => window.__sdl.S.est)).toBe(true);
+    await enter('[data-node="k"]');
+    await enter('#insp [data-focus-key="hashing-v100"]');
+    await enter('#playBtn');
+    await fastForward(page, 5);
+    await enter('#exp-lose-c');
+    await fastForward(page, 2);
+    await enter('#exp-lose-c');
+    expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
+  });
+
+  test('phone: canvas on the first screen, inspector ring fits, no sideways scroll', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await freshPage(page, '#level-11/build');
+    await set(page, 'k', { hashing: 'v500' });
+    const top = await page.locator('#cv').evaluate((e) => e.getBoundingClientRect().top);
+    expect(top).toBeLessThan(844);
+    await select(page, 'k');
+    await expect(page.locator('#ringView svg')).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  });
+
+  for (const [w, h] of [[1024, 768], [1280, 720]]) {
+    test(`${w}×${h}: Play button above the fold`, async ({ page }) => {
+      await page.setViewportSize({ width: w, height: h });
+      await freshPage(page, '#level-11/build');
+      const box = await page.locator('#playBtn').boundingBox();
+      expect(box.y + box.height).toBeLessThanOrEqual(h);
+    });
+  }
+
+  for (const colorScheme of ['light', 'dark']) {
+    test.describe(`axe (${colorScheme})`, () => {
+      test.use({ colorScheme });
+      test('no violations on lesson, build and quiz', async ({ page }) => {
+        await freshPage(page, '#level-11/lesson');
+        for (const tab of ['lesson', 'build', 'quiz']) {
+          await page.click(`#tab-${tab}`);
+          if (tab === 'build') {
+            await page.evaluate(() => { window.__sdl.S.est = true; window.__sdl.afterChange(true); });
+            await set(page, 'k', { hashing: 'ring' });
+            await page.click('#playBtn'); await page.waitForTimeout(500);
+            await select(page, 'k');
+          }
+          const results = await new AxeBuilder({ page }).setLegacyMode().analyze();
+          expect(results.violations.map((v) => `${tab}: ${v.id} (${v.nodes.length})`)).toEqual([]);
+        }
+      });
+    });
+  }
+});

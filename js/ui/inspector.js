@@ -2,7 +2,8 @@
 import { fmt } from '../format.js';
 import { $, el, keepFocus } from '../dom.js';
 import { TYPES, OK_PAIRS, pairKey, nameOf, lowerName, edgeInfo, MISSIONS, S, sel, run, byId, setSel, trafficHidden } from '../state.js';
-import { T, COMPONENTS, roleOf, runsAlone, holdsSessions, scales, dayCopies, serverSpec, sizesOf, choiceOf, isEdge, costOf, monthlyFileGB } from '../engine/components.js';
+import { T, COMPONENTS, roleOf, runsAlone, holdsSessions, scales, dayCopies, serverSpec, sizesOf, choiceOf, isEdge, isClustered, costOf, monthlyFileGB } from '../engine/components.js';
+import { ringBox, paintRing } from './ring-view.js';
 import { tryConnect, disconnect, removeSel, promote } from '../engine/interaction.js';
 import { log } from './log.js';
 import { afterDesignChange } from '../main.js';
@@ -33,6 +34,7 @@ function buildInspector() {
   const role = COMPONENTS[n.type].replicated && TYPES[n.type].roles && TYPES[n.type].roles[n.role];
   box.appendChild(el('h2', null, nameOf(n)));
   box.appendChild(el('p', 'desc', role ? role.desc : TYPES[n.type].desc));
+  if (isClustered(n)) { box.appendChild(el('p', 'label', 'Where keys land')); box.appendChild(ringBox()); paintRing(n); }
   if (role && n.role === 'replica') {
     const down = downIds().has(n.id);
     const b = el('button', 'btn', 'Promote to primary'); b.type = 'button'; b.dataset.focusKey = 'promote';
@@ -138,6 +140,7 @@ function buildInspector() {
 export function paintInspectorLive() {
   const live = $('inspLive'); if (!live || !sel || sel.kind !== 'node') return;
   const n = byId(sel.id); if (!n || roleOf(n) !== 'server') return;
+  if (isClustered(n)) paintRing(n); // it changes while an experiment adds or removes a server
   const st = run.mdl && run.everPlayed ? run.mdl.node[n.id] : null;
   if (!st && scales(n)) {
     // An autoscaled group: what it costs, and how many servers it runs over a day, from its load at the peak.

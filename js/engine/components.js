@@ -1,5 +1,6 @@
 // Component types: capacity, base time, cost and failure mode for everything on the canvas.
 import { S, byId, WORKLOAD, MISSIONS } from '../state.js';
+import { serverNames, keyShares, movedShare } from './hashring.js';
 
 export const SIZES = {
   S: { cpu: 2, cap: 200, cost: 40 },
@@ -56,6 +57,9 @@ export const T = { rtt: 40, web: 20, db: 10, dc: 0.5, dns: 5, nosqlLookup: 3, no
 // An option with count: n runs n servers of the chosen size (see countOf).
 // sharded: one box for a database split into shards (see shardShares): each holds part of the data, by a shard key.
 // offload: a store that takes the mission's non-relational share of a server's queries (nonRel) off its database.
+// clustered: one box for a cache cluster of `count` servers. Keys are placed by its hashing choice (see clusterLayout);
+//   each server's memory holds part of its own keys (see clusterHit). Read like a cache (aside), it is a single point
+//   of failure only with one server: a lost server's keys move to the others.
 // limits: a rate limiter. It checks each request against its API key's quota (see limiterRule), answers the excess with
 //   429, and forwards the rest. Connected to a store, it keeps its counters there, shared with the other limiters.
 // algos with sticky: true keep each user on the server they started on, so sessions held in memory are always found.
@@ -96,6 +100,19 @@ export const COMPONENTS = {
       algo: { options: { token: {}, leaky: {}, fixed: {}, slog: {}, scount: {} }, default: 'token' },
       bucket: { options: { 4: { size: 4 }, 12: { size: 12 }, 60: { size: 60 } }, default: '4' },
       refill: { options: { 1: { rate: 1 }, 5: { rate: 5 } }, default: '1' },
+    },
+  },
+  ring: {
+    role: 'server', sized: true, base: T.cache, unit: 'lookups/s', aside: true, clustered: true,
+    sizes: {
+      S: { mem: 2, cap: 10000, cost: 20 },
+      M: { mem: 4, cap: 10000, cost: 40 },
+      L: { mem: 8, cap: 10000, cost: 80 },
+      XL: { mem: 16, cap: 10000, cost: 160 },
+    },
+    choices: {
+      count: { options: { 3: { count: 3 }, 5: { count: 5 }, 6: { count: 6 }, 8: { count: 8 }, 10: { count: 10 } }, default: '5' },
+      hashing: { options: { mod: { mod: true }, ring: { vnodes: 1 }, v10: { vnodes: 10 }, v100: { vnodes: 100 }, v500: { vnodes: 500 } }, default: 'mod' },
     },
   },
   counter: { role: 'server', cap: 50000, base: T.cache, cost: 60, unit: 'ops/s', store: true, managed: true },
@@ -148,6 +165,30 @@ export const isStore = (n) => !!(COMPONENTS[n.type] || {}).store;
 export const isLocated = (n) => !!(COMPONENTS[n.type] || {}).located;
 export const isQueue = (n) => !!(COMPONENTS[n.type] || {}).queue;
 export const isOffload = (n) => !!(COMPONENTS[n.type] || {}).offload;
+export const isClustered = (n) => !!(COMPONENTS[n.type] || {}).clustered;
+/** Servers in a cache cluster. */
+export const clusterSize = (n) => COMPONENTS[n.type].choices.count.options[choiceOf(n, 'count')].count;
+/** The cluster's servers by name (A, B, C…). Resized by −1, server C has gone; by +1, the next letter has joined. */
+export function clusterNames(n, resize = 0) {
+  const names = serverNames(clusterSize(n) + Math.max(0, resize));
+  return resize < 0 ? names.filter((s) => s !== 'C') : names;
+}
+/** The cluster's hashing: { mod: true } for hash % N, or { vnodes } points per server on a hash ring. */
+export const hashMethod = (n) => COMPONENTS[n.type].choices.hashing.options[choiceOf(n, 'hashing')];
+/** Share of the keys each server holds, and the share whose server changed when the cluster was resized. */
+export function clusterLayout(n, resize = 0) {
+  const names = clusterNames(n, resize), method = hashMethod(n);
+  return { names, shares: keyShares(names, method), moved: resize ? movedShare(clusterNames(n), names, method) : 0 };
+}
+/**
+ * Share of reads a cache cluster answers. Each server holds its share of the keys and keeps as many of them as its
+ * memory fits, the most read first (the 80/20 rule, as in hitRate), so a server holding more than its share keeps
+ * a smaller part of it. Items stay WORKLOAD.cacheTtlSecs.
+ */
+export function clusterHit(n, shares) {
+  const mem = sizesOf(n.type)[n.size].mem, ttl = WORKLOAD.cacheTtlSecs, a = Math.log(0.8) / Math.log(0.2);
+  return Object.values(shares).reduce((sum, x) => sum + (x > 0 ? x * Math.pow(Math.min(1, mem / (WORKLOAD.catalogGB * x)), a) : 0), 0) * ttl / (ttl + WORKLOAD.readGapSecs);
+}
 /**
  * What a rate limiter's algorithm does, per API key:
  * q: the requests a key gets through in any rolling minute, as a multiple of the limit (60). Token and leaking buckets
@@ -249,6 +290,7 @@ export const dayCopies = (work, cap) => (WORKLOAD.day || [1]).map(f => copiesFor
 export function costOf(n, work = 0) {
   const c = COMPONENTS[n.type] || {};
   if (c.sharded) return n.size ? sizesOf(n.type)[n.size].cost * shardCount(n) : 0;
+  if (c.clustered) return n.size ? sizesOf(n.type)[n.size].cost * clusterSize(n) : 0;
   if (c.sized && scales(n)) { const k = dayCopies(work, serverSpec(n).cap); return Math.round(sizesOf(n.type)[n.size].cost * k.reduce((a, b) => a + b, 0) / k.length); }
   if (c.sized) return n.size ? sizesOf(n.type)[n.size].cost * countOf(n) : 0;
   if (c.perGB) return Math.round(monthlyFileGB() * c.perGB);
