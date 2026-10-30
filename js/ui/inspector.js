@@ -159,6 +159,15 @@ export function paintInspectorLive() {
       + (st.copies ? `<div class="wide"><b>${st.copies} ${st.copies === 1 ? 'server' : 'servers'} now</b><span>of size ${n.size}</span></div>` : '');
     return;
   }
+  if (st.ids) {
+    // An ID generator: IDs asked for and what it can make, what its IDs look like, and repeats.
+    const x = st.ids, col = st.load > st.cap * 1.005 ? 'var(--bad)' : 'var(--ok)';
+    live.innerHTML = `<div><b>${fmt(st.load)}</b><span>IDs/s asked for</span></div>`
+      + (x.method === 'uuid' ? '<div><b>no limit</b><span>made in each web server</span></div>' : `<div><b style="color:${col}">${fmt(st.cap)}</b><span>IDs/s on ${x.healthy} ${x.healthy === 1 ? 'server' : 'servers'}</span></div>`)
+      + `<div class="wide"><b>${x.bits} bits</b><span>${x.numeric ? 'a number' : 'written as hex digits and dashes'}, ${x.ordered ? 'in time order' : 'not in time order'}</span></div>`
+      + (x.dup > 0 ? `<div class="wide"><b style="color:var(--bad)">${(100 * x.dup).toFixed(0)}%</b><span>of IDs repeat one already made</span></div>` : '');
+    return;
+  }
   if (st.hit != null) {
     // A cache's words by default; a level can word them for another type (e.g. a CDN's files and origin).
     const w = { arriving: 'reads arriving, per second', misses: 'misses/s sent to the database', per: 'per lookup', ...TYPES[n.type].live };

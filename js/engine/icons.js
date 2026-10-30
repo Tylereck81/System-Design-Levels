@@ -82,6 +82,10 @@ export function drawIcon(type, parent, x, y, scale) {
     // A building with server racks: a whole data center.
     svgEl('rect', { x: 1, y: 1, width: 25, height: 22, rx: 2, class: 'ic-stroke' }, g);
     for (const x of [5, 15]) { svgEl('rect', { x, y: 5, width: 7, height: 15, rx: 1, class: 'ic-web' }, g); svgEl('path', { d: `M${x + 1.8} 9h3.4M${x + 1.8} 13h3.4`, class: 'ic-line' }, g); }
+  } else if (type === 'idgen') {
+    // A tag with a number on it: a new ID.
+    svgEl('path', { d: 'M1 6.5 7.5 1h18.5v22H7.5L1 17.5z', class: 'ic-stroke' }, g);
+    svgEl('path', { d: 'M12 7v10M17 7v10M10 10.5h9M10 13.5h9', class: 'ic-stroke' }, g);
   } else if (type === 'db') {
     svgEl('path', { d: 'M3.5 5v14a9.5 4 0 0 0 19 0V5z', class: 'ic-data' }, g);
     svgEl('ellipse', { cx: 13, cy: 5, rx: 9.5, ry: 4, class: 'ic-data-top' }, g);
