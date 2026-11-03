@@ -5,6 +5,7 @@ import { idOutcome } from './ids.js';
 import { CREATE_QUERIES } from './links.js';
 import { downloaderRate, THREADS, PAGE_MS } from './crawl.js';
 import { SEND_MS } from './notify.js';
+import { feedOutcome } from './feed.js';
 
 export const SIZES = {
   S: { cpu: 2, cap: 200, cost: 40 },
@@ -182,6 +183,18 @@ export const COMPONENTS = {
       dedupe: { options: { off: {}, on: { on: true } }, default: 'off' },
     },
   },
+  // A news feed (see feed.js). The feed service fans posts out (on write, on read, or a hybrid for stars) with its
+  //   fanout workers, optionally skipping inactive users; the feed cache keeps each feed as IDs or as whole posts, and
+  //   costs $2 a month per GB it holds.
+  feedsvc: {
+    role: 'server', cap: 20000, base: 5, cost: 300, unit: 'requests/s', feed: true,
+    choices: {
+      fanout: { options: { read: {}, write: {}, hybrid: {} }, default: 'read' },
+      workers: { options: { 1: { count: 1 }, 2: { count: 2 }, 4: { count: 4 }, 8: { count: 8 } }, default: '2' },
+      inactive: { options: { all: {}, skip: { skip: true } }, default: 'all' },
+    },
+  },
+  feedcache: { role: 'server', cap: 1000000, base: 1, cost: 0, unit: 'lookups/s', managed: true, feedCache: true, choices: { store: { options: { posts: {}, ids: { ids: true } }, default: 'posts' } } },
   provider: { role: 'server', cap: 100000, base: 50, cost: 0, unit: 'notifications/s', managed: true },
   contentstore: { role: 'server', cap: 5000, base: 10, cost: 300, unit: 'pages/s', managed: true },
   counter: { role: 'server', cap: 50000, base: T.cache, cost: 60, unit: 'ops/s', store: true, managed: true },
@@ -268,6 +281,16 @@ export function notifySettingsOf(notifier, queue, worker) {
     retry: on(worker, 'log'), dedupe: on(worker, 'dedupe'),
   };
 }
+/** A news feed's settings, from its feed service and feed cache (either may be missing). */
+export function feedSettingsOf(svc, cache) {
+  const ch = (n, key) => COMPONENTS[n.type].choices[key].options[choiceOf(n, key)];
+  return {
+    fanout: svc ? choiceOf(svc, 'fanout') : 'read', workers: svc ? ch(svc, 'workers').count : 0,
+    skipInactive: !!svc && !!ch(svc, 'inactive').skip, idsOnly: !!cache && !!ch(cache, 'store').ids,
+  };
+}
+/** GB the feed cache holds, given the feed service on the canvas (none when feeds are built at read time). */
+export const feedCacheGB = (cache) => feedOutcome(feedSettingsOf(S.nodes.find(n => COMPONENTS[n.type] && COMPONENTS[n.type].feed), cache), { reads: 0, posts: 0 }).cacheGB;
 export const isClustered = (n) => !!(COMPONENTS[n.type] || {}).clustered;
 /** Servers in a cache cluster. */
 export const clusterSize = (n) => COMPONENTS[n.type].choices.count.options[choiceOf(n, 'count')].count;
@@ -402,6 +425,8 @@ export function costOf(n, work = 0) {
   if (c.sharded) return n.size ? sizesOf(n.type)[n.size].cost * shardCount(n) : 0;
   if (c.clustered) return n.size ? sizesOf(n.type)[n.size].cost * clusterSize(n) : 0;
   if (c.quorum) return c.cost * quorumOf(n).N;
+  if (c.feed) return c.cost + 100 * feedSettingsOf(n, null).workers;
+  if (c.feedCache) return Math.round(2 * feedCacheGB(n));
   if (c.notify) return c.cost * notifySettingsOf(null, null, n).workers;
   if (c.crawl === 'download') return c.cost * downloaderOf(n).count;
   if (c.ids) { const id = idSettingOf(n); return id.method === 'uuid' ? 0 : c.cost * id.servers; }
