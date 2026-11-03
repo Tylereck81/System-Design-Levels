@@ -22,4 +22,5 @@ export const LEVELS = [
   { id: 18, title: 'Chat system', load: () => import('./level-18.js') },
   { id: 19, title: 'Search autocomplete', load: () => import('./level-19.js') },
   { id: 20, title: 'Video platform', load: () => import('./level-20.js') },
+  { id: 21, title: 'Cloud file sync', load: () => import('./level-21.js') },
 ];

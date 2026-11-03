@@ -3,7 +3,7 @@ import { svgEl } from '../dom.js';
 
 export function drawIcon(type, parent, x, y, scale) {
   const g = svgEl('g', { transform: `translate(${x} ${y})` + (scale ? ` scale(${scale})` : '') }, parent);
-  type = { notifier: 'web', nqueue: 'queue', nworker: 'worker', feedsvc: 'web', feedcache: 'cache', chatsrv: 'web', msgstore: 'kv', tapi: 'web', trie: 'ring', vupload: 'web', transcoder: 'worker', vserve: 'cdn' }[type] || type; // drawn like the parts they are
+  type = { notifier: 'web', nqueue: 'queue', nworker: 'worker', feedsvc: 'web', feedcache: 'cache', chatsrv: 'web', msgstore: 'kv', tapi: 'web', trie: 'ring', vupload: 'web', transcoder: 'worker', vserve: 'cdn', blocksrv: 'worker', pollsrv: 'web', blobstore: 'db' }[type] || type; // drawn like the parts they are
   if (type === 'users') {
     svgEl('rect', { x: 0, y: 4, width: 17, height: 12, rx: 2, class: 'ic-stroke' }, g);
     svgEl('path', { d: 'M-2 19h21', class: 'ic-stroke' }, g);

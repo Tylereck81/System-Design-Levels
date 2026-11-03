@@ -195,7 +195,7 @@ export default {
 
   quiz: {
     passScore: 8,
-    passText: 'Level 20 is done. Level 21, Cloud file sync, is next. It isn\'t built yet.',
+    passText: 'Level 20 is done. Level 21, Cloud file sync, is next: open it from the level menu at the top.',
     failText: level10.quiz.failText,
     questions: [
       { q: 'What does transcoding do?', o: ['Compresses the database', 'Copies every uploaded video to a second backup region overnight', 'Checks the uploader\'s password', 'Encodes a video into formats and bitrates for each device'], a: 3, e: 'Raw video is huge and many devices play only certain formats. Transcoding makes several resolutions, codecs and bitrates, so each viewer gets one that fits their screen and network.', r: 'Video transcoding' },
