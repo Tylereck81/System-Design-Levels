@@ -30,6 +30,20 @@ export default {
   targets,
   workload: { sync: true, growth: GROWTH },
 
+  // The mock interview's brief and self-check list for this problem (see mock.js).
+  mock: {
+    title: 'Cloud file sync',
+    brief: 'Design cloud file sync: people save a file on one device and see it on every other, share folders, and keep version history. 40 million users, 8 million a day, 15 GB free each, files up to 5 GB.',
+    checklist: [
+      'Estimated storage allocated (600 PB) and uploads a second (about 278)',
+      'Split files into blocks, and sent only changed blocks, compressed and encrypted',
+      'Kept metadata in a relational database for strong consistency',
+      'Told devices about changes by long polling, with a queue for offline ones',
+      'Resolved sync conflicts: the first processed wins, the other sees both versions',
+      'Saved storage with version limits, dedupe and cold storage, and handled server failures',
+    ],
+  },
+
   components: {
     users: {
       name: 'Users', sub: 'Laptops, phones, browsers',
@@ -203,7 +217,7 @@ export default {
 
   quiz: {
     passScore: 8,
-    passText: 'Level 21 is done, and with it every level. Mock interviews are next. They aren\'t built yet.',
+    passText: 'Level 21 is done, and with it every level. Next: a mock interview, from the level menu at the top.',
     failText: level10.quiz.failText,
     questions: [
       { q: 'What is delta sync?', o: ['Syncing only at night', 'Sending only the blocks that changed', 'Sending every file twice, to two regions at once', 'Syncing one device at a time'], a: 1, e: 'A file is split into blocks named by their hash. After an edit, only blocks whose hash changed are uploaded.', r: 'Block servers' },

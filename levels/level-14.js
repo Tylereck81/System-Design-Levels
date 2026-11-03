@@ -34,6 +34,20 @@ export default {
   // the link before. catalogGB: the links clicked in a month, readGapSecs: seconds between clicks on a link (for the cache).
   workload: { day: level6.workload.day, repeatClicks: REPEAT, catalogGB: 20, readGapSecs: 60 },
 
+  // The mock interview's brief and self-check list for this problem (see mock.js).
+  mock: {
+    title: 'URL shortener',
+    brief: 'Design a URL shortener: people turn long links into short ones, and every click on a short link redirects to the long one. 60 million new links a day, 10 clicks for each, links kept for 10 years; codes use 0–9, a–z and A–Z.',
+    checklist: [
+      'Estimated writes, reads and storage (about 694 and 6,900 a second; 21.9 TB over 10 years)',
+      'Worked out the code length: 7 characters for 219 billion links',
+      'Chose 301 or 302 and said why: less load, or every click counted',
+      'Compared a hash with a collision check against base 62 of a unique ID',
+      'Put a cache in front of the database for redirects',
+      'Limited link creation per account against bulk scripts',
+    ],
+  },
+
   components: {
     users: {
       name: 'Users', sub: 'Shorten links, click them',

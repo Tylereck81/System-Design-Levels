@@ -14,13 +14,14 @@ import { log } from './ui/log.js';
 import { drawFigures } from './ui/lesson.js';
 import { quizScore, renderQuiz } from './ui/quiz.js';
 import { renderShell } from './ui/shell.js';
-import { entry } from './level.js';
+import { entry, level } from './level.js';
 import { parseRoute, routeHash } from './route.js';
-import { LEVELS } from '../levels/index.js';
+import { LEVELS, MOCK } from '../levels/index.js';
 
 document.documentElement.lang = 'en';
 
-export const TABS = ['lesson', 'build', 'quiz'];
+// A mock interview has no quiz: a self-check list ends it instead.
+export const TABS = level.interview ? ['lesson', 'build'] : ['lesson', 'build', 'quiz'];
 export function renderTabs() {
   for (const t of TABS) {
     const b = $('tab-' + t);
@@ -29,7 +30,9 @@ export function renderTabs() {
     $('view-' + t).hidden = S.tab !== t;
   }
   const nd = S.done.filter(Boolean).length;
-  const bm = $('buildMeta'); bm.textContent = nd + '/' + MISSIONS.length; bm.classList.toggle('done', nd === MISSIONS.length);
+  const bm = $('buildMeta');
+  if (level.interview) { bm.textContent = S.mock && S.mock.finished ? '✓' : `${((S.mock && S.mock.step) || 0) + 1}/4`; bm.title = 'Interview step'; bm.classList.toggle('done', !!(S.mock && S.mock.finished)); }
+  else { bm.textContent = nd + '/' + MISSIONS.length; bm.classList.toggle('done', nd === MISSIONS.length); }
   const qa = quizScore(), qm = $('quizMeta');
   if (qa.answered < QUIZ.length) { qm.textContent = qa.answered + '/' + QUIZ.length; qm.title = 'Questions answered'; qm.classList.remove('done'); }
   else { const pass = qa.correct >= PASS; qm.textContent = (pass ? '✓ ' : '') + qa.correct + '/' + QUIZ.length; qm.title = `Score: ${qa.correct} correct${pass ? ', passed' : ''}`; qm.classList.toggle('done', pass); }
@@ -48,14 +51,14 @@ document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click
 $('startBuild').onclick = () => setTab('build');
 document.querySelector('.tabs').addEventListener('keydown', (e) => {
   const idx = TABS.indexOf(S.tab);
-  if (e.key === 'ArrowRight') { e.preventDefault(); setTab(TABS[(idx + 1) % 3], true); }
-  if (e.key === 'ArrowLeft') { e.preventDefault(); setTab(TABS[(idx + 2) % 3], true); }
-  if (e.key === 'Home') { e.preventDefault(); setTab('lesson', true); }
-  if (e.key === 'End') { e.preventDefault(); setTab('quiz', true); }
+  if (e.key === 'ArrowRight') { e.preventDefault(); setTab(TABS[(idx + 1) % TABS.length], true); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); setTab(TABS[(idx + TABS.length - 1) % TABS.length], true); }
+  if (e.key === 'Home') { e.preventDefault(); setTab(TABS[0], true); }
+  if (e.key === 'End') { e.preventDefault(); setTab(TABS[TABS.length - 1], true); }
 });
 window.addEventListener('hashchange', () => {
   const r = parseRoute(location.hash);
-  const target = (LEVELS.find(l => l.id === r.level) || LEVELS[0]).id; // an unknown level means Level 1
+  const target = r.level === 'mock' ? MOCK.id : (LEVELS.find(l => l.id === r.level) || LEVELS[0]).id; // an unknown level means Level 1
   if (target !== entry.id) { location.reload(); return; } // another level: start again with its file
   const tab = TABS.includes(r.tab) ? r.tab : S.tab;
   fixAddress(tab);
@@ -88,12 +91,14 @@ function start(data) {
   try { load(data); } catch (e) { setS(fresh()); }
   const route = parseRoute(location.hash);
   if (TABS.includes(route.tab)) S.tab = route.tab;
+  if (!TABS.includes(S.tab)) S.tab = 'lesson';
   fixAddress(S.tab); // e.g. an unknown level shows Level 1's address, and #level-2/XYZ shows #level-2/lesson
   renderShell();
   drawFigures();
   run.mdl = model();
   renderPalette(); renderCanvas(true); renderInspector(); renderHUD(); renderMission(); renderQuiz(); renderTabs();
-  log(S.done.every(Boolean) ? 'Welcome back. All missions done: replay any mission, or take the quiz.' : `Mission ${S.mission + 1}: ${MISSIONS[S.mission].title}.`);
+  if (level.interview) log(`Mock interview: ${level.interview.title}. Start the timer when you're ready.`);
+  else log(S.done.every(Boolean) ? 'Welcome back. All missions done: replay any mission, or take the quiz.' : `Mission ${S.mission + 1}: ${MISSIONS[S.mission].title}.`);
   requestAnimationFrame(frame);
 }
 start({});

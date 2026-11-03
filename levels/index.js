@@ -24,3 +24,8 @@ export const LEVELS = [
   { id: 20, title: 'Video platform', load: () => import('./level-20.js') },
   { id: 21, title: 'Cloud file sync', load: () => import('./level-21.js') },
 ];
+
+// The mock interview: a timed problem from one of the real-system levels, on a blank canvas (see mock.js).
+export const MOCK = { id: 'mock', title: 'Mock interview', load: () => import('./mock.js') };
+/** The levels a mock interview can pick its problem from. */
+export const MOCK_LEVELS = [14, 15, 16, 17, 18, 19, 20, 21];

@@ -26,6 +26,20 @@ export default {
   targets,
   workload: { crawl: true },
 
+  // The mock interview's brief and self-check list for this problem (see mock.js).
+  mock: {
+    title: 'Web crawler',
+    brief: 'Design a web crawler for a search engine: 2 billion HTML pages a month, kept for 5 years, new and changed pages included, duplicate content skipped.',
+    checklist: [
+      'Estimated pages a second and storage (about 772 a second; 600 TB a month, 36 PB in 5 years)',
+      'Drew the loop: frontier, downloader, DNS, parser, content seen, URL filter, URL seen',
+      'Kept it polite: a queue per host, one request at a time, with a pause',
+      'Cached DNS lookups',
+      'Caught duplicate pages by their hash',
+      'Guarded against crawler traps, and followed robots.txt',
+    ],
+  },
+
   components: {
     users: {
       name: 'URL frontier', sub: 'URLs to download',

@@ -1,5 +1,6 @@
 // Simulation loop: stepping, target checks and the animation frame.
 import { MISSIONS, TXT, HOLD, EXPERIMENTS, S, run, save } from '../state.js';
+import { level } from '../level.js';
 
 const OBSERVE_SECS = 1.5; // an experiment counts once it has run this long
 import { model, sampleRoute } from './model.js';
@@ -49,7 +50,7 @@ export function step(dt) {
   }
 
   const M = MISSIONS[S.mission], i = S.mission;
-  if (!S.verified[i]) {
+  if (!S.verified[i] && M.goals.length) { // a mock interview has no goals to verify
     const allOk = !anyOn() && M.goals.every(goal => {
       if (goal.type === 'exp') return true;
       if (goal.type === 'gate') return S.est;
@@ -63,10 +64,13 @@ export function step(dt) {
   for (const exp of EXPERIMENTS) {
     const k = exp.id;
     if (exp.kind === 'day') { if (run.on[k]) stepDay(exp, m.atPeak || m, built && M.goals.some(x => x.id === k) && !S.exp[i][k]); continue; }
-    if (run.on[k] && built && M.goals.some(x => x.id === k) && !S.exp[i][k]) {
+    // In a mock interview no experiment is a goal: each one says once what it observed, if its outcome held.
+    const mockOnce = level.interview && !run.expT['seen-' + k];
+    if (run.on[k] && built && ((M.goals.some(x => x.id === k) && !S.exp[i][k]) || mockOnce)) {
       const mx = m.atPeak || m;
       if (!expectMet(exp, mx)) { run.expT[k] = 0; continue; } // the required outcome must hold the whole time
       run.expT[k] = (run.expT[k] || 0) + dt;
+      if (run.expT[k] >= OBSERVE_SECS && mockOnce) { run.expT['seen-' + k] = 1; log(textOf(exp.observed, mx), 'ok'); continue; }
       if (run.expT[k] >= OBSERVE_SECS) {
         S.exp[i][k] = true;
         log(textOf(exp.observed, mx), 'ok');

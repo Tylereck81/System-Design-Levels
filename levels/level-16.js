@@ -26,6 +26,20 @@ export default {
   targets,
   workload: { notify: true },
 
+  // The mock interview's brief and self-check list for this problem (see mock.js).
+  mock: {
+    title: 'Notification system',
+    brief: 'Design a notification system that sends push notifications, SMS and email for an app\'s services: 12 million push, 2 million SMS and 6 million emails a day. Soft real-time; users can opt out.',
+    checklist: [
+      'Estimated notifications a second (about 231, 463 at the peak)',
+      'Used a queue per channel with workers, so one provider\'s outage doesn\'t stop the others',
+      'Named the outside providers, and how device tokens are gathered',
+      'Kept a notification log with retries, so nothing is lost',
+      'Dropped duplicates by event ID, and said exactly-once isn\'t possible',
+      'Checked opt-outs and limited notifications per user',
+    ],
+  },
+
   components: {
     users: {
       name: 'Services', sub: 'Ask for notifications',

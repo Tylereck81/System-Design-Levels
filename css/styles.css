@@ -194,6 +194,21 @@ body:has(#cv.compact) .zoom { display: none; }
 .gate p { margin: 0 0 8px; font-size: 13.5px; }
 .gate .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .gate input { width: 120px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-family: var(--f-mono); }
+/* Mock interview: the four steps with their clocks, the controls and the self-check list. */
+.mock-steps { list-style: none; padding: 0; margin: 0 0 10px; display: grid; gap: 4px; }
+.mock-steps li { display: flex; align-items: baseline; gap: 10px; background: var(--surface-2); border: 1px solid transparent; border-radius: 8px; padding: 6px 10px; }
+.mock-steps li b { flex: 1; font-size: 13.5px; }
+.mock-steps li.now { border-color: var(--accent); background: var(--accent-soft); }
+.mock-t { font: 500 15px var(--f-mono); font-variant-numeric: tabular-nums; }
+.mock-steps li.over .mock-t { color: var(--warn); }
+.mock-target { font-size: 12px; color: var(--ink-3); min-width: 62px; text-align: right; }
+.mock-tip { font-size: 13.5px; color: var(--ink-2); margin: 0 0 10px; }
+.mock-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 12px; }
+.mock-row select { padding: 7px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; font-size: 13.5px; }
+.mock-checks { list-style: none; padding: 0; margin: 0 0 8px; display: grid; gap: 7px; }
+.mock-checks li { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; }
+.mock-checks input { margin-top: 3px; accent-color: var(--accent); }
+.mock-count { font: 500 13px var(--f-mono); color: var(--ink-2); margin: 0 0 12px; }
 .gate .fb { font-size: 13px; margin-top: 8px; }
 .gate .fb.bad { color: var(--bad); }
 .gate.passed { border-style: solid; border-color: var(--ok); background: var(--ok-soft); }
