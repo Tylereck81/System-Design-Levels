@@ -20,4 +20,5 @@ export const LEVELS = [
   { id: 16, title: 'Notification system', load: () => import('./level-16.js') },
   { id: 17, title: 'News feed', load: () => import('./level-17.js') },
   { id: 18, title: 'Chat system', load: () => import('./level-18.js') },
+  { id: 19, title: 'Search autocomplete', load: () => import('./level-19.js') },
 ];
