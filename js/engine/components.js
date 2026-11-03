@@ -1,6 +1,7 @@
 // Component types: capacity, base time, cost and failure mode for everything on the canvas.
 import { S, byId, WORKLOAD, MISSIONS } from '../state.js';
 import { serverNames, keyShares, movedShare } from './hashring.js';
+import { idOutcome } from './ids.js';
 
 export const SIZES = {
   S: { cpu: 2, cap: 200, cost: 40 },
@@ -62,6 +63,9 @@ export const T = { rtt: 40, web: 20, db: 10, dc: 0.5, dns: 5, nosqlLookup: 3, no
 //   of failure only with one server: a lost server's keys move to the others.
 // quorum: a replicated key-value store, one box for its nodes and coordinator. Each key is kept on N replicas; a write
 //   waits for W of them and a read for R (see quorumOutcome). Its cost is per replica (cost × N).
+// ids: a unique ID generator, one box for its servers. Each request asks it for WORKLOAD.idsPerRequest new IDs; its
+//   method sets what they look like and how many it makes (see idOutcome). Its cost is per server, none for UUIDs (they
+//   are made in the web servers). A single point of failure only with one server.
 // limits: a rate limiter. It checks each request against its API key's quota (see limiterRule), answers the excess with
 //   429, and forwards the rest. Connected to a store, it keeps its counters there, shared with the other limiters.
 // algos with sticky: true keep each user on the server they started on, so sessions held in memory are always found.
@@ -126,6 +130,14 @@ export const COMPONENTS = {
       mode: { options: { strict: {}, sloppy: { sloppy: true } }, default: 'strict' },
     },
   },
+  idgen: {
+    role: 'server', cost: 100, unit: 'IDs/s', ids: true,
+    choices: {
+      method: { options: { step: {}, uuid: {}, ticket: {}, snow: {} }, default: 'uuid' },
+      servers: { options: { 1: { count: 1 }, 2: { count: 2 }, 3: { count: 3 }, 4: { count: 4 }, 5: { count: 5 } }, default: '1' },
+      clock: { options: { keep: {}, wait: { wait: true } }, default: 'keep' },
+    },
+  },
   counter: { role: 'server', cap: 50000, base: T.cache, cost: 60, unit: 'ops/s', store: true, managed: true },
   nosql: { role: 'server', cap: 20000, base: T.nosqlLookup, cost: 200, unit: 'lookups/s', offload: true, managed: true },
   // A whole data center: load balancers, autoscaled web servers, caches, databases and a session store.
@@ -182,6 +194,14 @@ export function quorumOf(n) {
   const ch = COMPONENTS[n.type].choices, N = ch.n.options[choiceOf(n, 'n')].n;
   return { N, W: Math.min(N, ch.w.options[choiceOf(n, 'w')].q), R: Math.min(N, ch.r.options[choiceOf(n, 'r')].q), sloppy: !!ch.mode.options[choiceOf(n, 'mode')].sloppy };
 }
+export const isIdGen = (n) => !!(COMPONENTS[n.type] || {}).ids;
+/** An ID generator's method, its servers and whether a timestamp-based one waits when its clock goes back. */
+export function idSettingOf(n) {
+  const ch = COMPONENTS[n.type].choices;
+  return { method: choiceOf(n, 'method'), servers: ch.servers.options[choiceOf(n, 'servers')].count, wait: !!ch.clock.options[choiceOf(n, 'clock')].wait };
+}
+/** True when the ID generator stops if one machine fails: one server, for every method but UUIDs. */
+export const idSpof = (n) => idOutcome(idSettingOf(n)).spof;
 export const isClustered = (n) => !!(COMPONENTS[n.type] || {}).clustered;
 /** Servers in a cache cluster. */
 export const clusterSize = (n) => COMPONENTS[n.type].choices.count.options[choiceOf(n, 'count')].count;
@@ -309,6 +329,7 @@ export function costOf(n, work = 0) {
   if (c.sharded) return n.size ? sizesOf(n.type)[n.size].cost * shardCount(n) : 0;
   if (c.clustered) return n.size ? sizesOf(n.type)[n.size].cost * clusterSize(n) : 0;
   if (c.quorum) return c.cost * quorumOf(n).N;
+  if (c.ids) { const id = idSettingOf(n); return id.method === 'uuid' ? 0 : c.cost * id.servers; }
   if (c.sized && scales(n)) { const k = dayCopies(work, serverSpec(n).cap); return Math.round(sizesOf(n.type)[n.size].cost * k.reduce((a, b) => a + b, 0) / k.length); }
   if (c.sized) return n.size ? sizesOf(n.type)[n.size].cost * countOf(n) : 0;
   if (c.perGB) return Math.round(monthlyFileGB() * c.perGB);

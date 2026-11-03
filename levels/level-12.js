@@ -204,7 +204,7 @@ export default {
 
   quiz: {
     passScore: 8,
-    passText: 'Level 12 is done. Level 13, Unique ID generator, is next. It isn\'t built yet.',
+    passText: 'Level 12 is done. Level 13, Unique ID generator, is next: open it from the level menu at the top.',
     failText: level10.quiz.failText,
     questions: [
       { q: 'Why can\'t a real distributed store be "CA" (consistent and available, but not partition tolerant)?', o: ['Disks are too slow to keep up', 'Consistency needs a single server', 'CA systems cost too much to run', 'Networks do fail'], a: 3, e: 'Networks fail, so a distributed system must keep working through partitions. When one happens, it has to give up either consistency (answer from old data) or availability (return errors).', r: 'CAP theorem' },
