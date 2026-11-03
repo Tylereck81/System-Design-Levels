@@ -86,6 +86,17 @@ export function drawIcon(type, parent, x, y, scale) {
     // A tag with a number on it: a new ID.
     svgEl('path', { d: 'M1 6.5 7.5 1h18.5v22H7.5L1 17.5z', class: 'ic-stroke' }, g);
     svgEl('path', { d: 'M12 7v10M17 7v10M10 10.5h9M10 13.5h9', class: 'ic-stroke' }, g);
+  } else if (type === 'downloader') {
+    // A page with an arrow down: it fetches pages.
+    svgEl('path', { d: 'M5 1h12l5 5v17H5z', class: 'ic-stroke' }, g);
+    svgEl('path', { d: 'M13.5 7v10M9.5 13l4 4 4-4', class: 'ic-stroke' }, g);
+  } else if (type === 'parser') {
+    // A page with lines and a link mark: it reads pages and extracts links.
+    svgEl('path', { d: 'M3 1h12l5 5v17H3z', class: 'ic-stroke' }, g);
+    svgEl('path', { d: 'M7 9h9M7 13h9M7 17h5', class: 'ic-line' }, g);
+  } else if (type === 'contentstore') {
+    // Stacked disks: pages kept on disk.
+    for (const y of [3, 10, 17]) svgEl('rect', { x: 2, y, width: 23, height: 5, rx: 2, class: 'ic-data' }, g);
   } else if (type === 'db') {
     svgEl('path', { d: 'M3.5 5v14a9.5 4 0 0 0 19 0V5z', class: 'ic-data' }, g);
     svgEl('ellipse', { cx: 13, cy: 5, rx: 9.5, ry: 4, class: 'ic-data-top' }, g);

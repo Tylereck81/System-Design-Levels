@@ -3,8 +3,9 @@ import { MISSIONS, TXT, PALETTE, S, run, byId, WORKLOAD } from '../state.js';
 import { quorumOutcome } from './quorum.js';
 import { idOutcome } from './ids.js';
 import { linkTraffic } from './links.js';
-import { COMPONENTS, T, roleOf, isServer, isReplica, isCache, isEdge, isStore, isSticky, scales, sessionsOn, holdsSessions, copiesFor, isLocated, isFar, isGeo, replicates, isQueue, isOffload, isQuorum, quorumOf, isIdGen, idSettingOf, idSpof, linkSettingsOf, createQueries, isClustered, clusterSize, clusterLayout, clusterHit, shardShares, keyedShards, limiterRule, hitRate, edgeHit, fallsBack, staleSecs, costOf, serverSpec, splitRule } from './components.js';
-import { activeExps, downIds, trafficFactor, uploadFactor, dayShift, botEdge, resizeBy, partitioned, clockBack, viralClicks, bulkCreates, textOf, PEAK } from './experiments.js';
+import { crawlOutcome, DUP_SHARE } from './crawl.js';
+import { COMPONENTS, T, roleOf, isServer, isReplica, isCache, isEdge, isStore, isSticky, scales, sessionsOn, holdsSessions, copiesFor, isLocated, isFar, isGeo, replicates, isQueue, isOffload, isQuorum, quorumOf, isIdGen, idSettingOf, idSpof, linkSettingsOf, createQueries, downloaderOf, crawlSettingsOf, isClustered, clusterSize, clusterLayout, clusterHit, shardShares, keyedShards, limiterRule, hitRate, edgeHit, fallsBack, staleSecs, costOf, serverSpec, splitRule } from './components.js';
+import { activeExps, downIds, trafficFactor, uploadFactor, dayShift, botEdge, resizeBy, partitioned, clockBack, viralClicks, bulkCreates, expFlag, textOf, PEAK } from './experiments.js';
 
 export { SIZES, T } from './components.js';
 
@@ -132,6 +133,13 @@ function linkAt(q, calm = false) {
   if (!web) return null;
   const set = linkSettingsOf(web);
   return { ...linkTraffic(set, { qps: q, writes: MISSIONS[S.mission].writes || 0, repeat: WORKLOAD.repeatClicks, viral: calm ? 0 : viralClicks(), bulk: calm ? 0 : bulkCreates() }), code: set.code };
+}
+// A web crawler's outcome (see crawl.js), set at the start of each model() call; null in other levels.
+let crawlNow = null;
+function crawlAt(q) {
+  if (!WORKLOAD.crawl) return null;
+  const users = S.nodes.find(n => roleOf(n) === 'client'), parser = S.nodes.find(n => COMPONENTS[n.type] && COMPONENTS[n.type].crawl === 'parse');
+  return crawlOutcome(crawlSettingsOf(users, parser), { rate: q, flood: expFlag('flood'), trap: expFlag('trap') });
 }
 const writeShare = () => (linkNow ? linkNow.writes : MISSIONS[S.mission].writes || 0);
 const fileShare = () => MISSIONS[S.mission].files || 0; // share of requests that are static files (the rest are pages)
@@ -265,6 +273,8 @@ function loadPhase(g, qps, sizing, down, r, day, backlog, U) {
     if (COMPONENTS[n.type].clustered) { cluster(n, L); continue; }
     if (COMPONENTS[n.type].quorum) { kvStore(n, L); continue; }
     if (COMPONENTS[n.type].ids) { idGen(n, L); continue; }
+    if (COMPONENTS[n.type].crawl === 'download') { download(n, L); continue; }
+    if (COMPONENTS[n.type].crawl === 'parse') { parse(n, L); continue; }
     if (COMPONENTS[n.type].limits) { limit(n, L); continue; }
     const sp = serverSpec(n);
     const Lf = files.get(n.id) || 0, ownFiles = Lf > 0 && sp.filePer != null; // a server that sends files itself
@@ -423,6 +433,24 @@ function loadPhase(g, qps, sizing, down, r, day, backlog, U) {
     r.kvFailPct = 100 * failed;
   }
   /**
+   * A crawler's downloaders: `count` machines at their pages a second each. A flooded host refuses its share of a
+   * FIFO crawl. What they fetch goes on to the parser.
+   */
+  function download(n, L) {
+    const c = COMPONENTS[n.type], d = downloaderOf(n, expFlag('slowDns')), cap = d.per * d.count;
+    const refused = crawlNow ? crawlNow.refused : 0, s = Math.min(L, cap) * (1 - refused);
+    served.set(n.id, s);
+    r.node[n.id] = { load: L, cap, util: L / cap, ms: c.base, mult: 1, base: c.base, unit: c.unit, drop: 1 - s / L, crawl: { ...d, refused } };
+    for (const grp of depGroups(n)) for (const [x, f] of split(grp, s, down, n)) add(load, x, f);
+  }
+  /** A crawler's parser: checks each page; with a duplicate check, only new content goes on to storage. */
+  function parse(n, L) {
+    const c = COMPONENTS[n.type], set = crawlSettingsOf(null, n), s = Math.min(L, c.cap), u = L / c.cap, mult = qmul(u);
+    served.set(n.id, s);
+    r.node[n.id] = { load: L, cap: c.cap, util: u, ms: c.base * mult, mult, base: c.base, unit: c.unit, drop: 1 - s / L };
+    for (const grp of depGroups(n)) for (const [x, f] of split(grp, s * (set.dedup ? 1 - DUP_SHARE : 1), down, n)) add(load, x, f);
+  }
+  /**
    * A unique ID generator: each request needs idsPerRequest new IDs. Requests whose IDs it can't make in time fail.
    * The model reports what its IDs look like and the share that repeat an ID already made.
    */
@@ -448,8 +476,9 @@ export function model({ peak = false } = {}) {
   let qps = peak ? base * PEAK : base * (1 + 0.02 * Math.sin(run.t * 1.7) + 0.01 * Math.sin(run.t * 4.1));
   // A URL shortener: the clicks and new links that reach its servers.
   linkNow = linkAt(qps);
+  crawlNow = crawlAt(qps);
   if (linkNow) { base = linkAt(base).qps; qps = linkNow.qps; }
-  const r = { mission: S.mission, qps, base, link: linkNow, servedPct: 0, latency: null, cost: g.cost, spof: 0, node: {}, issue: null, g, down: downIds(), bottleneck: null, hitRate: null, staleSecs: 0, fileStaleSecs: 0, farFileMs: null, lostPct: 0, farPageMs: null, noDataPct: 0, lagWrites: 0, queues: {}, uploadMs: null, jobsIn: 0, jobsOut: 0, backlog: 0, alert: null, maxShardUtil: null, shardCount: 0, ringMoved: null, ringSpread: null, kvStalePct: null, kvReadMs: null, kvFailPct: null, kvQuorum: null, idDupPct: null, idBits: null, idNumeric: null, idOrdered: null, idSpof: null, idMade: null, keyQuota: null, botThrough: 0, bots: botRate() };
+  const r = { mission: S.mission, qps, base, link: linkNow, crawl: crawlNow, servedPct: 0, latency: null, cost: g.cost, spof: 0, node: {}, issue: null, g, down: downIds(), bottleneck: null, hitRate: null, staleSecs: 0, fileStaleSecs: 0, farFileMs: null, lostPct: 0, farPageMs: null, noDataPct: 0, lagWrites: 0, queues: {}, uploadMs: null, jobsIn: 0, jobsOut: 0, backlog: 0, alert: null, maxShardUtil: null, shardCount: 0, ringMoved: null, ringSpread: null, kvStalePct: null, kvReadMs: null, kvFailPct: null, kvQuorum: null, idDupPct: null, idBits: null, idNumeric: null, idOrdered: null, idSpof: null, idMade: null, keyQuota: null, botThrough: 0, bots: botRate() };
   if (!g.entry.length) { r.issue = TXT.noWeb; return r; }
   if (g.needsDns && !g.hasDNS) { r.issue = TXT.noDns; return r; }
   r.spof = countSpofs(g);
@@ -594,7 +623,7 @@ function countSpofs(g) {
   const spof = new Set();
   const visit = (group, seen) => {
     for (const n of group) {
-      if (group.length === 1 && !COMPONENTS[n.type].managed && !(isClustered(n) && clusterSize(n) > 1) && !(isQuorum(n) && quorumOf(n).N > 1) && !(isIdGen(n) && !idSpof(n))) spof.add(n.id);
+      if (group.length === 1 && !COMPONENTS[n.type].managed && !(isClustered(n) && clusterSize(n) > 1) && !(isQuorum(n) && quorumOf(n).N > 1) && !(isIdGen(n) && !idSpof(n)) && !(COMPONENTS[n.type].crawl === 'download' && downloaderOf(n).count > 1)) spof.add(n.id);
       if (seen.has(n.id)) continue;
       seen.add(n.id);
       for (const grp of childGroups(n)) visit(grp, seen);

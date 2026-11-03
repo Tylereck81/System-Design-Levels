@@ -21,6 +21,8 @@ export const partitioned = () => activeExps().some(e => e.partition);
 export const viralClicks = () => activeExps().reduce((s, e) => s + (e.viral || 0), 0);
 /** New links a second one account creates in bulk in the running experiments. */
 export const bulkCreates = () => activeExps().reduce((s, e) => s + (e.bulk || 0), 0);
+/** True while a running experiment has flag `key` set (e.g. a crawler's slowDns, flood or trap). */
+export const expFlag = (key) => activeExps().some(e => e[key]);
 /** True while a running experiment sets an ID generator's clock back. */
 export const clockBack = () => activeExps().some(e => e.clockBack);
 /** Servers the running experiments add to (+1) or take from (−1) a cache cluster. */
