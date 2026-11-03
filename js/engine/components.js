@@ -8,6 +8,7 @@ import { SEND_MS } from './notify.js';
 import { feedOutcome } from './feed.js';
 import { API_CAP, SHARD_CAP } from './typeahead.js';
 import { videoOutcome, TRANSCODE_RATE } from './video.js';
+import { storageBill, BLOCK_MBPS, POLL_CONNS } from './sync.js';
 
 export const SIZES = {
   S: { cpu: 2, cap: 200, cost: 40 },
@@ -245,6 +246,29 @@ export const COMPONENTS = {
     },
   },
   vserve: { role: 'server', cap: 1000, base: 20, cost: 0, unit: 'videos/s', managed: true, video: 'serve', choices: { deliver: { options: { cdn: {}, popular: { on: true } }, default: 'cdn' } } },
+  // Cloud file sync (see sync.js). Block servers move file blocks (whole files or only changed blocks, maybe
+  //   compressed); notification servers hold clients' long-poll connections; cloud storage keeps the blocks in two
+  //   regions, with a version limit, cold storage and dedupe as choices. Its cost is the month's storage bill.
+  blocksrv: {
+    role: 'server', cap: BLOCK_MBPS, base: 10, cost: 300, unit: 'MB/s', sync: 'block',
+    choices: {
+      count: { options: { 2: { count: 2 }, 3: { count: 3 }, 4: { count: 4 }, 6: { count: 6 } }, default: '2' },
+      delta: { options: { whole: {}, delta: { on: true } }, default: 'whole' },
+      compress: { options: { off: {}, on: { on: true } }, default: 'off' },
+    },
+  },
+  pollsrv: {
+    role: 'server', cap: POLL_CONNS, base: 1, cost: 400, unit: 'connections', sync: 'poll',
+    choices: { count: { options: { 4: { count: 4 }, 5: { count: 5 }, 6: { count: 6 }, 7: { count: 7 }, 8: { count: 8 } }, default: '4' } },
+  },
+  blobstore: {
+    role: 'server', cap: 1e9, base: 5, cost: 0, unit: 'uploads/s', managed: true, sync: 'store',
+    choices: {
+      versions: { options: { all: {}, ten: { on: true } }, default: 'all' },
+      cold: { options: { off: {}, on: { on: true } }, default: 'off' },
+      dedupe: { options: { off: {}, on: { on: true } }, default: 'off' },
+    },
+  },
   provider: { role: 'server', cap: 100000, base: 50, cost: 0, unit: 'notifications/s', managed: true },
   contentstore: { role: 'server', cap: 5000, base: 10, cost: 300, unit: 'pages/s', managed: true },
   counter: { role: 'server', cap: 50000, base: T.cache, cost: 60, unit: 'ops/s', store: true, managed: true },
@@ -364,6 +388,15 @@ export function videoSettingsOf(up, tc, sv) {
   return {
     presigned: on(up, 'url'), chunks: on(up, 'chunks'), retry: on(tc, 'retry'), popularOnly: on(sv, 'deliver'),
     workers: tc ? COMPONENTS[tc.type].choices.workers.options[choiceOf(tc, 'workers')].count : 0,
+  };
+}
+/** Cloud file sync's settings, from its block servers, notification servers and cloud storage (any may be missing). */
+export function syncSettingsOf(block, poll, store) {
+  const on = (n, key) => !!n && !!COMPONENTS[n.type].choices[key].options[choiceOf(n, key)].on;
+  const count = (n) => (n ? COMPONENTS[n.type].choices.count.options[choiceOf(n, 'count')].count : 0);
+  return {
+    blocks: count(block), delta: on(block, 'delta'), compress: on(block, 'compress'), polls: count(poll),
+    tenVersions: on(store, 'versions'), cold: on(store, 'cold'), dedupe: on(store, 'dedupe'),
   };
 }
 export const isClustered = (n) => !!(COMPONENTS[n.type] || {}).clustered;
@@ -500,6 +533,9 @@ export function costOf(n, work = 0) {
   if (c.sharded) return n.size ? sizesOf(n.type)[n.size].cost * shardCount(n) : 0;
   if (c.clustered) return n.size ? sizesOf(n.type)[n.size].cost * clusterSize(n) : 0;
   if (c.quorum) return c.cost * quorumOf(n).N;
+  if (c.sync === 'block') return c.cost * syncSettingsOf(n, null, null).blocks;
+  if (c.sync === 'poll') return c.cost * syncSettingsOf(null, n, null).polls;
+  if (c.sync === 'store') return Math.round(storageBill(syncSettingsOf(null, null, n)));
   if (c.video === 'transcode') return c.cost * videoSettingsOf(null, n, null).workers;
   if (c.video === 'serve') return Math.round(videoOutcome(videoSettingsOf(null, null, n), { rate: 1 }).bill);
   if (c.typeahead === 'api') return c.cost * typeaheadSettingsOf(n, null).apis;
