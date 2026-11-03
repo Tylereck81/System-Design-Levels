@@ -123,6 +123,9 @@ test.describe('Level 11 · numbers', () => {
       const r = await measure(page);
       expect([hashing, r.moved, r.spread]).toEqual([hashing, expect.closeTo(add, 3), expect.closeTo(after, 3)]);
     }
+    // The Mission 1 takeaway names E's share of a one-point ring: (1 + spread) / 5.
+    const source = await (await page.request.get('/levels/level-11.js')).text();
+    expect(source).toContain(`E owns ${Math.round(100 * (1 + cases[0][1]) / 5)}% of the ring`);
     // One point per server: E holds 61% of the keys but has a fifth of the memory, so it keeps fewer of them.
     await set(page, 'k', { hashing: 'ring' });
     await page.evaluate(() => { window.__sdl.run.on = {}; });
