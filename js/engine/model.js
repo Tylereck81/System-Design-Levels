@@ -8,7 +8,8 @@ import { notifyOutcome } from './notify.js';
 import { feedOutcome } from './feed.js';
 import { chatOutcome } from './chat.js';
 import { typeaheadOutcome } from './typeahead.js';
-import { COMPONENTS, T, roleOf, isServer, isReplica, isCache, isEdge, isStore, isSticky, scales, sessionsOn, holdsSessions, copiesFor, isLocated, isFar, isGeo, replicates, isQueue, isOffload, isQuorum, quorumOf, isIdGen, idSettingOf, idSpof, linkSettingsOf, createQueries, downloaderOf, crawlSettingsOf, notifySettingsOf, feedSettingsOf, chatSettingsOf, typeaheadSettingsOf, isClustered, clusterSize, clusterLayout, clusterHit, shardShares, keyedShards, limiterRule, hitRate, edgeHit, fallsBack, staleSecs, costOf, serverSpec, splitRule } from './components.js';
+import { videoOutcome } from './video.js';
+import { COMPONENTS, T, roleOf, isServer, isReplica, isCache, isEdge, isStore, isSticky, scales, sessionsOn, holdsSessions, copiesFor, isLocated, isFar, isGeo, replicates, isQueue, isOffload, isQuorum, quorumOf, isIdGen, idSettingOf, idSpof, linkSettingsOf, createQueries, downloaderOf, crawlSettingsOf, notifySettingsOf, feedSettingsOf, chatSettingsOf, typeaheadSettingsOf, videoSettingsOf, isClustered, clusterSize, clusterLayout, clusterHit, shardShares, keyedShards, limiterRule, hitRate, edgeHit, fallsBack, staleSecs, costOf, serverSpec, splitRule } from './components.js';
 import { activeExps, downIds, trafficFactor, uploadFactor, dayShift, botEdge, resizeBy, partitioned, clockBack, viralClicks, bulkCreates, expFlag, textOf, PEAK } from './experiments.js';
 
 export { SIZES, T } from './components.js';
@@ -178,6 +179,14 @@ function typeAt(q) {
   const set = typeaheadSettingsOf(find('api'), find('trie'));
   return { ...typeaheadOutcome(set, { qps: q }), ...set };
 }
+// A video platform's outcome (see video.js), set at the start of each model() call; null in other levels.
+let videoNow = null;
+function videoAt(q) {
+  if (!WORKLOAD.video) return null;
+  const find = (k) => S.nodes.find(n => (COMPONENTS[n.type] || {}).video === k);
+  const set = videoSettingsOf(find('upload'), find('transcode'), find('serve'));
+  return { ...videoOutcome(set, { rate: q, patchy: expFlag('patchy'), dies: expFlag('workerDies'), growth: expFlag('growth') ? WORKLOAD.growth || 1 : 1 }), ...set };
+}
 const writeShare = () => (linkNow ? linkNow.writes : MISSIONS[S.mission].writes || 0);
 const fileShare = () => MISSIONS[S.mission].files || 0; // share of requests that are static files (the rest are pages)
 const farShare = () => MISSIONS[S.mission].far || 0;    // share of users far from the data center
@@ -315,6 +324,7 @@ function loadPhase(g, qps, sizing, down, r, day, backlog, U) {
     if (COMPONENTS[n.type].feed) { feedService(n, L); continue; }
     if (COMPONENTS[n.type].chat) { chatServers(n, L); continue; }
     if (COMPONENTS[n.type].typeahead) { typeahead(n, L); continue; }
+    if (COMPONENTS[n.type].video === 'upload' || COMPONENTS[n.type].video === 'transcode') { videoStep(n, L); continue; }
     if (COMPONENTS[n.type].crawl === 'parse') { parse(n, L); continue; }
     if (COMPONENTS[n.type].limits) { limit(n, L); continue; }
     const sp = serverSpec(n);
@@ -524,6 +534,17 @@ function loadPhase(g, qps, sizing, down, r, day, backlog, U) {
     r.node[n.id] = { load: L, cap, util: api ? L / cap : o.shardLoad / c.cap, ms, mult: 1, base: ms, unit: c.unit, drop: 1 - ok, typeahead: o };
     for (const grp of depGroups(n)) for (const [x, f] of split(grp, L * ok, down, n)) add(load, x, f);
   }
+  /**
+   * A video platform's upload service and transcoding servers: each passes on the share of videos that get through it
+   * (uploads that arrive; videos transcoded and not lost).
+   */
+  function videoStep(n, L) {
+    const c = COMPONENTS[n.type], o = videoNow, up = c.video === 'upload';
+    const ok = up ? o.uploaded : o.transcoded, cap = up ? (o.apiLoad ? L / o.apiLoad : c.cap) : c.cap * o.workers; // uploads through the API servers are limited by their links
+    served.set(n.id, L * ok);
+    r.node[n.id] = { load: L, cap, util: L / cap, ms: c.base, mult: 1, base: c.base, unit: c.unit, drop: 1 - ok, video: o };
+    for (const grp of depGroups(n)) for (const [x, f] of split(grp, L * ok, down, n)) add(load, x, f);
+  }
   /** A crawler's parser: checks each page; with a duplicate check, only new content goes on to storage. */
   function parse(n, L) {
     const c = COMPONENTS[n.type], set = crawlSettingsOf(null, n), s = Math.min(L, c.cap), u = L / c.cap, mult = qmul(u);
@@ -561,11 +582,12 @@ export function model({ peak = false } = {}) {
   notifyNow = notifyAt(qps);
   feedNow = feedAt(qps);
   chatNow = chatAt(qps);
+  videoNow = videoAt(qps);
   if (linkNow) { base = linkAt(base).qps; qps = linkNow.qps; }
   // Search autocomplete: browsers answer some keystrokes from their own cache, so fewer reach the servers.
   typeNow = typeAt(qps);
   if (typeNow) { base = typeAt(base).reach; qps = typeNow.reach; }
-  const r = { mission: S.mission, qps, base, link: linkNow, crawl: crawlNow, notify: notifyNow, feed: feedNow, chat: chatNow, typeahead: typeNow, servedPct: 0, latency: null, cost: g.cost, spof: 0, node: {}, issue: null, g, down: downIds(), bottleneck: null, hitRate: null, staleSecs: 0, fileStaleSecs: 0, farFileMs: null, lostPct: 0, farPageMs: null, noDataPct: 0, lagWrites: 0, queues: {}, uploadMs: null, jobsIn: 0, jobsOut: 0, backlog: 0, alert: null, maxShardUtil: null, shardCount: 0, ringMoved: null, ringSpread: null, kvStalePct: null, kvReadMs: null, kvFailPct: null, kvQuorum: null, idDupPct: null, idBits: null, idNumeric: null, idOrdered: null, idSpof: null, idMade: null, keyQuota: null, botThrough: 0, bots: botRate() };
+  const r = { mission: S.mission, qps, base, link: linkNow, crawl: crawlNow, notify: notifyNow, feed: feedNow, chat: chatNow, typeahead: typeNow, video: videoNow, servedPct: 0, latency: null, cost: g.cost, spof: 0, node: {}, issue: null, g, down: downIds(), bottleneck: null, hitRate: null, staleSecs: 0, fileStaleSecs: 0, farFileMs: null, lostPct: 0, farPageMs: null, noDataPct: 0, lagWrites: 0, queues: {}, uploadMs: null, jobsIn: 0, jobsOut: 0, backlog: 0, alert: null, maxShardUtil: null, shardCount: 0, ringMoved: null, ringSpread: null, kvStalePct: null, kvReadMs: null, kvFailPct: null, kvQuorum: null, idDupPct: null, idBits: null, idNumeric: null, idOrdered: null, idSpof: null, idMade: null, keyQuota: null, botThrough: 0, bots: botRate() };
   if (!g.entry.length) { r.issue = TXT.noWeb; return r; }
   if (g.needsDns && !g.hasDNS) { r.issue = TXT.noDns; return r; }
   r.spof = countSpofs(g);
@@ -710,7 +732,7 @@ function countSpofs(g) {
   const spof = new Set();
   const visit = (group, seen) => {
     for (const n of group) {
-      if (group.length === 1 && !COMPONENTS[n.type].managed && !(isClustered(n) && clusterSize(n) > 1) && !(isQuorum(n) && quorumOf(n).N > 1) && !(isIdGen(n) && !idSpof(n)) && !(COMPONENTS[n.type].crawl === 'download' && downloaderOf(n).count > 1) && !(COMPONENTS[n.type].notify && notifySettingsOf(null, null, n).workers > 1) && !(COMPONENTS[n.type].chat && chatSettingsOf(n, null).servers > 1) && !(COMPONENTS[n.type].typeahead === 'api' && typeaheadSettingsOf(n, null).apis > 1) && !(COMPONENTS[n.type].typeahead === 'trie' && typeaheadSettingsOf(null, n).shards > 1)) spof.add(n.id);
+      if (group.length === 1 && !COMPONENTS[n.type].managed && !(isClustered(n) && clusterSize(n) > 1) && !(isQuorum(n) && quorumOf(n).N > 1) && !(isIdGen(n) && !idSpof(n)) && !(COMPONENTS[n.type].crawl === 'download' && downloaderOf(n).count > 1) && !(COMPONENTS[n.type].notify && notifySettingsOf(null, null, n).workers > 1) && !(COMPONENTS[n.type].chat && chatSettingsOf(n, null).servers > 1) && !(COMPONENTS[n.type].typeahead === 'api' && typeaheadSettingsOf(n, null).apis > 1) && !(COMPONENTS[n.type].typeahead === 'trie' && typeaheadSettingsOf(null, n).shards > 1) && !(COMPONENTS[n.type].video === 'upload') && !(COMPONENTS[n.type].video === 'transcode' && videoSettingsOf(null, n, null).workers > 1)) spof.add(n.id);
       if (seen.has(n.id)) continue;
       seen.add(n.id);
       for (const grp of childGroups(n)) visit(grp, seen);

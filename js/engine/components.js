@@ -7,6 +7,7 @@ import { downloaderRate, THREADS, PAGE_MS } from './crawl.js';
 import { SEND_MS } from './notify.js';
 import { feedOutcome } from './feed.js';
 import { API_CAP, SHARD_CAP } from './typeahead.js';
+import { videoOutcome, TRANSCODE_RATE } from './video.js';
 
 export const SIZES = {
   S: { cpu: 2, cap: 200, cost: 40 },
@@ -228,6 +229,22 @@ export const COMPONENTS = {
       rebuild: { options: { weekly: { cost: 100 }, daily: { cost: 200 }, hourly: { cost: 500 } }, default: 'weekly' },
     },
   },
+  // A video platform (see video.js). The upload service takes videos through the API servers or by pre-signed URL,
+  //   whole or in resumable chunks; transcoding servers encode them, retrying a dead worker's tasks or not; delivery
+  //   streams them from the CDN, or only the popular ones (the rest from your own storage servers). Its cost is the
+  //   month's streaming bill.
+  vupload: {
+    role: 'server', cap: 1000, base: 50, cost: 800, unit: 'videos/s', video: 'upload',
+    choices: { url: { options: { api: {}, presigned: { on: true } }, default: 'api' }, chunks: { options: { whole: {}, chunked: { on: true } }, default: 'whole' } },
+  },
+  transcoder: {
+    role: 'server', cap: TRANSCODE_RATE, base: 50, cost: 500, unit: 'videos/s', video: 'transcode',
+    choices: {
+      workers: { options: { 6: { count: 6 }, 8: { count: 8 }, 10: { count: 10 }, 11: { count: 11 }, 12: { count: 12 } }, default: '10' },
+      retry: { options: { off: {}, on: { on: true } }, default: 'off' },
+    },
+  },
+  vserve: { role: 'server', cap: 1000, base: 20, cost: 0, unit: 'videos/s', managed: true, video: 'serve', choices: { deliver: { options: { cdn: {}, popular: { on: true } }, default: 'cdn' } } },
   provider: { role: 'server', cap: 100000, base: 50, cost: 0, unit: 'notifications/s', managed: true },
   contentstore: { role: 'server', cap: 5000, base: 10, cost: 300, unit: 'pages/s', managed: true },
   counter: { role: 'server', cap: 50000, base: T.cache, cost: 60, unit: 'ops/s', store: true, managed: true },
@@ -339,6 +356,14 @@ export function typeaheadSettingsOf(api, trie) {
     apis: api ? ch(api, 'count').count : 0, browser: !!api && !!ch(api, 'browser').on,
     method: trie ? choiceOf(trie, 'method') : 'table', shards: trie ? ch(trie, 'shards').count : 1,
     map: !!trie && !!ch(trie, 'split').on, rebuild: trie ? choiceOf(trie, 'rebuild') : 'weekly',
+  };
+}
+/** A video platform's settings, from its upload service, transcoding servers and delivery (any may be missing). */
+export function videoSettingsOf(up, tc, sv) {
+  const on = (n, key) => !!n && !!COMPONENTS[n.type].choices[key].options[choiceOf(n, key)].on;
+  return {
+    presigned: on(up, 'url'), chunks: on(up, 'chunks'), retry: on(tc, 'retry'), popularOnly: on(sv, 'deliver'),
+    workers: tc ? COMPONENTS[tc.type].choices.workers.options[choiceOf(tc, 'workers')].count : 0,
   };
 }
 export const isClustered = (n) => !!(COMPONENTS[n.type] || {}).clustered;
@@ -475,6 +500,8 @@ export function costOf(n, work = 0) {
   if (c.sharded) return n.size ? sizesOf(n.type)[n.size].cost * shardCount(n) : 0;
   if (c.clustered) return n.size ? sizesOf(n.type)[n.size].cost * clusterSize(n) : 0;
   if (c.quorum) return c.cost * quorumOf(n).N;
+  if (c.video === 'transcode') return c.cost * videoSettingsOf(null, n, null).workers;
+  if (c.video === 'serve') return Math.round(videoOutcome(videoSettingsOf(null, null, n), { rate: 1 }).bill);
   if (c.typeahead === 'api') return c.cost * typeaheadSettingsOf(n, null).apis;
   if (c.typeahead === 'trie') return c.cost * typeaheadSettingsOf(null, n).shards + COMPONENTS[n.type].choices.rebuild.options[choiceOf(n, 'rebuild')].cost;
   if (c.chat) return c.cost * chatSettingsOf(n, null).servers;

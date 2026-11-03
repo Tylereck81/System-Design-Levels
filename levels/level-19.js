@@ -184,7 +184,7 @@ export default {
 
   quiz: {
     passScore: 8,
-    passText: 'Level 19 is done. Level 20, Video platform, is next. It isn\'t built yet.',
+    passText: 'Level 19 is done. Level 20, Video platform, is next: open it from the level menu at the top.',
     failText: level10.quiz.failText,
     questions: [
       { q: 'What does each trie node store to make suggestions fast?', o: ['The whole search log', 'The user\'s history', 'A full copy of its parent node', 'Its own top 5 queries'], a: 3, e: 'Keeping the top k at every node means a lookup only finds the prefix node and reads its list: O(1) with a capped prefix length.', r: 'Trie data structure' },
