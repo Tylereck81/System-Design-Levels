@@ -205,7 +205,7 @@ export default {
 
   quiz: {
     passScore: 8,
-    passText: 'Level 15 is done. Level 16, Notification system, is next. It isn\'t built yet.',
+    passText: 'Level 15 is done. Level 16, Notification system, is next: open it from the level menu at the top.',
     failText: level10.quiz.failText,
     questions: [
       { q: 'Why do crawlers use breadth-first rather than depth-first search?', o: ['BFS uses less memory on every graph', 'DFS can go very deep on one site', 'BFS finds pages in alphabetical order', 'DFS can\'t follow links'], a: 1, e: 'The web is a huge graph; depth-first can follow one site\'s links down and down. Breadth-first, with a FIFO queue, spreads the crawl across the web.', r: 'DFS vs BFS' },

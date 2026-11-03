@@ -17,4 +17,5 @@ export const LEVELS = [
   { id: 13, title: 'Unique ID generator', load: () => import('./level-13.js') },
   { id: 14, title: 'URL shortener', load: () => import('./level-14.js') },
   { id: 15, title: 'Web crawler', load: () => import('./level-15.js') },
+  { id: 16, title: 'Notification system', load: () => import('./level-16.js') },
 ];
