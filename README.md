@@ -2,7 +2,7 @@
 
 A drag-and-drop game for practising system design interviews. Each level has a lesson, missions where you build an architecture and watch simulated traffic run through it, "break it" experiments, and a quiz.
 
-**Status:** Levels 1 to 17 of 21 are playable.
+**Status:** Levels 1 to 18 of 21 are playable.
 
 ## Run it
 

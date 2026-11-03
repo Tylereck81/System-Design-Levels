@@ -210,7 +210,7 @@ export default {
 
   quiz: {
     passScore: 8,
-    passText: 'Level 17 is done. Level 18, Chat system, is next. It isn\'t built yet.',
+    passText: 'Level 17 is done. Level 18, Chat system, is next: open it from the level menu at the top.',
     failText: level10.quiz.failText,
     questions: [
       { q: 'What does fanout on write do when someone posts?', o: ['Puts the post ID in each friend\'s feed', 'Waits until each friend asks for the feed again', 'Emails every friend', 'Deletes old posts'], a: 0, e: 'Fanout on write (push) precomputes feeds: each friend\'s cached feed gets the new post ID right away, so loading a feed is one read.', r: 'Fanout on write' },
