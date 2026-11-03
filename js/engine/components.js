@@ -2,6 +2,7 @@
 import { S, byId, WORKLOAD, MISSIONS } from '../state.js';
 import { serverNames, keyShares, movedShare } from './hashring.js';
 import { idOutcome } from './ids.js';
+import { CREATE_QUERIES } from './links.js';
 
 export const SIZES = {
   S: { cpu: 2, cap: 200, cost: 40 },
@@ -82,7 +83,14 @@ export const COMPONENTS = {
   web: {
     role: 'server', sized: true, base: T.web, unit: 'req/s', alone: { missing: ['db', 'shards'], capFactor: 0.5, base: T.web + T.db }, files: { per: T.file / T.web, base: T.file },
     jobs: { per: 2000, base: T.job }, // a web server of a size does as many jobs as a worker of that size
-    stateful: true, choices: { scaling: { options: { fixed: {}, auto: { auto: true } }, default: 'fixed' } },
+    stateful: true,
+    choices: {
+      scaling: { options: { fixed: {}, auto: { auto: true } }, default: 'fixed' },
+      // A URL shortener's settings (see links.js); levels that don't list them keep the defaults, which change nothing.
+      redirect: { options: { 301: { permanent: true }, 302: {} }, default: '302' },
+      code: { options: { base62: {}, hash: {}, bloom: {} }, default: 'base62' },
+      limit: { options: { none: {}, account: { limit: true } }, default: 'none' },
+    },
   },
   session: { role: 'server', cap: 10000, base: T.nosqlLookup, cost: 150, unit: 'lookups/s', store: true, managed: true },
   queue: { role: 'server', cap: 10000, base: T.publish, cost: 50, unit: 'messages/s', queue: true, managed: true },
@@ -273,6 +281,13 @@ export const isGeo = (dns) => !!dns && !!(COMPONENTS[dns.type].choices || {}).ro
 export const replicates = (a, b) => a.type === b.type && !!(COMPONENTS[a.type] || {}).syncs && S.edges.some(e => e.from === a.id && e.to === b.id);
 export const isSticky = (n) => { const c = n && COMPONENTS[n.type]; return !!(c && c.algos && (c.algos[n.algo] || c.algos[c.defaultAlgo]).sticky); };
 /** True when the server runs as an autoscaled group. */
+/** A URL shortener's settings on its web server: 301 redirects, a per-account limit on new links, how codes are made. */
+export function linkSettingsOf(n) {
+  const ch = COMPONENTS[n.type].choices;
+  return { permanent: !!ch.redirect.options[choiceOf(n, 'redirect')].permanent, limit: !!ch.limit.options[choiceOf(n, 'limit')].limit, code: choiceOf(n, 'code') };
+}
+/** Database queries one new link costs the server's database (1 except for a URL shortener's hashed codes). */
+export const createQueries = (n) => { const ch = (COMPONENTS[n.type] || {}).choices; return ch && ch.code ? CREATE_QUERIES[choiceOf(n, 'code')] : 1; };
 export const scales = (n) => { const c = COMPONENTS[n.type] || {}; return !!(c.choices && c.choices.scaling && c.choices.scaling.options[choiceOf(n, 'scaling')].auto); };
 /** True when the mission's pages carry a session (a login and a cart). */
 export const sessionsOn = () => !!MISSIONS[S.mission].sessions;
