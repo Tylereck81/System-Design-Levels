@@ -3,6 +3,7 @@ import { S, byId, WORKLOAD, MISSIONS } from '../state.js';
 import { serverNames, keyShares, movedShare } from './hashring.js';
 import { idOutcome } from './ids.js';
 import { CREATE_QUERIES } from './links.js';
+import { downloaderRate, THREADS, PAGE_MS } from './crawl.js';
 
 export const SIZES = {
   S: { cpu: 2, cap: 200, cost: 40 },
@@ -76,7 +77,8 @@ export const T = { rtt: 40, web: 20, db: 10, dc: 0.5, dns: 5, nosqlLookup: 3, no
 // Failure mode for every server: when down it serves nothing; its share moves to healthy peers,
 // and with no healthy peer every request sent to it fails.
 export const COMPONENTS = {
-  users: { role: 'client' },
+  // queues: a web crawler's URL frontier (see crawl.js): one FIFO queue, or a queue per host. Other levels ignore it.
+  users: { role: 'client', choices: { queues: { options: { fifo: {}, host: { perHost: true } }, default: 'fifo' } } },
   dns: { role: 'resolver', cost: T.dns, choices: { routing: { options: { rr: {}, geo: { geo: true } }, default: 'rr' } } },
   lb: { role: 'server', cap: 5000, base: T.lb, cost: 20, unit: 'req/s', routing: 'standby', forwards: true,
     algos: { rr: { split: 'even' }, wrr: { split: 'capacity' }, lc: { split: 'capacity' }, sticky: { split: 'even', sticky: true } }, defaultAlgo: 'rr' },
@@ -146,6 +148,24 @@ export const COMPONENTS = {
       clock: { options: { keep: {}, wait: { wait: true } }, default: 'keep' },
     },
   },
+  // A web crawler (see crawl.js). download: fetches pages, `count` machines; its DNS lookups go one at a time unless
+  //   it keeps a DNS cache. parse: checks each page and extracts its links; with dedup it stores only new content, and
+  //   with a URL filter it drops links deeper or longer than a limit. The content storage keeps the pages.
+  downloader: {
+    role: 'server', cap: THREADS * 1000 / PAGE_MS, base: PAGE_MS, cost: 200, unit: 'pages/s', crawl: 'download',
+    choices: {
+      count: { options: { 1: { count: 1 }, 2: { count: 2 }, 4: { count: 4 }, 5: { count: 5 }, 6: { count: 6 }, 8: { count: 8 } }, default: '4' },
+      dns: { options: { lookup: {}, cache: { cache: true } }, default: 'lookup' },
+    },
+  },
+  parser: {
+    role: 'server', cap: 2000, base: 5, cost: 150, unit: 'pages/s', crawl: 'parse',
+    choices: {
+      dedup: { options: { off: {}, on: { on: true } }, default: 'off' },
+      filter: { options: { off: {}, on: { on: true } }, default: 'off' },
+    },
+  },
+  contentstore: { role: 'server', cap: 5000, base: 10, cost: 300, unit: 'pages/s', managed: true },
   counter: { role: 'server', cap: 50000, base: T.cache, cost: 60, unit: 'ops/s', store: true, managed: true },
   nosql: { role: 'server', cap: 20000, base: T.nosqlLookup, cost: 200, unit: 'lookups/s', offload: true, managed: true },
   // A whole data center: load balancers, autoscaled web servers, caches, databases and a session store.
@@ -210,6 +230,16 @@ export function idSettingOf(n) {
 }
 /** True when the ID generator stops if one machine fails: one server, for every method but UUIDs. */
 export const idSpof = (n) => idOutcome(idSettingOf(n)).spof;
+/** A crawler downloader's machines and pages a second each, given whether the DNS provider is slow. */
+export function downloaderOf(n, slowDns = false) {
+  const ch = COMPONENTS[n.type].choices, count = ch.count.options[choiceOf(n, 'count')].count, dnsCache = !!ch.dns.options[choiceOf(n, 'dns')].cache;
+  return { count, dnsCache, per: downloaderRate({ dnsCache }, { slowDns }) };
+}
+/** A crawler's settings: per-host queues on its frontier (`users`), and its parser's duplicate check and URL filter. */
+export function crawlSettingsOf(users, parser) {
+  const on = (key) => !!parser && !!COMPONENTS[parser.type].choices[key].options[choiceOf(parser, key)].on;
+  return { perHost: !!users && choiceOf(users, 'queues') === 'host', dedup: on('dedup'), filter: on('filter') };
+}
 export const isClustered = (n) => !!(COMPONENTS[n.type] || {}).clustered;
 /** Servers in a cache cluster. */
 export const clusterSize = (n) => COMPONENTS[n.type].choices.count.options[choiceOf(n, 'count')].count;
@@ -344,6 +374,7 @@ export function costOf(n, work = 0) {
   if (c.sharded) return n.size ? sizesOf(n.type)[n.size].cost * shardCount(n) : 0;
   if (c.clustered) return n.size ? sizesOf(n.type)[n.size].cost * clusterSize(n) : 0;
   if (c.quorum) return c.cost * quorumOf(n).N;
+  if (c.crawl === 'download') return c.cost * downloaderOf(n).count;
   if (c.ids) { const id = idSettingOf(n); return id.method === 'uuid' ? 0 : c.cost * id.servers; }
   if (c.sized && scales(n)) { const k = dayCopies(work, serverSpec(n).cap); return Math.round(sizesOf(n.type)[n.size].cost * k.reduce((a, b) => a + b, 0) / k.length); }
   if (c.sized) return n.size ? sizesOf(n.type)[n.size].cost * countOf(n) : 0;

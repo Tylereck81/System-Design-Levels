@@ -186,6 +186,8 @@ export function paintInspectorLive() {
     + (st.limiter && st.waitMs > 0 ? `<div class="wide"><b>${(st.waitMs / 1000).toFixed(1)} s</b><span>a real request waits in the queue, on average</span></div>` : '')
     + (st.kv ? `<div class="wide"><b>${st.kv.readMs} ms · ${st.kv.writeMs} ms</b><span>a read waits for ${st.kv.R} of ${st.kv.N} replicas, a write for ${st.kv.W}</span></div><div class="wide"><b${st.kv.stale > 0 ? ' style="color:var(--warn)"' : ''}>${(100 * st.kv.stale).toFixed(1)}%</b><span>of reads return an old value</span></div>` : '')
     + (st.kv && st.kv.failed > 0 ? `<div class="wide"><b style="color:var(--bad)">${(100 * st.kv.failed).toFixed(0)}%</b><span>of requests fail: no quorum on their side of the partition</span></div>` : '')
+    + (st.crawl ? `<div class="wide"><b>${st.crawl.count} × ${fmt(st.crawl.per)}</b><span>machines × pages/s each${st.crawl.dnsCache ? ', with a DNS cache' : ': DNS lookups one at a time'}</span></div>` : '')
+    + (st.crawl && st.crawl.refused > 0 ? `<div class="wide"><b style="color:var(--bad)">${Math.round(100 * st.crawl.refused)}%</b><span>of downloads refused by a flooded host</span></div>` : '')
     + (st.shards ? `<div class="wide"><b>${st.shards.map(x => fmt(x.load)).join(' · ')}</b><span>queries/s on each shard; the busiest sets the % busy</span></div>` : '')
     + (run.queues[n.id] != null ? `<div class="wide"><b>${fmt(run.queues[n.id])} jobs</b><span>waiting for a worker</span></div>` : '')
     + (st.uploads ? `<div class="wide"><b>${st.jobMs != null ? (st.jobMs / 1000).toFixed(0) + ' s' : 'published'}</b><span>per upload${st.jobMs != null ? ', processed here before it answers' : ' to the queue, then answered'}</span></div>` : '')

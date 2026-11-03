@@ -191,7 +191,7 @@ export default {
 
   quiz: {
     passScore: 8,
-    passText: 'Level 14 is done. Level 15, Web crawler, is next. It isn\'t built yet.',
+    passText: 'Level 14 is done. Level 15, Web crawler, is next: open it from the level menu at the top.',
     failText: level10.quiz.failText,
     questions: [
       { q: 'Which redirect lets you count every click?', o: ['301 Moved Permanently', '302 Found', '200 OK with the page', '404 Not Found'], a: 1, e: 'With 302 the browser asks your servers on every click, so you can count each one. With 301 it keeps the redirect and skips you next time: less load, fewer counted clicks.', r: '301 vs 302' },
