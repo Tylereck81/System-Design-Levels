@@ -217,7 +217,7 @@ export default {
 
   quiz: {
     passScore: 8,
-    passText: 'Level 13 is done. Level 14, URL shortener, is next. It isn\'t built yet.',
+    passText: 'Level 13 is done. Level 14, URL shortener, is next: open it from the level menu at the top.',
     failText: level10.quiz.failText,
     questions: [
       { q: 'Why isn\'t one database\'s auto_increment enough for IDs at scale?', o: ['It needs 128 bits per ID', 'Its IDs are not numbers', 'Its numbers can repeat after every restart', 'One server caps the rate and can fail'], a: 3, e: 'One database hands out every ID, so its speed caps the whole system and when it fails nothing can be saved. Spread the counter over several databases, and their numbers must be kept apart.', r: 'Why one counter is not enough' },

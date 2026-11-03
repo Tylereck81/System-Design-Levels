@@ -2,8 +2,9 @@
 import { MISSIONS, TXT, PALETTE, S, run, byId, WORKLOAD } from '../state.js';
 import { quorumOutcome } from './quorum.js';
 import { idOutcome } from './ids.js';
-import { COMPONENTS, T, roleOf, isServer, isReplica, isCache, isEdge, isStore, isSticky, scales, sessionsOn, holdsSessions, copiesFor, isLocated, isFar, isGeo, replicates, isQueue, isOffload, isQuorum, quorumOf, isIdGen, idSettingOf, idSpof, isClustered, clusterSize, clusterLayout, clusterHit, shardShares, keyedShards, limiterRule, hitRate, edgeHit, fallsBack, staleSecs, costOf, serverSpec, splitRule } from './components.js';
-import { activeExps, downIds, trafficFactor, uploadFactor, dayShift, botEdge, resizeBy, partitioned, clockBack, textOf, PEAK } from './experiments.js';
+import { linkTraffic } from './links.js';
+import { COMPONENTS, T, roleOf, isServer, isReplica, isCache, isEdge, isStore, isSticky, scales, sessionsOn, holdsSessions, copiesFor, isLocated, isFar, isGeo, replicates, isQueue, isOffload, isQuorum, quorumOf, isIdGen, idSettingOf, idSpof, linkSettingsOf, createQueries, isClustered, clusterSize, clusterLayout, clusterHit, shardShares, keyedShards, limiterRule, hitRate, edgeHit, fallsBack, staleSecs, costOf, serverSpec, splitRule } from './components.js';
+import { activeExps, downIds, trafficFactor, uploadFactor, dayShift, botEdge, resizeBy, partitioned, clockBack, viralClicks, bulkCreates, textOf, PEAK } from './experiments.js';
 
 export { SIZES, T } from './components.js';
 
@@ -70,7 +71,8 @@ export function graph() {
   // An autoscaled group pays for the servers it runs each hour, so its cost needs its load at the peak (peak).
   if (S.nodes.some(scales)) {
     const scratch = { node: {}, issue: null, staleSecs: 0, fileStaleSecs: 0, noDataPct: 0, lagWrites: 0, queues: {} };
-    loadPhase(g, MISSIONS[S.mission].qps, 1, new Set(), scratch, null, null, MISSIONS[S.mission].uploads || 0);
+    linkNow = linkAt(MISSIONS[S.mission].qps, true); // the monthly cost ignores experiments
+    loadPhase(g, linkNow ? linkNow.qps : MISSIONS[S.mission].qps, 1, new Set(), scratch, null, null, MISSIONS[S.mission].uploads || 0);
     for (const n of S.nodes.filter(scales)) { const w = (scratch.node[n.id] || {}).load || 0; g.peak.set(n.id, w); g.cost += costOf(n, w); }
   }
   return g;
@@ -119,7 +121,19 @@ function share(targets, flow, sender) {
   }
   return targets.map(c => [c, flow / targets.length]);
 }
-const writeShare = () => MISSIONS[S.mission].writes || 0;
+// A URL shortener's traffic (see links.js), set at the start of each model() call; null in other levels.
+let linkNow = null;
+/**
+ * A URL shortener's traffic for `q` requests a second: the clicks and new links that reach its servers, by its web
+ * server's settings, with the running experiments' viral clicks and bulk links unless `calm`. Null in other levels.
+ */
+function linkAt(q, calm = false) {
+  const web = WORKLOAD.repeatClicks != null && S.nodes.find(n => n.type === 'web');
+  if (!web) return null;
+  const set = linkSettingsOf(web);
+  return { ...linkTraffic(set, { qps: q, writes: MISSIONS[S.mission].writes || 0, repeat: WORKLOAD.repeatClicks, viral: calm ? 0 : viralClicks(), bulk: calm ? 0 : bulkCreates() }), code: set.code };
+}
+const writeShare = () => (linkNow ? linkNow.writes : MISSIONS[S.mission].writes || 0);
 const fileShare = () => MISSIONS[S.mission].files || 0; // share of requests that are static files (the rest are pages)
 const farShare = () => MISSIONS[S.mission].far || 0;    // share of users far from the data center
 const uploadShare = () => (MISSIONS[S.mission].uploads || 0) * uploadFactor(); // share of pages that are uploads
@@ -186,7 +200,8 @@ function cacheAside(caches, flow, down, w) {
   const each = flow * (1 - w) / caches.length, out = { parts: [], writes: flow * w, misses: 0, bypass: 0 };
   for (const c of caches) {
     if (down.has(c.id)) { out.bypass += each; continue; }
-    const h = isClustered(c) ? clusterReadHit(c) : hitRate(c, caches.length);
+    const h0 = isClustered(c) ? clusterReadHit(c) : hitRate(c, caches.length);
+    const h = linkNow ? h0 + (1 - h0) * linkNow.hot : h0; // clicks on a viral link always find it cached
     out.parts.push([c, each, h]);
     out.misses += each * (1 - h);
   }
@@ -307,12 +322,16 @@ function loadPhase(g, qps, sizing, down, r, day, backlog, U) {
       const a = cacheAside(cs.caches, on, down, writeShare());
       reads += on * (1 - writeShare());
       for (const [c, f, h] of a.parts) { add(load, c, f); hitOf.set(c.id, h); hits += f * h; }
-      for (const grp of cs.others) { send(grp, a.writes, 1); send(grp, a.misses + a.bypass, 0); }
+      for (const grp of cs.others) { send(grp, a.writes * createQueries(n), 1); send(grp, a.misses + a.bypass, 0); }
     } else {
       // A store that takes the non-relational queries gets that share; the database gets the rest.
       const og = offloadGroup(n), R = og ? nonRelShare() : 0;
       if (og) send(og, on * R);
-      for (const grp of depGroups(n)) send(grp, R ? on * (1 - R) : on);
+      const k = createQueries(n), w = writeShare();
+      for (const grp of depGroups(n)) {
+        if (k === 1) send(grp, R ? on * (1 - R) : on);
+        else { send(grp, on * (1 - w), 0); send(grp, on * w * k, 1); } // each new link costs k queries
+      }
     }
     // Each healthy replica applies every write the primary served.
     const wrote = (writes.get(n.id) || 0) * s / L;
@@ -425,9 +444,12 @@ function loadPhase(g, qps, sizing, down, r, day, backlog, U) {
 export function model({ peak = false } = {}) {
   const g = graph();
   const M = MISSIONS[S.mission];
-  const base = M.qps * trafficFactor();
-  const qps = peak ? base * PEAK : base * (1 + 0.02 * Math.sin(run.t * 1.7) + 0.01 * Math.sin(run.t * 4.1));
-  const r = { mission: S.mission, qps, base, servedPct: 0, latency: null, cost: g.cost, spof: 0, node: {}, issue: null, g, down: downIds(), bottleneck: null, hitRate: null, staleSecs: 0, fileStaleSecs: 0, farFileMs: null, lostPct: 0, farPageMs: null, noDataPct: 0, lagWrites: 0, queues: {}, uploadMs: null, jobsIn: 0, jobsOut: 0, backlog: 0, alert: null, maxShardUtil: null, shardCount: 0, ringMoved: null, ringSpread: null, kvStalePct: null, kvReadMs: null, kvFailPct: null, kvQuorum: null, idDupPct: null, idBits: null, idNumeric: null, idOrdered: null, idSpof: null, idMade: null, keyQuota: null, botThrough: 0, bots: botRate() };
+  let base = M.qps * trafficFactor();
+  let qps = peak ? base * PEAK : base * (1 + 0.02 * Math.sin(run.t * 1.7) + 0.01 * Math.sin(run.t * 4.1));
+  // A URL shortener: the clicks and new links that reach its servers.
+  linkNow = linkAt(qps);
+  if (linkNow) { base = linkAt(base).qps; qps = linkNow.qps; }
+  const r = { mission: S.mission, qps, base, link: linkNow, servedPct: 0, latency: null, cost: g.cost, spof: 0, node: {}, issue: null, g, down: downIds(), bottleneck: null, hitRate: null, staleSecs: 0, fileStaleSecs: 0, farFileMs: null, lostPct: 0, farPageMs: null, noDataPct: 0, lagWrites: 0, queues: {}, uploadMs: null, jobsIn: 0, jobsOut: 0, backlog: 0, alert: null, maxShardUtil: null, shardCount: 0, ringMoved: null, ringSpread: null, kvStalePct: null, kvReadMs: null, kvFailPct: null, kvQuorum: null, idDupPct: null, idBits: null, idNumeric: null, idOrdered: null, idSpof: null, idMade: null, keyQuota: null, botThrough: 0, bots: botRate() };
   if (!g.entry.length) { r.issue = TXT.noWeb; return r; }
   if (g.needsDns && !g.hasDNS) { r.issue = TXT.noDns; return r; }
   r.spof = countSpofs(g);

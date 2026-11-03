@@ -15,4 +15,5 @@ export const LEVELS = [
   { id: 11, title: 'Consistent hashing', load: () => import('./level-11.js') },
   { id: 12, title: 'Distributed key-value store', load: () => import('./level-12.js') },
   { id: 13, title: 'Unique ID generator', load: () => import('./level-13.js') },
+  { id: 14, title: 'URL shortener', load: () => import('./level-14.js') },
 ];
