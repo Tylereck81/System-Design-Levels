@@ -75,6 +75,8 @@ test.describe('Mock interview · the timer', () => {
   test('four steps with their times; a step over its time turns amber', async ({ page }) => {
     await page.clock.install();
     await openMock(page, 14);
+    // Stop the page's clock, so only fastForward moves time, however slowly the browser clicks.
+    await page.clock.pauseAt(new Date(await page.evaluate(() => Date.now() + 1000)));
     await expect(steps(page)).toHaveCount(4);
     await expect(steps(page).nth(0)).toContainText('Scope it');
     await expect(steps(page).nth(0)).toContainText('5–8 min');
