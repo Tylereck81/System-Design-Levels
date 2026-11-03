@@ -194,7 +194,7 @@ export default {
 
   quiz: {
     passScore: 8,
-    passText: 'Level 18 is done. Level 19, Search autocomplete, is next. It isn\'t built yet.',
+    passText: 'Level 18 is done. Level 19, Search autocomplete, is next: open it from the level menu at the top.',
     failText: level10.quiz.failText,
     questions: [
       { q: 'Why is WebSocket the usual choice for receiving chat messages?', o: ['It needs no server memory for each open connection', 'The server can push over one open connection', 'It works only on mobile', 'It replaces the database'], a: 1, e: 'HTTP is started by the client. WebSocket upgrades one HTTP connection into a persistent two-way one, so the server sends each message as it arrives.', r: 'WebSocket' },
