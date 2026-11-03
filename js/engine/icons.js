@@ -3,6 +3,7 @@ import { svgEl } from '../dom.js';
 
 export function drawIcon(type, parent, x, y, scale) {
   const g = svgEl('g', { transform: `translate(${x} ${y})` + (scale ? ` scale(${scale})` : '') }, parent);
+  type = { notifier: 'web', nqueue: 'queue', nworker: 'worker' }[type] || type; // drawn like the parts they are
   if (type === 'users') {
     svgEl('rect', { x: 0, y: 4, width: 17, height: 12, rx: 2, class: 'ic-stroke' }, g);
     svgEl('path', { d: 'M-2 19h21', class: 'ic-stroke' }, g);
@@ -97,6 +98,10 @@ export function drawIcon(type, parent, x, y, scale) {
   } else if (type === 'contentstore') {
     // Stacked disks: pages kept on disk.
     for (const y of [3, 10, 17]) svgEl('rect', { x: 2, y, width: 23, height: 5, rx: 2, class: 'ic-data' }, g);
+  } else if (type === 'provider') {
+    // An envelope: a message handed to an outside service.
+    svgEl('rect', { x: 1, y: 4, width: 25, height: 17, rx: 2, class: 'ic-stroke' }, g);
+    svgEl('path', { d: 'M2 5.5l11.5 9 11.5-9', class: 'ic-stroke' }, g);
   } else if (type === 'db') {
     svgEl('path', { d: 'M3.5 5v14a9.5 4 0 0 0 19 0V5z', class: 'ic-data' }, g);
     svgEl('ellipse', { cx: 13, cy: 5, rx: 9.5, ry: 4, class: 'ic-data-top' }, g);
