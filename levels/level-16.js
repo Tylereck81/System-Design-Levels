@@ -201,7 +201,7 @@ export default {
 
   quiz: {
     passScore: 8,
-    passText: 'Level 16 is done. Level 17, News feed, is next. It isn\'t built yet.',
+    passText: 'Level 16 is done. Level 17, News feed, is next: open it from the level menu at the top.',
     failText: level10.quiz.failText,
     questions: [
       { q: 'Why give each channel its own queue?', o: ['Queues are cheaper that way', 'A provider outage only stalls its own queue', 'Each worker then needs fewer machines behind it', 'Messages arrive in order'], a: 1, e: 'With one shared queue, sends to a dead SMS provider hold up the workers for everyone. A queue per channel keeps push and email moving.', r: 'High-level design' },

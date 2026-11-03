@@ -18,4 +18,5 @@ export const LEVELS = [
   { id: 14, title: 'URL shortener', load: () => import('./level-14.js') },
   { id: 15, title: 'Web crawler', load: () => import('./level-15.js') },
   { id: 16, title: 'Notification system', load: () => import('./level-16.js') },
+  { id: 17, title: 'News feed', load: () => import('./level-17.js') },
 ];
