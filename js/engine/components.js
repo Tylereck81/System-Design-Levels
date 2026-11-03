@@ -4,6 +4,7 @@ import { serverNames, keyShares, movedShare } from './hashring.js';
 import { idOutcome } from './ids.js';
 import { CREATE_QUERIES } from './links.js';
 import { downloaderRate, THREADS, PAGE_MS } from './crawl.js';
+import { SEND_MS } from './notify.js';
 
 export const SIZES = {
   S: { cpu: 2, cap: 200, cost: 40 },
@@ -165,6 +166,23 @@ export const COMPONENTS = {
       filter: { options: { off: {}, on: { on: true } }, default: 'off' },
     },
   },
+  // A notification system (see notify.js). The notification server can check opt-outs and limit each user's
+  //   notifications; the message queues are one shared queue or one per channel; the workers send to the providers,
+  //   with a notification log to retry from and a duplicate check.
+  notifier: {
+    role: 'server', cap: 2000, base: 5, cost: 150, unit: 'requests/s',
+    choices: { check: { options: { off: {}, on: { on: true } }, default: 'off' }, limit: { options: { off: {}, on: { on: true } }, default: 'off' } },
+  },
+  nqueue: { role: 'server', cap: 100000, base: 2, cost: 50, unit: 'messages/s', managed: true, choices: { layout: { options: { one: {}, channel: { perChannel: true } }, default: 'one' } } },
+  nworker: {
+    role: 'server', cap: 1000 / SEND_MS, base: SEND_MS, cost: 90, unit: 'notifications/s', notify: true,
+    choices: {
+      count: { options: { 2: { count: 2 }, 3: { count: 3 }, 4: { count: 4 }, 5: { count: 5 }, 6: { count: 6 }, 8: { count: 8 } }, default: '4' },
+      log: { options: { off: {}, on: { on: true } }, default: 'off' },
+      dedupe: { options: { off: {}, on: { on: true } }, default: 'off' },
+    },
+  },
+  provider: { role: 'server', cap: 100000, base: 50, cost: 0, unit: 'notifications/s', managed: true },
   contentstore: { role: 'server', cap: 5000, base: 10, cost: 300, unit: 'pages/s', managed: true },
   counter: { role: 'server', cap: 50000, base: T.cache, cost: 60, unit: 'ops/s', store: true, managed: true },
   nosql: { role: 'server', cap: 20000, base: T.nosqlLookup, cost: 200, unit: 'lookups/s', offload: true, managed: true },
@@ -239,6 +257,16 @@ export function downloaderOf(n, slowDns = false) {
 export function crawlSettingsOf(users, parser) {
   const on = (key) => !!parser && !!COMPONENTS[parser.type].choices[key].options[choiceOf(parser, key)].on;
   return { perHost: !!users && choiceOf(users, 'queues') === 'host', dedup: on('dedup'), filter: on('filter') };
+}
+/** A notification system's settings, from its notification server, message queues and workers (any may be missing). */
+export function notifySettingsOf(notifier, queue, worker) {
+  const on = (n, key) => !!n && !!COMPONENTS[n.type].choices[key].options[choiceOf(n, key)].on;
+  return {
+    check: on(notifier, 'check'), limit: on(notifier, 'limit'),
+    perChannel: !!queue && !!COMPONENTS[queue.type].choices.layout.options[choiceOf(queue, 'layout')].perChannel,
+    workers: worker ? COMPONENTS[worker.type].choices.count.options[choiceOf(worker, 'count')].count : 0,
+    retry: on(worker, 'log'), dedupe: on(worker, 'dedupe'),
+  };
 }
 export const isClustered = (n) => !!(COMPONENTS[n.type] || {}).clustered;
 /** Servers in a cache cluster. */
@@ -374,6 +402,7 @@ export function costOf(n, work = 0) {
   if (c.sharded) return n.size ? sizesOf(n.type)[n.size].cost * shardCount(n) : 0;
   if (c.clustered) return n.size ? sizesOf(n.type)[n.size].cost * clusterSize(n) : 0;
   if (c.quorum) return c.cost * quorumOf(n).N;
+  if (c.notify) return c.cost * notifySettingsOf(null, null, n).workers;
   if (c.crawl === 'download') return c.cost * downloaderOf(n).count;
   if (c.ids) { const id = idSettingOf(n); return id.method === 'uuid' ? 0 : c.cost * id.servers; }
   if (c.sized && scales(n)) { const k = dayCopies(work, serverSpec(n).cap); return Math.round(sizesOf(n.type)[n.size].cost * k.reduce((a, b) => a + b, 0) / k.length); }
