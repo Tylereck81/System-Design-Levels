@@ -6,6 +6,7 @@ import { CREATE_QUERIES } from './links.js';
 import { downloaderRate, THREADS, PAGE_MS } from './crawl.js';
 import { SEND_MS } from './notify.js';
 import { feedOutcome } from './feed.js';
+import { API_CAP, SHARD_CAP } from './typeahead.js';
 
 export const SIZES = {
   S: { cpu: 2, cap: 200, cost: 40 },
@@ -208,6 +209,25 @@ export const COMPONENTS = {
     },
   },
   msgstore: { role: 'server', cap: 1000000, base: 3, cost: 500, unit: 'messages/s', managed: true, choices: { offline: { options: { wait: {}, push: { on: true } }, default: 'wait' } } },
+  // Search autocomplete (see typeahead.js). API servers answer keystroke requests and can let browsers cache them;
+  //   the trie cache finds the top 5 for a prefix (a table query, a trie walk, or the 5 kept per node), split into
+  //   shards by letter range or by a shard map, rebuilt from the logs weekly, daily or hourly.
+  tapi: {
+    role: 'server', cap: API_CAP, base: 5, cost: 200, unit: 'requests/s', typeahead: 'api',
+    choices: {
+      count: { options: { 2: { count: 2 }, 3: { count: 3 }, 4: { count: 4 }, 5: { count: 5 }, 6: { count: 6 }, 8: { count: 8 } }, default: '4' },
+      browser: { options: { off: {}, on: { on: true } }, default: 'off' },
+    },
+  },
+  trie: {
+    role: 'server', cap: SHARD_CAP, base: 1, cost: 300, unit: 'lookups/s', typeahead: 'trie',
+    choices: {
+      method: { options: { table: {}, trie: {}, topk: {} }, default: 'table' },
+      shards: { options: { 1: { count: 1 }, 2: { count: 2 }, 3: { count: 3 }, 4: { count: 4 } }, default: '3' },
+      split: { options: { letter: {}, map: { on: true } }, default: 'letter' },
+      rebuild: { options: { weekly: { cost: 100 }, daily: { cost: 200 }, hourly: { cost: 500 } }, default: 'weekly' },
+    },
+  },
   provider: { role: 'server', cap: 100000, base: 50, cost: 0, unit: 'notifications/s', managed: true },
   contentstore: { role: 'server', cap: 5000, base: 10, cost: 300, unit: 'pages/s', managed: true },
   counter: { role: 'server', cap: 50000, base: T.cache, cost: 60, unit: 'ops/s', store: true, managed: true },
@@ -310,6 +330,15 @@ export function chatSettingsOf(srv, store) {
   return {
     servers: srv ? COMPONENTS[srv.type].choices.count.options[choiceOf(srv, 'count')].count : 0,
     protocol: srv ? choiceOf(srv, 'protocol') : 'poll', discovery: on(srv, 'reconnect'), heartbeat: on(srv, 'presence'), push: on(store, 'offline'),
+  };
+}
+/** Search autocomplete's settings, from its API servers and trie cache (either may be missing). */
+export function typeaheadSettingsOf(api, trie) {
+  const ch = (n, key) => COMPONENTS[n.type].choices[key].options[choiceOf(n, key)];
+  return {
+    apis: api ? ch(api, 'count').count : 0, browser: !!api && !!ch(api, 'browser').on,
+    method: trie ? choiceOf(trie, 'method') : 'table', shards: trie ? ch(trie, 'shards').count : 1,
+    map: !!trie && !!ch(trie, 'split').on, rebuild: trie ? choiceOf(trie, 'rebuild') : 'weekly',
   };
 }
 export const isClustered = (n) => !!(COMPONENTS[n.type] || {}).clustered;
@@ -446,6 +475,8 @@ export function costOf(n, work = 0) {
   if (c.sharded) return n.size ? sizesOf(n.type)[n.size].cost * shardCount(n) : 0;
   if (c.clustered) return n.size ? sizesOf(n.type)[n.size].cost * clusterSize(n) : 0;
   if (c.quorum) return c.cost * quorumOf(n).N;
+  if (c.typeahead === 'api') return c.cost * typeaheadSettingsOf(n, null).apis;
+  if (c.typeahead === 'trie') return c.cost * typeaheadSettingsOf(null, n).shards + COMPONENTS[n.type].choices.rebuild.options[choiceOf(n, 'rebuild')].cost;
   if (c.chat) return c.cost * chatSettingsOf(n, null).servers;
   if (c.feed) return c.cost + 100 * feedSettingsOf(n, null).workers;
   if (c.feedCache) return Math.round(2 * feedCacheGB(n));
