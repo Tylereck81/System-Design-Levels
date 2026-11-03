@@ -1,16 +1,24 @@
 // Page shell: fills in the level's lesson, header and headings, and runs the level picker.
 import { $, el } from '../dom.js';
 import { level, entry } from '../level.js';
-import { LEVELS, TOTAL_LEVELS } from '../../levels/index.js';
+import { LEVELS, TOTAL_LEVELS, MOCK } from '../../levels/index.js';
 import { routeHash } from '../route.js';
 import { QUIZ, PASS } from '../state.js';
 
 export function renderShell() {
   $('view-lesson').insertAdjacentHTML('afterbegin', level.lessonHtml);
-  $('lvlChip').textContent = `Level ${entry.id} / ${TOTAL_LEVELS}`;
-  $('lvlName').textContent = entry.title;
-  $('buildTitle').textContent = `Build: Level ${entry.id} missions`;
-  $('quizLabel').textContent = `Level ${entry.id} quiz · ${QUIZ.length} questions · ${PASS} to pass`;
+  if (level.interview) {
+    $('lvlChip').textContent = 'Mock interview';
+    $('lvlName').textContent = level.interview.title;
+    $('buildTitle').textContent = `Mock interview: ${level.interview.title}`;
+    $('tab-quiz').hidden = true;
+    $('startBuild').firstChild.textContent = 'Start the interview ';
+  } else {
+    $('lvlChip').textContent = `Level ${entry.id} / ${TOTAL_LEVELS}`;
+    $('lvlName').textContent = entry.title;
+    $('buildTitle').textContent = `Build: Level ${entry.id} missions`;
+    $('quizLabel').textContent = `Level ${entry.id} quiz · ${QUIZ.length} questions · ${PASS} to pass`;
+  }
   renderPicker();
 }
 
@@ -26,6 +34,11 @@ function renderPicker() {
     a.addEventListener('click', () => setOpen(false));
     list.appendChild(el('li')).appendChild(a);
   }
+  const a = el('a'); a.href = routeHash(MOCK.id, 'lesson');
+  if (entry.id === MOCK.id) a.setAttribute('aria-current', 'page');
+  a.append(el('span', 'chip', 'Mock'), el('span', null, 'Mock interview: a timed problem'));
+  a.addEventListener('click', () => setOpen(false));
+  list.appendChild(el('li')).appendChild(a);
 }
 
 function setOpen(open, focusButton) {

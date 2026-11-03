@@ -27,6 +27,20 @@ export default {
   targets,
   workload: { chat: true },
 
+  // The mock interview's brief and self-check list for this problem (see mock.js).
+  mock: {
+    title: 'Chat system',
+    brief: 'Design a chat app: one-on-one and group chats (up to 150 people), text only, several devices per account, online status, and history kept forever. 40 million daily users.',
+    checklist: [
+      'Chose WebSocket over polling and long polling, and said why',
+      'Separated stateless API servers from stateful chat servers',
+      'Used service discovery to pick, and replace, a chat server',
+      'Stored messages in a key-value store, with IDs that grow with time',
+      'Pushed notifications to offline recipients; synced each device by its last message ID',
+      'Used heartbeats for online status, and fetched big groups\' status on demand',
+    ],
+  },
+
   components: {
     users: {
       name: 'Users', sub: 'Chat on phone and laptop',

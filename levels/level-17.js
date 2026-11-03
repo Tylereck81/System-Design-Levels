@@ -32,6 +32,20 @@ export default {
   // The day's traffic curve (for the autoscaled web servers). feed: this level's news feed; surge: posts on New Year's Eve.
   workload: { day: level6.workload.day, feed: true, surge: SURGE },
 
+  // The mock interview's brief and self-check list for this problem (see mock.js).
+  mock: {
+    title: 'News feed',
+    brief: 'Design a news feed: people post text, photos and short videos, and see their friends\' posts, newest first. 15 million daily users, up to 3,000 friends each.',
+    checklist: [
+      'Separated publishing a post from building a feed, with an API for each',
+      'Compared fanout on write with fanout on read',
+      'Handled accounts with huge followings (the hybrid)',
+      'Kept only IDs in the feed cache, and estimated its size',
+      'Used a graph database for friends, and caches for posts and users',
+      'Served photos and videos from a CDN',
+    ],
+  },
+
   components: {
     users: {
       name: 'Users', sub: 'Post, scroll feeds',

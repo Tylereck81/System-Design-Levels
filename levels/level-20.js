@@ -25,6 +25,20 @@ export default {
   targets,
   workload: { video: true, growth: GROWTH },
 
+  // The mock interview's brief and self-check list for this problem (see mock.js).
+  mock: {
+    title: 'Video platform',
+    brief: 'Design a video platform: creators upload videos, mostly from phones, and viewers stream them on any device. 4 million daily users watch 6 videos each; 10% upload one 250 MB video a day.',
+    checklist: [
+      'Estimated storage (100 TB a day) and the CDN bill (about $120,000 a day)',
+      'Drew the upload flow: storage, transcoding, encoded storage, CDN, and the metadata',
+      'Used pre-signed URLs and resumable chunked uploads',
+      'Transcoded with a graph of tasks, retrying failed ones',
+      'Streamed from the CDN with adaptive bitrate',
+      'Cut the CDN bill: only popular videos on the CDN',
+    ],
+  },
+
   components: {
     users: {
       name: 'Creators and viewers', sub: 'Upload and watch',

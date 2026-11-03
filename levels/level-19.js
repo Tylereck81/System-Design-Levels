@@ -27,6 +27,20 @@ export default {
   targets,
   workload: { typeahead: true },
 
+  // The mock interview's brief and self-check list for this problem (see mock.js).
+  mock: {
+    title: 'Search autocomplete',
+    brief: 'Design search autocomplete: as someone types, show the 5 most popular searches that start with what they\'ve typed, within 100 ms. 12 million daily users, English only.',
+    checklist: [
+      'Estimated requests a second: every keystroke is one (about 27,800, 55,600 at the peak)',
+      'Used a trie with the top 5 kept at every node',
+      'Split a query path from a data-gathering path: logs, aggregation, rebuilds',
+      'Let browsers cache suggestions',
+      'Sharded the trie by measured traffic, not equal letter ranges',
+      'Said how fresh suggestions must be, and filtered unwanted ones',
+    ],
+  },
+
   components: {
     users: {
       name: 'Users', sub: 'Type in a search box',
