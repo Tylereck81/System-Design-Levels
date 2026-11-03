@@ -195,6 +195,19 @@ export const COMPONENTS = {
     },
   },
   feedcache: { role: 'server', cap: 1000000, base: 1, cost: 0, unit: 'lookups/s', managed: true, feedCache: true, choices: { store: { options: { posts: {}, ids: { ids: true } }, default: 'posts' } } },
+  // A chat system (see chat.js). The chat servers hold users' connections (polling, long polling or WebSocket),
+  //   find a new server through service discovery when one dies, and track presence; the message store keeps every
+  //   message and can push a notification to offline recipients.
+  chatsrv: {
+    role: 'server', cap: 20000, base: 5, cost: 300, unit: 'messages/s', chat: true,
+    choices: {
+      count: { options: { 2: { count: 2 }, 3: { count: 3 }, 4: { count: 4 }, 5: { count: 5 }, 6: { count: 6 } }, default: '3' },
+      protocol: { options: { poll: {}, long: {}, ws: {} }, default: 'poll' },
+      reconnect: { options: { fixed: {}, discovery: { on: true } }, default: 'fixed' },
+      presence: { options: { disconnect: {}, heartbeat: { on: true } }, default: 'disconnect' },
+    },
+  },
+  msgstore: { role: 'server', cap: 1000000, base: 3, cost: 500, unit: 'messages/s', managed: true, choices: { offline: { options: { wait: {}, push: { on: true } }, default: 'wait' } } },
   provider: { role: 'server', cap: 100000, base: 50, cost: 0, unit: 'notifications/s', managed: true },
   contentstore: { role: 'server', cap: 5000, base: 10, cost: 300, unit: 'pages/s', managed: true },
   counter: { role: 'server', cap: 50000, base: T.cache, cost: 60, unit: 'ops/s', store: true, managed: true },
@@ -291,6 +304,14 @@ export function feedSettingsOf(svc, cache) {
 }
 /** GB the feed cache holds, given the feed service on the canvas (none when feeds are built at read time). */
 export const feedCacheGB = (cache) => feedOutcome(feedSettingsOf(S.nodes.find(n => COMPONENTS[n.type] && COMPONENTS[n.type].feed), cache), { reads: 0, posts: 0 }).cacheGB;
+/** A chat system's settings, from its chat servers and message store (either may be missing). */
+export function chatSettingsOf(srv, store) {
+  const on = (n, key) => !!n && !!COMPONENTS[n.type].choices[key].options[choiceOf(n, key)].on;
+  return {
+    servers: srv ? COMPONENTS[srv.type].choices.count.options[choiceOf(srv, 'count')].count : 0,
+    protocol: srv ? choiceOf(srv, 'protocol') : 'poll', discovery: on(srv, 'reconnect'), heartbeat: on(srv, 'presence'), push: on(store, 'offline'),
+  };
+}
 export const isClustered = (n) => !!(COMPONENTS[n.type] || {}).clustered;
 /** Servers in a cache cluster. */
 export const clusterSize = (n) => COMPONENTS[n.type].choices.count.options[choiceOf(n, 'count')].count;
@@ -425,6 +446,7 @@ export function costOf(n, work = 0) {
   if (c.sharded) return n.size ? sizesOf(n.type)[n.size].cost * shardCount(n) : 0;
   if (c.clustered) return n.size ? sizesOf(n.type)[n.size].cost * clusterSize(n) : 0;
   if (c.quorum) return c.cost * quorumOf(n).N;
+  if (c.chat) return c.cost * chatSettingsOf(n, null).servers;
   if (c.feed) return c.cost + 100 * feedSettingsOf(n, null).workers;
   if (c.feedCache) return Math.round(2 * feedCacheGB(n));
   if (c.notify) return c.cost * notifySettingsOf(null, null, n).workers;

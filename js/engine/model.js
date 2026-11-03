@@ -6,7 +6,8 @@ import { linkTraffic } from './links.js';
 import { crawlOutcome, DUP_SHARE } from './crawl.js';
 import { notifyOutcome } from './notify.js';
 import { feedOutcome } from './feed.js';
-import { COMPONENTS, T, roleOf, isServer, isReplica, isCache, isEdge, isStore, isSticky, scales, sessionsOn, holdsSessions, copiesFor, isLocated, isFar, isGeo, replicates, isQueue, isOffload, isQuorum, quorumOf, isIdGen, idSettingOf, idSpof, linkSettingsOf, createQueries, downloaderOf, crawlSettingsOf, notifySettingsOf, feedSettingsOf, isClustered, clusterSize, clusterLayout, clusterHit, shardShares, keyedShards, limiterRule, hitRate, edgeHit, fallsBack, staleSecs, costOf, serverSpec, splitRule } from './components.js';
+import { chatOutcome } from './chat.js';
+import { COMPONENTS, T, roleOf, isServer, isReplica, isCache, isEdge, isStore, isSticky, scales, sessionsOn, holdsSessions, copiesFor, isLocated, isFar, isGeo, replicates, isQueue, isOffload, isQuorum, quorumOf, isIdGen, idSettingOf, idSpof, linkSettingsOf, createQueries, downloaderOf, crawlSettingsOf, notifySettingsOf, feedSettingsOf, chatSettingsOf, isClustered, clusterSize, clusterLayout, clusterHit, shardShares, keyedShards, limiterRule, hitRate, edgeHit, fallsBack, staleSecs, costOf, serverSpec, splitRule } from './components.js';
 import { activeExps, downIds, trafficFactor, uploadFactor, dayShift, botEdge, resizeBy, partitioned, clockBack, viralClicks, bulkCreates, expFlag, textOf, PEAK } from './experiments.js';
 
 export { SIZES, T } from './components.js';
@@ -160,6 +161,14 @@ function feedAt(q) {
   const posts = q * w * (expFlag('postSurge') ? WORKLOAD.surge || 1 : 1);
   return { ...feedOutcome(set, { reads: q * (1 - w), posts, star: expFlag('star') }), ...set };
 }
+// A chat system's outcome (see chat.js), set at the start of each model() call; null in other levels.
+let chatNow = null;
+function chatAt(q) {
+  if (!WORKLOAD.chat) return null;
+  const find = (t) => S.nodes.find(n => n.type === t);
+  const set = chatSettingsOf(find('chatsrv'), find('msgstore'));
+  return { ...chatOutcome(set, { msgs: q, dies: expFlag('serverDies'), night: expFlag('night'), tunnel: expFlag('tunnel') }), ...set };
+}
 const writeShare = () => (linkNow ? linkNow.writes : MISSIONS[S.mission].writes || 0);
 const fileShare = () => MISSIONS[S.mission].files || 0; // share of requests that are static files (the rest are pages)
 const farShare = () => MISSIONS[S.mission].far || 0;    // share of users far from the data center
@@ -295,6 +304,7 @@ function loadPhase(g, qps, sizing, down, r, day, backlog, U) {
     if (COMPONENTS[n.type].crawl === 'download') { download(n, L); continue; }
     if (COMPONENTS[n.type].notify) { sendOut(n, L); continue; }
     if (COMPONENTS[n.type].feed) { feedService(n, L); continue; }
+    if (COMPONENTS[n.type].chat) { chatServers(n, L); continue; }
     if (COMPONENTS[n.type].crawl === 'parse') { parse(n, L); continue; }
     if (COMPONENTS[n.type].limits) { limit(n, L); continue; }
     const sp = serverSpec(n);
@@ -484,6 +494,14 @@ function loadPhase(g, qps, sizing, down, r, day, backlog, U) {
     r.node[n.id] = { load: L, cap: c.cap, util: L / c.cap, ms: o.readMs, mult: 1, base: o.readMs, unit: c.unit, drop: 1 - s / L, feed: o };
     for (const grp of depGroups(n)) for (const [x, f] of split(grp, s, down, n)) add(load, x, f);
   }
+  /** A chat system's servers: they deliver the share of messages the outcome allows, and store every one. */
+  function chatServers(n, L) {
+    const c = COMPONENTS[n.type], o = chatNow || { served: 1, servers: 1, protocol: 'ws' }, s = L * o.served;
+    const cap = c.cap * o.servers * (o.protocol === 'ws' ? 1 : 2.5); // HTTP servers count requests: 50,000 a second each
+    served.set(n.id, s);
+    r.node[n.id] = { load: L, cap, util: L / cap, ms: c.base, mult: 1, base: c.base, unit: c.unit, drop: 1 - o.served, chat: o };
+    for (const grp of depGroups(n)) for (const [x, f] of split(grp, s, down, n)) add(load, x, f);
+  }
   /** A crawler's parser: checks each page; with a duplicate check, only new content goes on to storage. */
   function parse(n, L) {
     const c = COMPONENTS[n.type], set = crawlSettingsOf(null, n), s = Math.min(L, c.cap), u = L / c.cap, mult = qmul(u);
@@ -520,8 +538,9 @@ export function model({ peak = false } = {}) {
   crawlNow = crawlAt(qps);
   notifyNow = notifyAt(qps);
   feedNow = feedAt(qps);
+  chatNow = chatAt(qps);
   if (linkNow) { base = linkAt(base).qps; qps = linkNow.qps; }
-  const r = { mission: S.mission, qps, base, link: linkNow, crawl: crawlNow, notify: notifyNow, feed: feedNow, servedPct: 0, latency: null, cost: g.cost, spof: 0, node: {}, issue: null, g, down: downIds(), bottleneck: null, hitRate: null, staleSecs: 0, fileStaleSecs: 0, farFileMs: null, lostPct: 0, farPageMs: null, noDataPct: 0, lagWrites: 0, queues: {}, uploadMs: null, jobsIn: 0, jobsOut: 0, backlog: 0, alert: null, maxShardUtil: null, shardCount: 0, ringMoved: null, ringSpread: null, kvStalePct: null, kvReadMs: null, kvFailPct: null, kvQuorum: null, idDupPct: null, idBits: null, idNumeric: null, idOrdered: null, idSpof: null, idMade: null, keyQuota: null, botThrough: 0, bots: botRate() };
+  const r = { mission: S.mission, qps, base, link: linkNow, crawl: crawlNow, notify: notifyNow, feed: feedNow, chat: chatNow, servedPct: 0, latency: null, cost: g.cost, spof: 0, node: {}, issue: null, g, down: downIds(), bottleneck: null, hitRate: null, staleSecs: 0, fileStaleSecs: 0, farFileMs: null, lostPct: 0, farPageMs: null, noDataPct: 0, lagWrites: 0, queues: {}, uploadMs: null, jobsIn: 0, jobsOut: 0, backlog: 0, alert: null, maxShardUtil: null, shardCount: 0, ringMoved: null, ringSpread: null, kvStalePct: null, kvReadMs: null, kvFailPct: null, kvQuorum: null, idDupPct: null, idBits: null, idNumeric: null, idOrdered: null, idSpof: null, idMade: null, keyQuota: null, botThrough: 0, bots: botRate() };
   if (!g.entry.length) { r.issue = TXT.noWeb; return r; }
   if (g.needsDns && !g.hasDNS) { r.issue = TXT.noDns; return r; }
   r.spof = countSpofs(g);
@@ -666,7 +685,7 @@ function countSpofs(g) {
   const spof = new Set();
   const visit = (group, seen) => {
     for (const n of group) {
-      if (group.length === 1 && !COMPONENTS[n.type].managed && !(isClustered(n) && clusterSize(n) > 1) && !(isQuorum(n) && quorumOf(n).N > 1) && !(isIdGen(n) && !idSpof(n)) && !(COMPONENTS[n.type].crawl === 'download' && downloaderOf(n).count > 1) && !(COMPONENTS[n.type].notify && notifySettingsOf(null, null, n).workers > 1)) spof.add(n.id);
+      if (group.length === 1 && !COMPONENTS[n.type].managed && !(isClustered(n) && clusterSize(n) > 1) && !(isQuorum(n) && quorumOf(n).N > 1) && !(isIdGen(n) && !idSpof(n)) && !(COMPONENTS[n.type].crawl === 'download' && downloaderOf(n).count > 1) && !(COMPONENTS[n.type].notify && notifySettingsOf(null, null, n).workers > 1) && !(COMPONENTS[n.type].chat && chatSettingsOf(n, null).servers > 1)) spof.add(n.id);
       if (seen.has(n.id)) continue;
       seen.add(n.id);
       for (const grp of childGroups(n)) visit(grp, seen);
