@@ -201,24 +201,9 @@ test.describe('Level 17 · teaching feedback', () => {
 });
 
 test.describe('Level 17 · quiz', () => {
-  test('answer key is balanced, not guessable by length, and not Level 14\'s to 16\'s', async ({ page }) => {
+  test('quiz label shows 10 questions and 8 to pass', async ({ page }) => {
+    // The quiz rules (balance, length, answer key) are checked in tests/unit/levels.test.mjs.
     await freshPage(page, '#level-17/quiz');
-    const keyOf = async (n) => [...(await (await page.request.get(`/levels/level-${n}.js`)).text()).matchAll(/o: \[(.*?)\], a: (\d)/g)];
-    const questions = await keyOf(17);
-    expect(questions).toHaveLength(10);
-    const counts = [0, 0, 0, 0];
-    let longestIsRight = 0;
-    for (const [, opts, a] of questions) {
-      counts[+a]++;
-      const options = [...opts.matchAll(/'((?:[^'\\]|\\.)*)'/g)].map((m) => m[1]);
-      expect(options).toHaveLength(4);
-      const longest = options.reduce((best, o, i) => (o.length > options[best].length ? i : best), 0);
-      if (longest === +a) longestIsRight++;
-    }
-    expect(Math.max(...counts)).toBeLessThanOrEqual(3);
-    expect(longestIsRight).toBe(0);
-    const key = (qs) => qs.map((q) => q[2]).join('');
-    for (const n of [14, 15, 16]) expect(key(questions)).not.toBe(key(await keyOf(n)));
     await expect(page.locator('#quizLabel')).toHaveText('Level 17 quiz · 10 questions · 8 to pass');
   });
 });

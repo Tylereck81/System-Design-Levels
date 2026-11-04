@@ -400,22 +400,9 @@ test.describe('Level 3 · fixes from QA', () => {
 });
 
 test.describe('Level 3 · quiz', () => {
-  test('answer key is balanced and not guessable by length', async ({ page }) => {
+  test('quiz label shows 10 questions and 8 to pass', async ({ page }) => {
+    // The quiz rules (balance, length, answer key) are checked in tests/unit/levels.test.mjs.
     await freshPage(page, '#level-3/quiz');
-    const source = await (await page.request.get('/levels/level-03.js')).text();
-    const questions = [...source.matchAll(/o: \[(.*?)\], a: (\d)/g)];
-    expect(questions).toHaveLength(10);
-    const counts = [0, 0, 0, 0];
-    let longestIsRight = 0;
-    for (const [, opts, a] of questions) {
-      counts[+a]++;
-      const options = [...opts.matchAll(/'((?:[^'\\]|\\.)*)'/g)].map((m) => m[1]);
-      expect(options).toHaveLength(4);
-      const longest = options.reduce((best, o, i) => (o.length > options[best].length ? i : best), 0);
-      if (longest === +a) longestIsRight++;
-    }
-    expect(Math.max(...counts)).toBeLessThanOrEqual(3);
-    expect(longestIsRight).toBeLessThanOrEqual(3);
     await expect(page.locator('#quizLabel')).toHaveText('Level 3 quiz · 10 questions · 8 to pass');
   });
 });

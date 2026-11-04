@@ -91,23 +91,6 @@ test.describe('Level 1 · quiz', () => {
     await expect(page.locator('#qResult')).toContainText('10 / 10: passed');
     await expect(page.locator('#quizMeta')).toHaveText('✓ 10/10');
   });
-
-  test('answer key is balanced and not guessable by length', async ({ page }) => {
-    await freshPage(page);
-    const source = await (await page.request.get('/levels/level-01.js')).text();
-    const questions = [...source.matchAll(/o: \[(.*?)\], a: (\d)/g)];
-    expect(questions).toHaveLength(10);
-    const counts = [0, 0, 0, 0];
-    let longestIsRight = 0;
-    for (const [, opts, a] of questions) {
-      counts[+a]++;
-      const options = [...opts.matchAll(/'((?:[^'\\]|\\.)*)'/g)].map((m) => m[1]);
-      const longest = options.reduce((best, o, i) => (o.length > options[best].length ? i : best), 0);
-      if (longest === +a) longestIsRight++;
-    }
-    expect(Math.max(...counts)).toBeLessThanOrEqual(3);
-    expect(longestIsRight).toBeLessThanOrEqual(3);
-  });
 });
 
 test.describe('Level 1 · robustness', () => {

@@ -7,6 +7,7 @@ const PORT = Number(process.env.TEST_PORT) || 4199;
 
 export default defineConfig({
   testDir: './tests',
+  testMatch: '**/*.spec.js', // browser tests only; tests/unit/*.test.mjs run in Node (npm run test:unit)
   fullyParallel: true,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? 'github' : 'list',
