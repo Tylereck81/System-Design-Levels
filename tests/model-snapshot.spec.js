@@ -14,14 +14,20 @@ const TOLERANCE = 1e-9; // relative; sums done in another order may differ in th
 /**
  * In the page: every case for one level. For each mission, the start design and the designs recorded for it are
  * measured with no experiment (at two moments of the traffic's wobble, and at its peak) and with each experiment
- * running (now, and at the peak when it has a required outcome). Returns { case name: result as JSON }.
+ * running (now, and at the peak when it has a required outcome). A crash is measured on each component it could take
+ * down, and a day at three hours. Each result also records the mission's goals: met or not, and the value shown.
+ * Returns { case name: result as JSON }.
  */
 async function measureLevel({ levelFile, designs }) {
   const { S, run, model } = window.__sdl;
   const level = (await import(levelFile)).default;
+  const { startExp, crashCandidates } = await import('/js/engine/experiments.js'); // the module the game runs
+  const DAY_HOURS = [3, 12, 18];
   const json = (r) => {
     const { g, ...rest } = r; // the graph view holds functions and the whole design
-    return JSON.stringify(rest, (_, x) => {
+    const goals = level.missions[r.mission].goals.filter((x) => x.type === 'struct' || x.type === 'metric')
+      .map((x) => { const on = x.type === 'struct' ? g : r; return [x.id, !!x.test(on), x.val ? x.val(r, g) : null]; });
+    return JSON.stringify({ ...rest, goals }, (_, x) => {
       if (x instanceof Set) return [...x].sort();
       if (x instanceof Map) return Object.fromEntries([...x].sort(([a], [b]) => String(a).localeCompare(String(b))));
       if (typeof x === 'number' && !Number.isFinite(x)) return String(x);
@@ -43,17 +49,31 @@ async function measureLevel({ levelFile, designs }) {
       run.t = 0;
       at('calm/peak', model({ peak: true }));
       const g = model().g;
+      const measure = (name, exp) => {
+        at(`${name}/now`, model());
+        if (exp.expect) at(`${name}/peak`, model({ peak: true })); // the game judges a required outcome at the peak
+      };
       for (const exp of level.experiments || []) {
         if (exp.kind === 'crash') {
-          const target = (exp.targets ? exp.targets(g) : [exp.target(g)]).filter(Boolean)[0];
-          if (!target) continue; // nothing on this design for the crash to take down
-          run.on = { [exp.id]: { node: target.id } };
+          // The game crashes the candidate whose loss hurts most; measuring each covers whichever it picks.
+          for (const target of crashCandidates(exp, g)) {
+            startExp(exp, g);
+            run.on[exp.id].node = target.id;
+            measure(`${exp.id}:${target.id}`, exp);
+            run.on = {};
+          }
+        } else if (exp.kind === 'day') {
+          for (const hour of DAY_HOURS) {
+            startExp(exp, g);
+            run.on[exp.id].t = exp.secs * (hour + 0.5) / 24;
+            measure(`${exp.id}@${hour}h`, exp);
+            run.on = {};
+          }
         } else {
-          run.on = { [exp.id]: exp.kind === 'day' ? { t: exp.secs / 2 } : {} };
+          startExp(exp, g);
+          measure(exp.id, exp);
+          run.on = {};
         }
-        at(`${exp.id}/now`, model());
-        if (exp.expect) at(`${exp.id}/peak`, model({ peak: true })); // the game judges a required outcome at the peak
-        run.on = {};
       }
     });
   });

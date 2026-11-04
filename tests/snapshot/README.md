@@ -8,11 +8,15 @@ specs) do that.
 | Path | Holds |
 |---|---|
 | `designs/level-NN.json` | Designs recorded from the test suite, with the mission each was measured on. Each level's start design is added by the spec. |
-| `expected/level-NN.json` | One line per case: `m<mission>/d<design>/<experiment or calm>/<moment>` → the model's result (without the graph view). |
+| `expected/level-NN.json` | One line per case: `m<mission>/d<design>/<experiment or calm>/<moment>` → the model's result (without the graph view) and the mission's goals (met or not, and the value shown). |
 | `capture.js`, `collect.mjs` | Record and select the designs. |
 
 Each design is measured with no experiment at two moments of the traffic's wobble and at its peak, and with each of
-the level's experiments running, now and at the peak.
+the level's experiments running: now, and at the peak when the experiment has a required outcome. A crash is measured
+on every component it could take down (`crash:<id>`), and a day at 03:00, 12:00 and 18:00 (`day@3h`).
+
+What it does not cover: the frame loop (goal holding, experiment timers, mission completion), the animation, and the
+page itself. The level specs test those.
 
 ## When it fails
 
@@ -36,4 +40,5 @@ node tests/snapshot/collect.mjs                       # writes designs/, at most
 SDL_SNAPSHOT_UPDATE=1 npx playwright test model-snapshot --project=chromium
 ```
 
-Do this on a commit whose numbers are known to be right (normally `main`), never in the same PR as an engine change.
+Playwright empties `test-results/` when a run starts, so only that run's designs are collected. Do this on a commit
+whose numbers are known to be right (normally `main`), never in the same PR as an engine change.

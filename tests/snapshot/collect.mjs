@@ -1,6 +1,6 @@
 // Turns the designs recorded by a capture run into tests/snapshot/designs/level-NN.json (see README.md).
 // Usage: node tests/snapshot/collect.mjs [max designs per mission, default 16]
-import { readdirSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseRoute } from '../../js/route.js';
 import { CAPTURE_DIR } from './capture.js';
@@ -10,6 +10,11 @@ const OUT_DIR = join('tests', 'snapshot', 'designs');
 
 /** Up to `max` items spread evenly over a sorted list, so the pick does not depend on the order tests ran in. */
 const spread = (items, max) => (items.length <= max ? items : Array.from({ length: max }, (_, i) => items[Math.floor(i * items.length / max)]));
+
+if (!existsSync(CAPTURE_DIR)) {
+  console.error(`Nothing to collect: ${CAPTURE_DIR} does not exist. Run the tests with SDL_CAPTURE=1 first (see README.md).`);
+  process.exit(1);
+}
 
 const byLevel = new Map(); // level id → mission → Set of design JSON
 for (const file of readdirSync(CAPTURE_DIR).filter((f) => f.endsWith('.ndjson'))) {
