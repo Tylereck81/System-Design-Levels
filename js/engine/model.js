@@ -7,7 +7,7 @@ import { ONLINE } from './sync.js';
 import { COMPONENTS, T } from './catalog.js';
 import { workloadsAt, trafficShape } from './workloads.js';
 import { roleOf, isServer, isReplica, isCache, isEdge, isStore, isSticky, scales, sessionsOn, holdsSessions, copiesFor, isLocated, isFar, isGeo, replicates, isQueue, isOffload, isQuorum, quorumOf, isIdGen, idSettingOf, idSpof, createQueries, downloaderOf, crawlSettingsOf, notifySettingsOf, chatSettingsOf, typeaheadSettingsOf, videoSettingsOf, isClustered, clusterSize, clusterLayout, clusterHit, shardShares, keyedShards, limiterRule, hitRate, edgeHit, fallsBack, staleSecs, costOf, serverSpec, splitRule } from './components.js';
-import { activeExps, downIds, trafficFactor, uploadFactor, dayShift, botEdge, resizeBy, partitioned, clockBack, viralClicks, bulkCreates, expFlag, textOf, PEAK } from './experiments.js';
+import { activeExps, downIds, trafficFactor, uploadFactor, dayShift, botEdge, resizeBy, partitioned, clockBack, expTotal, expFlag, textOf, PEAK } from './experiments.js';
 
 const outs = (id) => S.edges.filter(e => e.from === id).map(e => byId(e.to)).filter(Boolean);
 /** Servers `n` sends requests to. A connection that copies data between servers of a type that syncs carries none. */
@@ -69,7 +69,7 @@ export function graph() {
   // An autoscaled group pays for the servers it runs each hour, so its cost needs its load at the peak (peak).
   if (S.nodes.some(scales)) {
     const scratch = { node: {}, issue: null, staleSecs: 0, fileStaleSecs: 0, noDataPct: 0, lagWrites: 0, queues: {} };
-    const M = MISSIONS[S.mission], out = workloadsAt(M.qps, M.qps, workloadEnv(true)); // the monthly cost ignores experiments
+    const M = MISSIONS[S.mission], out = workloadsAt(M.qps, M.qps, workloadEnv(true)); // its workloads ignore experiments
     loadPhase(g, out.qps, 1, new Set(), scratch, null, null, M.uploads || 0, trafficOf(out));
     for (const n of S.nodes.filter(scales)) { const w = (scratch.node[n.id] || {}).load || 0; g.peak.set(n.id, w); g.cost += costOf(n, w); }
   }
@@ -119,14 +119,19 @@ function share(targets, flow, sender) {
   }
   return targets.map(c => [c, flow / targets.length]);
 }
-/** The environment a workload reads: the design, the mission, and the running experiments (none when `calm`). */
+/**
+ * The environment a workload reads: the design, the mission, and the running experiments (none when `calm`):
+ * flag(key) is true while one sets `key`, total(key) adds up a number they set.
+ */
 function workloadEnv(calm = false) {
-  return { nodes: S.nodes, mission: MISSIONS[S.mission], workload: WORKLOAD, flag: calm ? () => false : expFlag, viral: calm ? 0 : viralClicks(), bulk: calm ? 0 : bulkCreates() };
+  return { nodes: S.nodes, mission: MISSIONS[S.mission], workload: WORKLOAD, flag: calm ? () => false : expFlag, total: calm ? () => 0 : expTotal };
 }
 /** The share of requests that write: a workload's (a URL shortener's new links), else the mission's. */
 const writeShareOf = (shape) => shape.writes ?? (MISSIONS[S.mission].writes || 0);
 /** What the load and path passes need from the workloads: their outcomes, the write share and the cache-hot share. */
 const trafficOf = (out) => ({ outcomes: out.byField, writes: writeShareOf(out), cacheHot: out.cacheHot });
+/** splitFlow with the write share `W` filled in when a caller gives none (the scopes that split traffic use this). */
+const splitterFor = (W) => (group, flow, down, sender, w = W) => splitFlow(group, flow, down, sender, w);
 const fileShare = () => MISSIONS[S.mission].files || 0; // share of requests that are static files (the rest are pages)
 const farShare = () => MISSIONS[S.mission].far || 0;    // share of users far from the data center
 const uploadShare = () => (MISSIONS[S.mission].uploads || 0) * uploadFactor(); // share of pages that are uploads
@@ -210,8 +215,7 @@ function cacheAside(caches, flow, down, w, hot) {
  * workloads' outcomes, the write share and the cache-hot share (see trafficOf).
  */
 function loadPhase(g, qps, sizing, down, r, day, backlog, U, traffic) {
-  const W = traffic.writes, outcomes = traffic.outcomes;
-  const split = (group, flow, dn, sender, w = W) => splitFlow(group, flow, dn, sender, w); // with this moment's write share
+  const W = traffic.writes, outcomes = traffic.outcomes, split = splitterFor(W);
   const load = new Map(), served = new Map(), writes = new Map(), copied = new Map(), hitOf = new Map(), files = new Map(), pool = new Map(), bots = new Map();
   let reads = 0, hits = 0, lost = 0; // reads that went to a cache group and how many it answered; pages whose session was lost
   const add = (m, c, f) => m.set(c.id, (m.get(c.id) || 0) + f);
@@ -331,10 +335,10 @@ function loadPhase(g, qps, sizing, down, r, day, backlog, U, traffic) {
       // A store that takes the non-relational queries gets that share; the database gets the rest.
       const og = offloadGroup(n), R = og ? nonRelShare() : 0;
       if (og) send(og, on * R);
-      const perLink = createQueries(n), w = W;
+      const perLink = createQueries(n);
       for (const grp of depGroups(n)) {
         if (perLink === 1) send(grp, R ? on * (1 - R) : on);
-        else { send(grp, on * (1 - w), 0); send(grp, on * w * perLink, 1); } // each new link costs perLink queries
+        else { send(grp, on * (1 - W), 0); send(grp, on * W * perLink, 1); } // each new link costs perLink queries
       }
     }
     // Each healthy replica applies every write the primary served.
@@ -416,7 +420,7 @@ function loadPhase(g, qps, sizing, down, r, day, backlog, U, traffic) {
    * network partition, requests a side can't get a quorum for fail (strict quorum); reads can be stale.
    */
   function kvStore(n, L) {
-    const q = quorumOf(n), w = W, c = COMPONENTS[n.type];
+    const q = quorumOf(n), w = W, c = COMPONENTS[n.type]; // w: the share of its requests that write
     const o = quorumOutcome(q, { recent: WORKLOAD.recentShare || 0, far: WORKLOAD.partitionFar || 0, partition: partitioned() });
     const failed = (1 - w) * o.readFail + w * o.writeFail, ms = (1 - w) * o.readMs + w * o.writeMs;
     served.set(n.id, L * (1 - failed));
@@ -534,8 +538,7 @@ export function model({ peak = false } = {}) {
   // browsers do not answer themselves).
   const out = workloadsAt(qps, base, workloadEnv());
   qps = out.qps; base = out.base;
-  const traffic = trafficOf(out), W = traffic.writes;
-  const split = (group, flow, dn, sender, w = W) => splitFlow(group, flow, dn, sender, w); // with this moment's write share
+  const traffic = trafficOf(out), W = traffic.writes, split = splitterFor(W);
   const r = { mission: S.mission, qps, base, ...out.byField, servedPct: 0, latency: null, cost: g.cost, spof: 0, node: {}, issue: null, g, down: downIds(), bottleneck: null, hitRate: null, staleSecs: 0, fileStaleSecs: 0, farFileMs: null, lostPct: 0, farPageMs: null, noDataPct: 0, lagWrites: 0, queues: {}, uploadMs: null, jobsIn: 0, jobsOut: 0, backlog: 0, alert: null, maxShardUtil: null, shardCount: 0, ringMoved: null, ringSpread: null, kvStalePct: null, kvReadMs: null, kvFailPct: null, kvQuorum: null, idDupPct: null, idBits: null, idNumeric: null, idOrdered: null, idSpof: null, idMade: null, keyQuota: null, botThrough: 0, bots: botRate() };
   if (!g.entry.length) { r.issue = TXT.noWeb; return r; }
   if (g.needsDns && !g.hasDNS) { r.issue = TXT.noDns; return r; }
@@ -694,8 +697,7 @@ function countSpofs(g) {
 
 /** One request's route for the animation: Users → the servers it passes through → back, and where it fails. */
 export function sampleRoute(m) {
-  const W = writeShareOf(trafficShape(m));
-  const split = (group, flow, dn, sender, w = W) => splitFlow(group, flow, dn, sender, w); // with this moment's write share
+  const W = writeShareOf(trafficShape(m)), split = splitterFor(W);
   const fwd = [m.g.users.id], seen = new Set();
   const F = fileShare(), file = F > 0 && Math.random() < F; // a file goes to the CDN, or ends at a web server
   // Uploads are rare, so dots show them more often than they happen (one dot in 6) to make the queue visible.

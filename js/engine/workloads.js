@@ -6,7 +6,8 @@
 //   active  whether the level's `workload` turns it on
 //   at      its outcome for `qps` requests a second, from the design and the running experiments (env)
 //   shape   how the outcome changes the traffic the servers see: { qps, writes?, cacheHot? }
-// A level turns on at most one entry; with several, each would see the traffic the ones before it shaped.
+// A level turns on at most one entry (tests/unit/levels.test.mjs checks it). A field must not be the name of another
+// model result field: model() spreads the outcomes into its result.
 import { COMPONENTS } from './catalog.js';
 import {
   roleOf, linkSettingsOf, crawlSettingsOf, notifySettingsOf, feedSettingsOf, chatSettingsOf, typeaheadSettingsOf,
@@ -37,7 +38,9 @@ export const WORKLOADS = [
       const web = byFlag(env.nodes, 'links');
       if (!web) return null;
       const set = linkSettingsOf(web);
-      const traffic = { qps: q, writes: env.mission.writes || 0, repeat: env.workload.repeatClicks, viral: env.viral, bulk: env.bulk };
+      const traffic = {
+        qps: q, writes: env.mission.writes || 0, repeat: env.workload.repeatClicks, viral: env.total('viral'), bulk: env.total('bulk'),
+      };
       return { ...linkTraffic(set, traffic), code: set.code };
     },
     shape: (o) => ({ qps: o.qps, writes: o.writes, cacheHot: o.hot }), // clicks on a viral link always find it cached
@@ -108,11 +111,11 @@ export const WORKLOADS = [
   },
 ];
 
-/** How the outcomes in `byField` change the traffic: { writes?, cacheHot? } (empty when none does). */
+/** How the outcomes in `byField` change the share of requests that write and of keys always cached. */
 export function trafficShape(byField) {
   let shape = {};
   for (const w of WORKLOADS) if (w.shape && byField[w.field]) shape = { ...shape, ...w.shape(byField[w.field]) };
-  return shape;
+  return { writes: shape.writes, cacheHot: shape.cacheHot };
 }
 
 /**
@@ -124,8 +127,7 @@ export function workloadsAt(qps, base, env) {
   for (const w of WORKLOADS) {
     const o = w.active(env.workload) ? w.at(qps, env) : null;
     byField[w.field] = o;
-    if (o && w.shape) { qps = w.shape(o).qps; base = w.shape(w.at(base, env)).qps; }
+    if (o && w.shape) { base = w.shape(base === qps ? o : w.at(base, env)).qps; qps = w.shape(o).qps; }
   }
-  const { writes, cacheHot } = trafficShape(byField);
-  return { byField, qps, base, writes, cacheHot };
+  return { byField, qps, base, ...trafficShape(byField) };
 }
