@@ -87,6 +87,7 @@ async function measureLevel({ designs, backlogJobs, dayHours }) {
       /** Run one case and keep its result; an error says which case it came from. */
       const at = (name, measure) => {
         const key = `m${mission}/${design.id}/${name}`;
+        if (key in out) throw new Error(`${key} is measured twice: a designs file lists the same design twice`);
         try { out[key] = json(measure()); } catch (err) { throw new Error(`${key}: ${err.message}`); }
       };
       S.nodes = structuredClone(design.nodes);

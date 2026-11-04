@@ -8,13 +8,17 @@ import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { LEVELS } from '../../levels/index.js';
 import { parseRoute } from '../../js/route.js';
-import { CAPTURE_DIR, DESIGNS_DIR, fileOf, canonical } from './common.js';
+import { CAPTURE_DIR, DESIGNS_DIR, fileOf, canonical, designId } from './common.js';
 
 const { values: args } = parseArgs({ options: { max: { type: 'string', default: '16' }, 'accept-fewer': { type: 'boolean', default: false } } });
 const MAX_PER_MISSION = Number(args.max) || 16;
 
-/** Up to `max` items spread evenly over a sorted list, so the pick does not depend on the order tests ran in. */
-const spread = (items, max) => (items.length <= max ? items : Array.from({ length: max }, (_, i) => items[Math.floor(i * items.length / max)]));
+/**
+ * At most `max` designs (canonical JSON), in a stable order. Over the limit, the ones with the lowest content ids are
+ * kept, so one more recorded design changes at most one of them, whatever order the tests ran in.
+ */
+const pick = (designs, max) => designs.map((d) => [designId(JSON.parse(d)), d])
+  .sort(([a], [b]) => (a < b ? -1 : 1)).slice(0, max).map(([, d]) => d).sort();
 /** The level the game opens for an address: an unknown level means Level 1, as in js/boot.js. */
 const levelOf = (route) => { const id = parseRoute(route).level; return id === 'mock' ? id : (LEVELS.find((l) => l.id === id) || LEVELS[0]).id; };
 const fail = (message) => { console.error(message); process.exit(1); };
@@ -45,7 +49,7 @@ for (const entry of LEVELS) {
   for (const [mission, designs] of [...(byLevel.get(entry.id) || new Map())].sort((a, b) => a[0] - b[0])) {
     if (!data.missions[mission]) continue; // a test set a mission the level does not have
     found.push(`m${mission}: ${designs.size} found`);
-    for (const design of spread([...designs].filter((d) => d !== start).sort(), MAX_PER_MISSION)) {
+    for (const design of pick([...designs].filter((d) => d !== start), MAX_PER_MISSION)) {
       lines.push(JSON.stringify({ mission, ...JSON.parse(design) }));
     }
   }
