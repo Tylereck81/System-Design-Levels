@@ -76,7 +76,7 @@ test.describe('Level 20 · numbers', () => {
   test('uploads: the API servers\' links, pre-signed URLs and chunks', async ({ page }) => {
     await freshPage(page, '#level-20/build');
     // 9.3 × 1.03 uploads a second; 4 API servers × 125 MB/s ÷ 250 MB = 2 videos a second; 5% of whole files fail.
-    let r = await measure(page);
+    const r = await measure(page);
     expect(r.qps).toBeCloseTo(9.579, 6);
     expect(r.o.uploaded).toBeCloseTo(2 / 9.579 * 0.95, 9);
     expect(r.cost).toBe(800 + 10 * 500 + 3600000);

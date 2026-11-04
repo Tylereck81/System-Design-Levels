@@ -399,10 +399,10 @@ function loadPhase(g, qps, sizing, down, r, day, backlog, U) {
       // A store that takes the non-relational queries gets that share; the database gets the rest.
       const og = offloadGroup(n), R = og ? nonRelShare() : 0;
       if (og) send(og, on * R);
-      const k = createQueries(n), w = writeShare();
+      const perLink = createQueries(n), w = writeShare();
       for (const grp of depGroups(n)) {
-        if (k === 1) send(grp, R ? on * (1 - R) : on);
-        else { send(grp, on * (1 - w), 0); send(grp, on * w * k, 1); } // each new link costs k queries
+        if (perLink === 1) send(grp, R ? on * (1 - R) : on);
+        else { send(grp, on * (1 - w), 0); send(grp, on * w * perLink, 1); } // each new link costs perLink queries
       }
     }
     // Each healthy replica applies every write the primary served.
@@ -436,7 +436,7 @@ function loadPhase(g, qps, sizing, down, r, day, backlog, U) {
     const sp = serverSpec(n), Lb = bots.get(n.id) || 0, Lr = L - Lb, u = L / sp.cap, d = Math.max(0, 1 - sp.cap / L);
     const rule = limiterRule(n, !!backlog && botEdge()), sg = storeGroup(n), back = depGroups(n).length > 0; // the monthly cost (no backlog) ignores experiments
     const peers = g.entry.filter(c => COMPONENTS[c.type].limits && !down.has(c.id)).length || 1;
-    const q = rule.q * (sg ? 1 : peers), B = botRate();
+    const q = rule.q * (sg ? 1 : peers);
     const botPass = B ? Math.min(Lb, botKeys() * T.keyLimit * q * Lb / B) : 0;
     const s = back ? (Lr * (1 - rule.fb) + botPass) * (1 - d) : 0;
     served.set(n.id, s);
@@ -712,19 +712,19 @@ export function model({ peak = false } = {}) {
   // Pages go to the entry servers. Files go to the CDN while one is up (its edges are near every user), else to the origin.
   const classes = [], far = farShare();
   const U = uploadShare();
-  for (const [share, rtt] of [[1 - far, T.rtt], [far, T.far]]) {
-    if (share <= 0) continue;
-    const pf = F ? qps * share * (1 - F) : qps * share;
+  for (const [regionShare, rtt] of [[1 - far, T.rtt], [far, T.far]]) {
+    if (regionShare <= 0) continue;
+    const pf = F ? qps * regionShare * (1 - F) : qps * regionShare;
     classes.push({ flow: U ? pf * (1 - U) : pf, file: false, rtt });
     if (U) classes.push({ flow: pf * U, file: false, job: true, rtt });
-    if (F) classes.push({ flow: qps * share * F, file: true, rtt, far: rtt === T.far });
+    if (F) classes.push({ flow: qps * regionShare * F, file: true, rtt, far: rtt === T.far });
   }
   // With located entry servers, each region goes where its DNS sends it, with that trip's round trip.
   const viaRegion = (k) => {
-    const far = k.rtt === T.far, parts = regionEntry(g, down, far).filter(p => k.file || !p[3]).map(([n, sh, rtt]) => walk(n, k.flow * sh, rtt, new Set())).filter(p => p.served > 0);
+    const farRegion = k.rtt === T.far, parts = regionEntry(g, down, farRegion).filter(p => k.file || !p[3]).map(([n, sh, rtt]) => walk(n, k.flow * sh, rtt, new Set())).filter(p => p.served > 0);
     const sv = parts.reduce((a, p) => a + p.served, 0);
     const res = sv ? { served: sv, end: parts.reduce((a, p) => a + p.served * p.end, 0) / sv } : NONE;
-    if (far && !k.file && res.served) r.farPageMs = res.end;
+    if (farRegion && !k.file && res.served) r.farPageMs = res.end;
     return res;
   };
   const results = classes.map((k) => {

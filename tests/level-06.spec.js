@@ -122,7 +122,7 @@ test.describe('Level 6 · numbers', () => {
     // M: 1,000 pages a second per group at the peak, 240 per server: 5 servers, 50% busy.
     await autoscale(page, 'M');
     await calm(page);
-    let r = await measure(page);
+    const r = await measure(page);
     expect(r.copies).toEqual([5, 5]);
     expect(r.w1).toBeCloseTo(0.5, 3);
     expect(r.cost).toBe(2758);

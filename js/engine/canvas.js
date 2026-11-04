@@ -24,7 +24,6 @@ export function nodeSub(n) {
   if (!c.sized) {
     const { index, count } = standbyPeers(n), standby = index > 0;
     // While the active one is down, the standby carries the traffic: it is the active one now.
-    const m = run.mdl, st = m && run.everPlayed ? m.node[n.id] : null;
     if (standby && st && !st.down && st.load > 0) return `${TYPES[n.type].sub} · took over`;
     const algo = c.algos && (TYPES[n.type].algos || []).find(a => a.id === (n.algo || c.defaultAlgo));
     if (!algo) return standby ? TYPES[n.type].standbySub : TYPES[n.type].sub;
@@ -35,7 +34,6 @@ export function nodeSub(n) {
   if (c.replicated && TYPES[n.type].roles && n.role) return `${n.size} · ${fmt(serverSpec(n).cap)}/s`;
   if (c.kinds && TYPES[n.type].kinds) return n.kind ? `${TYPES[n.type].kinds.find(k => k.id === n.kind).short} · ${n.size} ${fmt(SIZES[n.size].cap)}/s` : TYPES[n.type].unsetSub;
   return runsAlone(n) ? `${n.size} · ${fmt(SIZES[n.size].cap * c.alone.capFactor)} req/s (½)` : `${n.size} · ${fmt(SIZES[n.size].cap)} req/s`;
-  return '';
 }
 
 export function applyMode() {
