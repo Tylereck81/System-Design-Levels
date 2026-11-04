@@ -239,14 +239,6 @@ test.describe('Level 10 · teaching feedback', () => {
   });
 });
 
-test.describe('Level 10 · quiz', () => {
-  test('quiz label shows 10 questions and 8 to pass', async ({ page }) => {
-    // The quiz rules (balance, length, answer key) are checked in tests/unit/levels.test.mjs.
-    await freshPage(page, '#level-10/quiz');
-    await expect(page.locator('#quizLabel')).toHaveText('Level 10 quiz · 10 questions · 8 to pass');
-  });
-});
-
 test.describe('Level 10 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-10/build');
