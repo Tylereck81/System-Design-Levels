@@ -3,20 +3,22 @@
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { test } from '@playwright/test';
+import { CAPTURE_DIR } from './files.js';
 
-export const CAPTURE_DIR = join('test-results', 'snapshot-capture');
 const PREFIX = 'SDL_CAPTURE ';
 const SNAPSHOT_SPEC = 'model-snapshot.spec.js'; // it measures recorded designs; recording them again would loop
 
 /**
  * In the page: wrap the test hooks as soon as the game publishes them, and log each distinct design once, with the
- * mission it was measured on. A design counts when a test asks the model about it, or when its mission becomes
- * verified (through a test's fast-forward or through real-time play).
+ * level the page started with and the mission it was measured on. A design counts when a test asks the model about it,
+ * or when its mission becomes verified (through a test's fast-forward or through real-time play).
  */
 function watchDesigns(prefix) {
   const logged = new Set(), verified = new Set();
+  let level = null; // the level this page booted with; a later hash change reloads the page
   const record = (S) => {
-    const json = JSON.stringify({ route: location.hash, mission: S.mission, nodes: S.nodes, edges: S.edges });
+    if (level == null) return;
+    const json = JSON.stringify({ level, mission: S.mission, nodes: S.nodes, edges: S.edges });
     if (logged.has(json)) return;
     logged.add(json);
     console.log(prefix + json);
@@ -32,6 +34,7 @@ function watchDesigns(prefix) {
     get: () => current,
     set: (sdl) => {
       current = sdl;
+      import('/js/level.js').then((m) => { level = m.entry.id; }); // already loaded: the game has started
       const { model, step } = sdl;
       sdl.model = (...args) => { record(sdl.S); return model(...args); };
       sdl.step = (...args) => { step(...args); checkVerified(sdl.S); };
