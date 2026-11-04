@@ -1,0 +1,566 @@
+{
+ "level": 15,
+ "designs": [
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60,
+     "queues": "fifo"
+    },
+    {
+     "id": "h",
+     "type": "downloader",
+     "x": 380,
+     "y": 180,
+     "count": "1",
+     "dns": "lookup"
+    },
+    {
+     "id": "p",
+     "type": "parser",
+     "x": 380,
+     "y": 300,
+     "dedup": "off",
+     "filter": "off"
+    },
+    {
+     "id": "s",
+     "type": "contentstore",
+     "x": 380,
+     "y": 420
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "h"
+    },
+    {
+     "id": "s2",
+     "from": "h",
+     "to": "p"
+    },
+    {
+     "id": "s3",
+     "from": "p",
+     "to": "s"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60,
+     "queues": "fifo"
+    },
+    {
+     "id": "h",
+     "type": "downloader",
+     "x": 380,
+     "y": 180,
+     "count": "4",
+     "dns": "cache"
+    },
+    {
+     "id": "p",
+     "type": "parser",
+     "x": 380,
+     "y": 300,
+     "dedup": "off",
+     "filter": "off"
+    },
+    {
+     "id": "s",
+     "type": "contentstore",
+     "x": 380,
+     "y": 420
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "h"
+    },
+    {
+     "id": "s2",
+     "from": "h",
+     "to": "p"
+    },
+    {
+     "id": "s3",
+     "from": "p",
+     "to": "s"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60,
+     "queues": "fifo"
+    },
+    {
+     "id": "h",
+     "type": "downloader",
+     "x": 380,
+     "y": 180,
+     "count": "4",
+     "dns": "lookup"
+    },
+    {
+     "id": "p",
+     "type": "parser",
+     "x": 380,
+     "y": 300,
+     "dedup": "off",
+     "filter": "off"
+    },
+    {
+     "id": "s",
+     "type": "contentstore",
+     "x": 380,
+     "y": 420
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "h"
+    },
+    {
+     "id": "s2",
+     "from": "h",
+     "to": "p"
+    },
+    {
+     "id": "s3",
+     "from": "p",
+     "to": "s"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60,
+     "queues": "fifo"
+    },
+    {
+     "id": "h",
+     "type": "downloader",
+     "x": 380,
+     "y": 180,
+     "count": "5",
+     "dns": "cache"
+    },
+    {
+     "id": "p",
+     "type": "parser",
+     "x": 380,
+     "y": 300,
+     "dedup": "off",
+     "filter": "off"
+    },
+    {
+     "id": "s",
+     "type": "contentstore",
+     "x": 380,
+     "y": 420
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "h"
+    },
+    {
+     "id": "s2",
+     "from": "h",
+     "to": "p"
+    },
+    {
+     "id": "s3",
+     "from": "p",
+     "to": "s"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60,
+     "queues": "fifo"
+    },
+    {
+     "id": "h",
+     "type": "downloader",
+     "x": 380,
+     "y": 180,
+     "count": "5",
+     "dns": "cache"
+    },
+    {
+     "id": "p",
+     "type": "parser",
+     "x": 380,
+     "y": 300,
+     "dedup": "on",
+     "filter": "off"
+    },
+    {
+     "id": "s",
+     "type": "contentstore",
+     "x": 380,
+     "y": 420
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "h"
+    },
+    {
+     "id": "s2",
+     "from": "h",
+     "to": "p"
+    },
+    {
+     "id": "s3",
+     "from": "p",
+     "to": "s"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60,
+     "queues": "fifo"
+    },
+    {
+     "id": "h",
+     "type": "downloader",
+     "x": 380,
+     "y": 180,
+     "count": "8",
+     "dns": "lookup"
+    },
+    {
+     "id": "p",
+     "type": "parser",
+     "x": 380,
+     "y": 300,
+     "dedup": "off",
+     "filter": "off"
+    },
+    {
+     "id": "s",
+     "type": "contentstore",
+     "x": 380,
+     "y": 420
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "h"
+    },
+    {
+     "id": "s2",
+     "from": "h",
+     "to": "p"
+    },
+    {
+     "id": "s3",
+     "from": "p",
+     "to": "s"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60,
+     "queues": "host"
+    },
+    {
+     "id": "h",
+     "type": "downloader",
+     "x": 380,
+     "y": 180,
+     "count": "5",
+     "dns": "cache"
+    },
+    {
+     "id": "p",
+     "type": "parser",
+     "x": 380,
+     "y": 300,
+     "dedup": "off",
+     "filter": "off"
+    },
+    {
+     "id": "s",
+     "type": "contentstore",
+     "x": 380,
+     "y": 420
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "h"
+    },
+    {
+     "id": "s2",
+     "from": "h",
+     "to": "p"
+    },
+    {
+     "id": "s3",
+     "from": "p",
+     "to": "s"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60,
+     "queues": "host"
+    },
+    {
+     "id": "h",
+     "type": "downloader",
+     "x": 380,
+     "y": 180,
+     "count": "5",
+     "dns": "cache"
+    },
+    {
+     "id": "p",
+     "type": "parser",
+     "x": 380,
+     "y": 300,
+     "dedup": "on",
+     "filter": "off"
+    },
+    {
+     "id": "s",
+     "type": "contentstore",
+     "x": 380,
+     "y": 420
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "h"
+    },
+    {
+     "id": "s2",
+     "from": "h",
+     "to": "p"
+    },
+    {
+     "id": "s3",
+     "from": "p",
+     "to": "s"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60,
+     "queues": "host"
+    },
+    {
+     "id": "h",
+     "type": "downloader",
+     "x": 380,
+     "y": 180,
+     "count": "5",
+     "dns": "cache"
+    },
+    {
+     "id": "p",
+     "type": "parser",
+     "x": 380,
+     "y": 300,
+     "dedup": "on",
+     "filter": "on"
+    },
+    {
+     "id": "s",
+     "type": "contentstore",
+     "x": 380,
+     "y": 420
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "h"
+    },
+    {
+     "id": "s2",
+     "from": "h",
+     "to": "p"
+    },
+    {
+     "id": "s3",
+     "from": "p",
+     "to": "s"
+    }
+   ]
+  },
+  {
+   "mission": 1,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60,
+     "queues": "host"
+    },
+    {
+     "id": "h",
+     "type": "downloader",
+     "x": 380,
+     "y": 180,
+     "count": "5",
+     "dns": "cache"
+    },
+    {
+     "id": "p",
+     "type": "parser",
+     "x": 380,
+     "y": 300,
+     "dedup": "off",
+     "filter": "off"
+    },
+    {
+     "id": "s",
+     "type": "contentstore",
+     "x": 380,
+     "y": 420
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "h"
+    },
+    {
+     "id": "s2",
+     "from": "h",
+     "to": "p"
+    },
+    {
+     "id": "s3",
+     "from": "p",
+     "to": "s"
+    }
+   ]
+  },
+  {
+   "mission": 2,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60,
+     "queues": "host"
+    },
+    {
+     "id": "h",
+     "type": "downloader",
+     "x": 380,
+     "y": 180,
+     "count": "5",
+     "dns": "cache"
+    },
+    {
+     "id": "p",
+     "type": "parser",
+     "x": 380,
+     "y": 300,
+     "dedup": "on",
+     "filter": "on"
+    },
+    {
+     "id": "s",
+     "type": "contentstore",
+     "x": 380,
+     "y": 420
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "h"
+    },
+    {
+     "id": "s2",
+     "from": "h",
+     "to": "p"
+    },
+    {
+     "id": "s3",
+     "from": "p",
+     "to": "s"
+    }
+   ]
+  }
+ ]
+}

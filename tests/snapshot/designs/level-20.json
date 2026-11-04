@@ -1,0 +1,413 @@
+{
+ "level": 20,
+ "designs": [
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60
+    },
+    {
+     "id": "p",
+     "type": "vupload",
+     "x": 380,
+     "y": 190,
+     "url": "api",
+     "chunks": "whole"
+    },
+    {
+     "id": "t",
+     "type": "transcoder",
+     "x": 380,
+     "y": 320,
+     "workers": "10",
+     "retry": "off"
+    },
+    {
+     "id": "v",
+     "type": "vserve",
+     "x": 380,
+     "y": 450,
+     "deliver": "cdn"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "p"
+    },
+    {
+     "id": "s2",
+     "from": "p",
+     "to": "t"
+    },
+    {
+     "id": "s3",
+     "from": "t",
+     "to": "v"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60
+    },
+    {
+     "id": "p",
+     "type": "vupload",
+     "x": 380,
+     "y": 190,
+     "url": "api",
+     "chunks": "whole"
+    },
+    {
+     "id": "t",
+     "type": "transcoder",
+     "x": 380,
+     "y": 320,
+     "workers": "10",
+     "retry": "off"
+    },
+    {
+     "id": "v",
+     "type": "vserve",
+     "x": 380,
+     "y": 450,
+     "deliver": "popular"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "p"
+    },
+    {
+     "id": "s2",
+     "from": "p",
+     "to": "t"
+    },
+    {
+     "id": "s3",
+     "from": "t",
+     "to": "v"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60
+    },
+    {
+     "id": "p",
+     "type": "vupload",
+     "x": 380,
+     "y": 190,
+     "url": "presigned",
+     "chunks": "chunked"
+    },
+    {
+     "id": "t",
+     "type": "transcoder",
+     "x": 380,
+     "y": 320,
+     "workers": "10",
+     "retry": "off"
+    },
+    {
+     "id": "v",
+     "type": "vserve",
+     "x": 380,
+     "y": 450,
+     "deliver": "cdn"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "p"
+    },
+    {
+     "id": "s2",
+     "from": "p",
+     "to": "t"
+    },
+    {
+     "id": "s3",
+     "from": "t",
+     "to": "v"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60
+    },
+    {
+     "id": "p",
+     "type": "vupload",
+     "x": 380,
+     "y": 190,
+     "url": "presigned",
+     "chunks": "chunked"
+    },
+    {
+     "id": "t",
+     "type": "transcoder",
+     "x": 380,
+     "y": 320,
+     "workers": "10",
+     "retry": "on"
+    },
+    {
+     "id": "v",
+     "type": "vserve",
+     "x": 380,
+     "y": 450,
+     "deliver": "cdn"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "p"
+    },
+    {
+     "id": "s2",
+     "from": "p",
+     "to": "t"
+    },
+    {
+     "id": "s3",
+     "from": "t",
+     "to": "v"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60
+    },
+    {
+     "id": "p",
+     "type": "vupload",
+     "x": 380,
+     "y": 190,
+     "url": "presigned",
+     "chunks": "chunked"
+    },
+    {
+     "id": "t",
+     "type": "transcoder",
+     "x": 380,
+     "y": 320,
+     "workers": "11",
+     "retry": "on"
+    },
+    {
+     "id": "v",
+     "type": "vserve",
+     "x": 380,
+     "y": 450,
+     "deliver": "cdn"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "p"
+    },
+    {
+     "id": "s2",
+     "from": "p",
+     "to": "t"
+    },
+    {
+     "id": "s3",
+     "from": "t",
+     "to": "v"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60
+    },
+    {
+     "id": "p",
+     "type": "vupload",
+     "x": 380,
+     "y": 190,
+     "url": "presigned",
+     "chunks": "whole"
+    },
+    {
+     "id": "t",
+     "type": "transcoder",
+     "x": 380,
+     "y": 320,
+     "workers": "10",
+     "retry": "off"
+    },
+    {
+     "id": "v",
+     "type": "vserve",
+     "x": 380,
+     "y": 450,
+     "deliver": "cdn"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "p"
+    },
+    {
+     "id": "s2",
+     "from": "p",
+     "to": "t"
+    },
+    {
+     "id": "s3",
+     "from": "t",
+     "to": "v"
+    }
+   ]
+  },
+  {
+   "mission": 1,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60
+    },
+    {
+     "id": "p",
+     "type": "vupload",
+     "x": 380,
+     "y": 190,
+     "url": "presigned",
+     "chunks": "chunked"
+    },
+    {
+     "id": "t",
+     "type": "transcoder",
+     "x": 380,
+     "y": 320,
+     "workers": "11",
+     "retry": "on"
+    },
+    {
+     "id": "v",
+     "type": "vserve",
+     "x": 380,
+     "y": 450,
+     "deliver": "cdn"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "p"
+    },
+    {
+     "id": "s2",
+     "from": "p",
+     "to": "t"
+    },
+    {
+     "id": "s3",
+     "from": "t",
+     "to": "v"
+    }
+   ]
+  },
+  {
+   "mission": 2,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60
+    },
+    {
+     "id": "p",
+     "type": "vupload",
+     "x": 380,
+     "y": 190,
+     "url": "presigned",
+     "chunks": "chunked"
+    },
+    {
+     "id": "t",
+     "type": "transcoder",
+     "x": 380,
+     "y": 320,
+     "workers": "11",
+     "retry": "on"
+    },
+    {
+     "id": "v",
+     "type": "vserve",
+     "x": 380,
+     "y": 450,
+     "deliver": "popular"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "p"
+    },
+    {
+     "id": "s2",
+     "from": "p",
+     "to": "t"
+    },
+    {
+     "id": "s3",
+     "from": "t",
+     "to": "v"
+    }
+   ]
+  }
+ ]
+}

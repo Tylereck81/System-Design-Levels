@@ -1,10 +1,15 @@
 // Shared helpers for level tests. They drive the game through the real UI where it matters,
 // and through window.__sdl test hooks for setup and for fast-forwarding simulated time.
 
+import { installCapture } from './snapshot/capture.js';
+
 export const QUIZ_KEY_L1 = [2, 0, 3, 1, 2, 0, 1, 3, 2, 0];
+
+const capturing = new WeakSet();
 
 /** Open the game with empty saved progress. */
 export async function freshPage(page, hash = '') {
+  if (!capturing.has(page)) { capturing.add(page); await installCapture(page); }
   await page.goto('/');
   await page.evaluate(() => localStorage.clear());
   // Leave the page first: changing only the hash to another level would make the game reload itself.

@@ -1,0 +1,753 @@
+{
+ "level": 14,
+ "designs": [
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 120,
+     "y": 60
+    },
+    {
+     "id": "l",
+     "type": "lb",
+     "x": 380,
+     "y": 168,
+     "algo": "rr"
+    },
+    {
+     "id": "w",
+     "type": "web",
+     "x": 380,
+     "y": 276,
+     "size": "L",
+     "scaling": "auto",
+     "redirect": "301",
+     "code": "base62",
+     "limit": "account"
+    },
+    {
+     "id": "b",
+     "type": "db",
+     "x": 380,
+     "y": 420,
+     "size": "XL",
+     "kind": "sql"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "u",
+     "to": "l"
+    },
+    {
+     "id": "s3",
+     "from": "l",
+     "to": "w"
+    },
+    {
+     "id": "s4",
+     "from": "w",
+     "to": "b"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 120,
+     "y": 60
+    },
+    {
+     "id": "l",
+     "type": "lb",
+     "x": 380,
+     "y": 168,
+     "algo": "rr"
+    },
+    {
+     "id": "w",
+     "type": "web",
+     "x": 380,
+     "y": 276,
+     "size": "L",
+     "scaling": "auto",
+     "redirect": "301",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "b",
+     "type": "db",
+     "x": 380,
+     "y": 420,
+     "size": "XL",
+     "kind": "sql"
+    },
+    {
+     "id": "n1",
+     "type": "cache",
+     "x": 640,
+     "y": 348,
+     "size": "L",
+     "ttl": "3600",
+     "onWrite": "ttl"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "u",
+     "to": "l"
+    },
+    {
+     "id": "s3",
+     "from": "l",
+     "to": "w"
+    },
+    {
+     "id": "s4",
+     "from": "w",
+     "to": "b"
+    },
+    {
+     "id": "e2",
+     "from": "w",
+     "to": "n1"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 120,
+     "y": 60
+    },
+    {
+     "id": "l",
+     "type": "lb",
+     "x": 380,
+     "y": 168,
+     "algo": "rr"
+    },
+    {
+     "id": "w",
+     "type": "web",
+     "x": 380,
+     "y": 276,
+     "size": "L",
+     "scaling": "auto",
+     "redirect": "301",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "b",
+     "type": "db",
+     "x": 380,
+     "y": 420,
+     "size": "XL",
+     "kind": "sql"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "u",
+     "to": "l"
+    },
+    {
+     "id": "s3",
+     "from": "l",
+     "to": "w"
+    },
+    {
+     "id": "s4",
+     "from": "w",
+     "to": "b"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 120,
+     "y": 60
+    },
+    {
+     "id": "l",
+     "type": "lb",
+     "x": 380,
+     "y": 168,
+     "algo": "rr"
+    },
+    {
+     "id": "w",
+     "type": "web",
+     "x": 380,
+     "y": 276,
+     "size": "L",
+     "scaling": "auto",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "b",
+     "type": "db",
+     "x": 380,
+     "y": 420,
+     "size": "XL",
+     "kind": "sql"
+    },
+    {
+     "id": "n1",
+     "type": "cache",
+     "x": 640,
+     "y": 348,
+     "size": "L",
+     "ttl": "3600",
+     "onWrite": "ttl"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "u",
+     "to": "l"
+    },
+    {
+     "id": "s3",
+     "from": "l",
+     "to": "w"
+    },
+    {
+     "id": "s4",
+     "from": "w",
+     "to": "b"
+    },
+    {
+     "id": "e2",
+     "from": "w",
+     "to": "n1"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 120,
+     "y": 60
+    },
+    {
+     "id": "l",
+     "type": "lb",
+     "x": 380,
+     "y": 168,
+     "algo": "rr"
+    },
+    {
+     "id": "w",
+     "type": "web",
+     "x": 380,
+     "y": 276,
+     "size": "L",
+     "scaling": "auto",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "b",
+     "type": "db",
+     "x": 380,
+     "y": 420,
+     "size": "XL",
+     "kind": "sql"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "u",
+     "to": "l"
+    },
+    {
+     "id": "s3",
+     "from": "l",
+     "to": "w"
+    },
+    {
+     "id": "s4",
+     "from": "w",
+     "to": "b"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 120,
+     "y": 60
+    },
+    {
+     "id": "l",
+     "type": "lb",
+     "x": 380,
+     "y": 168,
+     "algo": "rr"
+    },
+    {
+     "id": "w",
+     "type": "web",
+     "x": 380,
+     "y": 276,
+     "size": "L",
+     "scaling": "auto",
+     "redirect": "302",
+     "code": "bloom",
+     "limit": "none"
+    },
+    {
+     "id": "b",
+     "type": "db",
+     "x": 380,
+     "y": 420,
+     "size": "XL",
+     "kind": "sql"
+    },
+    {
+     "id": "n1",
+     "type": "cache",
+     "x": 640,
+     "y": 348,
+     "size": "L",
+     "ttl": "3600",
+     "onWrite": "ttl"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "u",
+     "to": "l"
+    },
+    {
+     "id": "s3",
+     "from": "l",
+     "to": "w"
+    },
+    {
+     "id": "s4",
+     "from": "w",
+     "to": "b"
+    },
+    {
+     "id": "e2",
+     "from": "w",
+     "to": "n1"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 120,
+     "y": 60
+    },
+    {
+     "id": "l",
+     "type": "lb",
+     "x": 380,
+     "y": 168,
+     "algo": "rr"
+    },
+    {
+     "id": "w",
+     "type": "web",
+     "x": 380,
+     "y": 276,
+     "size": "L",
+     "scaling": "auto",
+     "redirect": "302",
+     "code": "hash",
+     "limit": "none"
+    },
+    {
+     "id": "b",
+     "type": "db",
+     "x": 380,
+     "y": 420,
+     "size": "XL",
+     "kind": "sql"
+    },
+    {
+     "id": "n1",
+     "type": "cache",
+     "x": 640,
+     "y": 348,
+     "size": "L",
+     "ttl": "3600",
+     "onWrite": "ttl"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "u",
+     "to": "l"
+    },
+    {
+     "id": "s3",
+     "from": "l",
+     "to": "w"
+    },
+    {
+     "id": "s4",
+     "from": "w",
+     "to": "b"
+    },
+    {
+     "id": "e2",
+     "from": "w",
+     "to": "n1"
+    }
+   ]
+  },
+  {
+   "mission": 1,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 120,
+     "y": 60
+    },
+    {
+     "id": "l",
+     "type": "lb",
+     "x": 380,
+     "y": 168,
+     "algo": "rr"
+    },
+    {
+     "id": "w",
+     "type": "web",
+     "x": 380,
+     "y": 276,
+     "size": "L",
+     "scaling": "auto",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "account"
+    },
+    {
+     "id": "b",
+     "type": "db",
+     "x": 380,
+     "y": 420,
+     "size": "XL",
+     "kind": "sql"
+    },
+    {
+     "id": "n1",
+     "type": "cache",
+     "x": 640,
+     "y": 348,
+     "size": "L",
+     "ttl": "3600",
+     "onWrite": "ttl"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "u",
+     "to": "l"
+    },
+    {
+     "id": "s3",
+     "from": "l",
+     "to": "w"
+    },
+    {
+     "id": "s4",
+     "from": "w",
+     "to": "b"
+    },
+    {
+     "id": "e2",
+     "from": "w",
+     "to": "n1"
+    }
+   ]
+  },
+  {
+   "mission": 2,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 120,
+     "y": 60
+    },
+    {
+     "id": "l",
+     "type": "lb",
+     "x": 380,
+     "y": 168,
+     "algo": "rr"
+    },
+    {
+     "id": "w",
+     "type": "web",
+     "x": 380,
+     "y": 276,
+     "size": "L",
+     "scaling": "auto",
+     "redirect": "302",
+     "code": "bloom",
+     "limit": "account"
+    },
+    {
+     "id": "b",
+     "type": "db",
+     "x": 380,
+     "y": 420,
+     "size": "XL",
+     "kind": "sql"
+    },
+    {
+     "id": "n1",
+     "type": "cache",
+     "x": 640,
+     "y": 348,
+     "size": "L",
+     "ttl": "3600",
+     "onWrite": "ttl"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "u",
+     "to": "l"
+    },
+    {
+     "id": "s3",
+     "from": "l",
+     "to": "w"
+    },
+    {
+     "id": "s4",
+     "from": "w",
+     "to": "b"
+    },
+    {
+     "id": "e2",
+     "from": "w",
+     "to": "n1"
+    }
+   ]
+  },
+  {
+   "mission": 2,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 120,
+     "y": 60
+    },
+    {
+     "id": "l",
+     "type": "lb",
+     "x": 380,
+     "y": 168,
+     "algo": "rr"
+    },
+    {
+     "id": "w",
+     "type": "web",
+     "x": 380,
+     "y": 276,
+     "size": "L",
+     "scaling": "auto",
+     "redirect": "302",
+     "code": "hash",
+     "limit": "account"
+    },
+    {
+     "id": "b",
+     "type": "db",
+     "x": 380,
+     "y": 420,
+     "size": "XL",
+     "kind": "sql"
+    },
+    {
+     "id": "n1",
+     "type": "cache",
+     "x": 640,
+     "y": 348,
+     "size": "L",
+     "ttl": "3600",
+     "onWrite": "ttl"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "u",
+     "to": "l"
+    },
+    {
+     "id": "s3",
+     "from": "l",
+     "to": "w"
+    },
+    {
+     "id": "s4",
+     "from": "w",
+     "to": "b"
+    },
+    {
+     "id": "e2",
+     "from": "w",
+     "to": "n1"
+    }
+   ]
+  }
+ ]
+}

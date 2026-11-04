@@ -1,0 +1,1985 @@
+{
+ "level": 2,
+ "designs": [
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 64
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 640,
+     "y": 64
+    },
+    {
+     "id": "w1",
+     "type": "web",
+     "x": 380,
+     "y": 280,
+     "size": "L"
+    },
+    {
+     "id": "b",
+     "type": "db",
+     "x": 380,
+     "y": 456,
+     "size": "L",
+     "kind": "sql"
+    },
+    {
+     "id": "n1",
+     "type": "lb",
+     "x": 380,
+     "y": 172,
+     "algo": "rr"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "w1",
+     "to": "b"
+    },
+    {
+     "id": "e2",
+     "from": "u",
+     "to": "n1"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 64
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 640,
+     "y": 64
+    },
+    {
+     "id": "w1",
+     "type": "web",
+     "x": 380,
+     "y": 280,
+     "size": "L"
+    },
+    {
+     "id": "b",
+     "type": "db",
+     "x": 380,
+     "y": 456,
+     "size": "L",
+     "kind": "sql"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "w1",
+     "to": "b"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 64
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 640,
+     "y": 64
+    },
+    {
+     "id": "w1",
+     "type": "web",
+     "x": 380,
+     "y": 280,
+     "size": "M"
+    },
+    {
+     "id": "b",
+     "type": "db",
+     "x": 380,
+     "y": 456,
+     "size": "L",
+     "kind": "sql"
+    },
+    {
+     "id": "n1",
+     "type": "web",
+     "x": 380,
+     "y": 374,
+     "size": "M",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n2",
+     "type": "lb",
+     "x": 380,
+     "y": 172,
+     "algo": "rr"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "w1",
+     "to": "b"
+    },
+    {
+     "id": "e3",
+     "from": "u",
+     "to": "n2"
+    },
+    {
+     "id": "e4",
+     "from": "n2",
+     "to": "w1"
+    },
+    {
+     "id": "e5",
+     "from": "n2",
+     "to": "n1"
+    },
+    {
+     "id": "e6",
+     "from": "n1",
+     "to": "b"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 64
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 640,
+     "y": 64
+    },
+    {
+     "id": "w1",
+     "type": "web",
+     "x": 380,
+     "y": 280,
+     "size": "M"
+    },
+    {
+     "id": "b",
+     "type": "db",
+     "x": 380,
+     "y": 456,
+     "size": "L",
+     "kind": "sql"
+    },
+    {
+     "id": "n1",
+     "type": "web",
+     "x": 380,
+     "y": 374,
+     "size": "M",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n2",
+     "type": "web",
+     "x": 592,
+     "y": 280,
+     "size": "M",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n3",
+     "type": "lb",
+     "x": 380,
+     "y": 172,
+     "algo": "rr"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "w1",
+     "to": "b"
+    },
+    {
+     "id": "e4",
+     "from": "u",
+     "to": "n3"
+    },
+    {
+     "id": "e5",
+     "from": "n3",
+     "to": "w1"
+    },
+    {
+     "id": "e6",
+     "from": "n3",
+     "to": "n1"
+    },
+    {
+     "id": "e7",
+     "from": "n3",
+     "to": "n2"
+    },
+    {
+     "id": "e8",
+     "from": "n1",
+     "to": "b"
+    },
+    {
+     "id": "e9",
+     "from": "n2",
+     "to": "b"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 64
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 640,
+     "y": 64
+    },
+    {
+     "id": "w1",
+     "type": "web",
+     "x": 380,
+     "y": 280,
+     "size": "M"
+    },
+    {
+     "id": "b",
+     "type": "db",
+     "x": 380,
+     "y": 456,
+     "size": "L",
+     "kind": "sql"
+    },
+    {
+     "id": "n1",
+     "type": "web",
+     "x": 380,
+     "y": 374,
+     "size": "M",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n2",
+     "type": "web",
+     "x": 592,
+     "y": 280,
+     "size": "M",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n3",
+     "type": "lb",
+     "x": 380,
+     "y": 172,
+     "algo": "rr"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "w1",
+     "to": "b"
+    },
+    {
+     "id": "e4",
+     "from": "u",
+     "to": "n3"
+    },
+    {
+     "id": "e5",
+     "from": "n3",
+     "to": "w1"
+    },
+    {
+     "id": "e6",
+     "from": "n3",
+     "to": "n1"
+    },
+    {
+     "id": "e7",
+     "from": "n3",
+     "to": "n2"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 64
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 640,
+     "y": 64
+    },
+    {
+     "id": "w1",
+     "type": "web",
+     "x": 380,
+     "y": 280,
+     "size": "M"
+    },
+    {
+     "id": "b",
+     "type": "db",
+     "x": 380,
+     "y": 456,
+     "size": "L",
+     "kind": "sql"
+    },
+    {
+     "id": "n1",
+     "type": "web",
+     "x": 380,
+     "y": 374,
+     "size": "M",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n3",
+     "type": "lb",
+     "x": 380,
+     "y": 172,
+     "algo": "rr"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "w1",
+     "to": "b"
+    },
+    {
+     "id": "e4",
+     "from": "u",
+     "to": "n3"
+    },
+    {
+     "id": "e5",
+     "from": "n3",
+     "to": "w1"
+    },
+    {
+     "id": "e6",
+     "from": "n3",
+     "to": "n1"
+    },
+    {
+     "id": "e8",
+     "from": "n1",
+     "to": "b"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 64
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 640,
+     "y": 64
+    },
+    {
+     "id": "w1",
+     "type": "web",
+     "x": 380,
+     "y": 280,
+     "size": "M"
+    },
+    {
+     "id": "b",
+     "type": "db",
+     "x": 380,
+     "y": 456,
+     "size": "L",
+     "kind": "sql"
+    },
+    {
+     "id": "n1",
+     "type": "web",
+     "x": 380,
+     "y": 374,
+     "size": "S",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n2",
+     "type": "lb",
+     "x": 380,
+     "y": 172,
+     "algo": "lc"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "w1",
+     "to": "b"
+    },
+    {
+     "id": "e3",
+     "from": "u",
+     "to": "n2"
+    },
+    {
+     "id": "e4",
+     "from": "n2",
+     "to": "w1"
+    },
+    {
+     "id": "e5",
+     "from": "n2",
+     "to": "n1"
+    },
+    {
+     "id": "e6",
+     "from": "n1",
+     "to": "b"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 64
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 640,
+     "y": 64
+    },
+    {
+     "id": "w1",
+     "type": "web",
+     "x": 380,
+     "y": 280,
+     "size": "M"
+    },
+    {
+     "id": "b",
+     "type": "db",
+     "x": 380,
+     "y": 456,
+     "size": "L",
+     "kind": "sql"
+    },
+    {
+     "id": "n1",
+     "type": "web",
+     "x": 380,
+     "y": 374,
+     "size": "S",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n2",
+     "type": "lb",
+     "x": 380,
+     "y": 172,
+     "algo": "rr"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "w1",
+     "to": "b"
+    },
+    {
+     "id": "e3",
+     "from": "u",
+     "to": "n2"
+    },
+    {
+     "id": "e4",
+     "from": "n2",
+     "to": "w1"
+    },
+    {
+     "id": "e5",
+     "from": "n2",
+     "to": "n1"
+    },
+    {
+     "id": "e6",
+     "from": "n1",
+     "to": "b"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 64
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 640,
+     "y": 64
+    },
+    {
+     "id": "w1",
+     "type": "web",
+     "x": 380,
+     "y": 280,
+     "size": "M"
+    },
+    {
+     "id": "b",
+     "type": "db",
+     "x": 380,
+     "y": 456,
+     "size": "L",
+     "kind": "sql"
+    },
+    {
+     "id": "n1",
+     "type": "web",
+     "x": 380,
+     "y": 374,
+     "size": "S",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n2",
+     "type": "lb",
+     "x": 380,
+     "y": 172,
+     "algo": "wrr"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "w1",
+     "to": "b"
+    },
+    {
+     "id": "e3",
+     "from": "u",
+     "to": "n2"
+    },
+    {
+     "id": "e4",
+     "from": "n2",
+     "to": "w1"
+    },
+    {
+     "id": "e5",
+     "from": "n2",
+     "to": "n1"
+    },
+    {
+     "id": "e6",
+     "from": "n1",
+     "to": "b"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 64
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 640,
+     "y": 64
+    },
+    {
+     "id": "w1",
+     "type": "web",
+     "x": 380,
+     "y": 280,
+     "size": "S"
+    },
+    {
+     "id": "b",
+     "type": "db",
+     "x": 380,
+     "y": 456,
+     "size": "L",
+     "kind": "sql"
+    },
+    {
+     "id": "n1",
+     "type": "lb",
+     "x": 380,
+     "y": 172,
+     "algo": "rr"
+    },
+    {
+     "id": "n2",
+     "type": "web",
+     "x": 380,
+     "y": 374,
+     "size": "S",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n3",
+     "type": "web",
+     "x": 592,
+     "y": 280,
+     "size": "S",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n4",
+     "type": "web",
+     "x": 168,
+     "y": 280,
+     "size": "S",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "w1",
+     "to": "b"
+    },
+    {
+     "id": "e5",
+     "from": "u",
+     "to": "n1"
+    },
+    {
+     "id": "e6",
+     "from": "n1",
+     "to": "w1"
+    },
+    {
+     "id": "e7",
+     "from": "n1",
+     "to": "n2"
+    },
+    {
+     "id": "e8",
+     "from": "n1",
+     "to": "n3"
+    },
+    {
+     "id": "e9",
+     "from": "n1",
+     "to": "n4"
+    },
+    {
+     "id": "e10",
+     "from": "n2",
+     "to": "b"
+    },
+    {
+     "id": "e11",
+     "from": "n3",
+     "to": "b"
+    },
+    {
+     "id": "e12",
+     "from": "n4",
+     "to": "b"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 64
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 640,
+     "y": 64
+    },
+    {
+     "id": "w1",
+     "type": "web",
+     "x": 380,
+     "y": 280,
+     "size": "S"
+    },
+    {
+     "id": "b",
+     "type": "db",
+     "x": 380,
+     "y": 456,
+     "size": "L",
+     "kind": "sql"
+    },
+    {
+     "id": "n1",
+     "type": "web",
+     "x": 380,
+     "y": 374,
+     "size": "L",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n2",
+     "type": "web",
+     "x": 592,
+     "y": 280,
+     "size": "S",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n3",
+     "type": "lb",
+     "x": 380,
+     "y": 172,
+     "algo": "rr"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "w1",
+     "to": "b"
+    },
+    {
+     "id": "e4",
+     "from": "u",
+     "to": "n3"
+    },
+    {
+     "id": "e5",
+     "from": "n3",
+     "to": "w1"
+    },
+    {
+     "id": "e6",
+     "from": "n3",
+     "to": "n1"
+    },
+    {
+     "id": "e7",
+     "from": "n3",
+     "to": "n2"
+    },
+    {
+     "id": "e8",
+     "from": "n1",
+     "to": "b"
+    },
+    {
+     "id": "e9",
+     "from": "n2",
+     "to": "b"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 64
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 640,
+     "y": 64
+    },
+    {
+     "id": "w1",
+     "type": "web",
+     "x": 380,
+     "y": 280,
+     "size": "S"
+    },
+    {
+     "id": "b",
+     "type": "db",
+     "x": 380,
+     "y": 456,
+     "size": "L",
+     "kind": "sql"
+    },
+    {
+     "id": "n1",
+     "type": "web",
+     "x": 380,
+     "y": 374,
+     "size": "S",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n2",
+     "type": "web",
+     "x": 592,
+     "y": 280,
+     "size": "S",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n3",
+     "type": "web",
+     "x": 168,
+     "y": 280,
+     "size": "S",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n4",
+     "type": "lb",
+     "x": 380,
+     "y": 172,
+     "algo": "rr"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "w1",
+     "to": "b"
+    },
+    {
+     "id": "e5",
+     "from": "u",
+     "to": "n4"
+    },
+    {
+     "id": "e6",
+     "from": "n4",
+     "to": "w1"
+    },
+    {
+     "id": "e7",
+     "from": "n4",
+     "to": "n1"
+    },
+    {
+     "id": "e8",
+     "from": "n4",
+     "to": "n2"
+    },
+    {
+     "id": "e9",
+     "from": "n4",
+     "to": "n3"
+    },
+    {
+     "id": "e10",
+     "from": "n1",
+     "to": "b"
+    },
+    {
+     "id": "e11",
+     "from": "n2",
+     "to": "b"
+    },
+    {
+     "id": "e12",
+     "from": "n3",
+     "to": "b"
+    }
+   ]
+  },
+  {
+   "mission": 1,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 64
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 640,
+     "y": 64
+    },
+    {
+     "id": "w1",
+     "type": "web",
+     "x": 380,
+     "y": 280,
+     "size": "L"
+    },
+    {
+     "id": "b",
+     "type": "db",
+     "x": 380,
+     "y": 456,
+     "size": "XL",
+     "kind": "sql"
+    },
+    {
+     "id": "n1",
+     "type": "web",
+     "x": 380,
+     "y": 374,
+     "size": "M",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n2",
+     "type": "web",
+     "x": 592,
+     "y": 280,
+     "size": "M",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n3",
+     "type": "web",
+     "x": 168,
+     "y": 280,
+     "size": "M",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n4",
+     "type": "lb",
+     "x": 380,
+     "y": 172,
+     "algo": "wrr"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "w1",
+     "to": "b"
+    },
+    {
+     "id": "e5",
+     "from": "u",
+     "to": "n4"
+    },
+    {
+     "id": "e6",
+     "from": "n4",
+     "to": "w1"
+    },
+    {
+     "id": "e7",
+     "from": "n4",
+     "to": "n1"
+    },
+    {
+     "id": "e8",
+     "from": "n4",
+     "to": "n2"
+    },
+    {
+     "id": "e9",
+     "from": "n4",
+     "to": "n3"
+    },
+    {
+     "id": "e10",
+     "from": "n1",
+     "to": "b"
+    },
+    {
+     "id": "e11",
+     "from": "n2",
+     "to": "b"
+    },
+    {
+     "id": "e12",
+     "from": "n3",
+     "to": "b"
+    }
+   ]
+  },
+  {
+   "mission": 1,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 64
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 640,
+     "y": 64
+    },
+    {
+     "id": "w1",
+     "type": "web",
+     "x": 380,
+     "y": 280,
+     "size": "M"
+    },
+    {
+     "id": "b",
+     "type": "db",
+     "x": 380,
+     "y": 456,
+     "size": "L",
+     "kind": "sql"
+    },
+    {
+     "id": "n1",
+     "type": "web",
+     "x": 380,
+     "y": 374,
+     "size": "M",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n2",
+     "type": "web",
+     "x": 592,
+     "y": 280,
+     "size": "M",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n3",
+     "type": "web",
+     "x": 168,
+     "y": 280,
+     "size": "M",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n4",
+     "type": "web",
+     "x": 380,
+     "y": 186,
+     "size": "M",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n5",
+     "type": "lb",
+     "x": 640,
+     "y": 172,
+     "algo": "rr"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "w1",
+     "to": "b"
+    },
+    {
+     "id": "e6",
+     "from": "u",
+     "to": "n5"
+    },
+    {
+     "id": "e7",
+     "from": "n5",
+     "to": "w1"
+    },
+    {
+     "id": "e8",
+     "from": "n5",
+     "to": "n1"
+    },
+    {
+     "id": "e9",
+     "from": "n5",
+     "to": "n2"
+    },
+    {
+     "id": "e10",
+     "from": "n5",
+     "to": "n3"
+    },
+    {
+     "id": "e11",
+     "from": "n5",
+     "to": "n4"
+    },
+    {
+     "id": "e12",
+     "from": "n1",
+     "to": "b"
+    },
+    {
+     "id": "e13",
+     "from": "n2",
+     "to": "b"
+    },
+    {
+     "id": "e14",
+     "from": "n3",
+     "to": "b"
+    },
+    {
+     "id": "e15",
+     "from": "n4",
+     "to": "b"
+    }
+   ]
+  },
+  {
+   "mission": 1,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 64
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 640,
+     "y": 64
+    },
+    {
+     "id": "w1",
+     "type": "web",
+     "x": 380,
+     "y": 280,
+     "size": "M"
+    },
+    {
+     "id": "b",
+     "type": "db",
+     "x": 380,
+     "y": 456,
+     "size": "XL",
+     "kind": "sql"
+    },
+    {
+     "id": "n1",
+     "type": "web",
+     "x": 380,
+     "y": 374,
+     "size": "M",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n2",
+     "type": "web",
+     "x": 592,
+     "y": 280,
+     "size": "M",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n3",
+     "type": "web",
+     "x": 168,
+     "y": 280,
+     "size": "M",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n4",
+     "type": "lb",
+     "x": 380,
+     "y": 172,
+     "algo": "rr"
+    },
+    {
+     "id": "n13",
+     "type": "web",
+     "x": 592,
+     "y": 374,
+     "size": "M",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "w1",
+     "to": "b"
+    },
+    {
+     "id": "e5",
+     "from": "u",
+     "to": "n4"
+    },
+    {
+     "id": "e6",
+     "from": "n4",
+     "to": "w1"
+    },
+    {
+     "id": "e7",
+     "from": "n4",
+     "to": "n1"
+    },
+    {
+     "id": "e8",
+     "from": "n4",
+     "to": "n2"
+    },
+    {
+     "id": "e9",
+     "from": "n4",
+     "to": "n3"
+    },
+    {
+     "id": "e10",
+     "from": "n1",
+     "to": "b"
+    },
+    {
+     "id": "e11",
+     "from": "n2",
+     "to": "b"
+    },
+    {
+     "id": "e12",
+     "from": "n3",
+     "to": "b"
+    },
+    {
+     "id": "e14",
+     "from": "n4",
+     "to": "n13"
+    },
+    {
+     "id": "e15",
+     "from": "n13",
+     "to": "b"
+    }
+   ]
+  },
+  {
+   "mission": 2,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 64
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 640,
+     "y": 64
+    },
+    {
+     "id": "w1",
+     "type": "web",
+     "x": 380,
+     "y": 280,
+     "size": "M"
+    },
+    {
+     "id": "b",
+     "type": "db",
+     "x": 380,
+     "y": 456,
+     "size": "XL",
+     "kind": "sql"
+    },
+    {
+     "id": "n1",
+     "type": "web",
+     "x": 380,
+     "y": 374,
+     "size": "M",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n2",
+     "type": "web",
+     "x": 592,
+     "y": 280,
+     "size": "M",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n3",
+     "type": "web",
+     "x": 168,
+     "y": 280,
+     "size": "M",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n4",
+     "type": "lb",
+     "x": 380,
+     "y": 172,
+     "algo": "rr"
+    },
+    {
+     "id": "n13",
+     "type": "web",
+     "x": 592,
+     "y": 374,
+     "size": "M",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n16",
+     "type": "lb",
+     "x": 640,
+     "y": 172,
+     "algo": "rr"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "w1",
+     "to": "b"
+    },
+    {
+     "id": "e5",
+     "from": "u",
+     "to": "n4"
+    },
+    {
+     "id": "e6",
+     "from": "n4",
+     "to": "w1"
+    },
+    {
+     "id": "e7",
+     "from": "n4",
+     "to": "n1"
+    },
+    {
+     "id": "e8",
+     "from": "n4",
+     "to": "n2"
+    },
+    {
+     "id": "e9",
+     "from": "n4",
+     "to": "n3"
+    },
+    {
+     "id": "e10",
+     "from": "n1",
+     "to": "b"
+    },
+    {
+     "id": "e11",
+     "from": "n2",
+     "to": "b"
+    },
+    {
+     "id": "e12",
+     "from": "n3",
+     "to": "b"
+    },
+    {
+     "id": "e14",
+     "from": "n4",
+     "to": "n13"
+    },
+    {
+     "id": "e15",
+     "from": "n13",
+     "to": "b"
+    },
+    {
+     "id": "e17",
+     "from": "u",
+     "to": "n16"
+    },
+    {
+     "id": "e18",
+     "from": "n16",
+     "to": "w1"
+    },
+    {
+     "id": "e19",
+     "from": "n16",
+     "to": "n1"
+    },
+    {
+     "id": "e20",
+     "from": "n16",
+     "to": "n2"
+    },
+    {
+     "id": "e21",
+     "from": "n16",
+     "to": "n3"
+    },
+    {
+     "id": "e22",
+     "from": "n16",
+     "to": "n13"
+    }
+   ]
+  },
+  {
+   "mission": 2,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 64
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 640,
+     "y": 64
+    },
+    {
+     "id": "w1",
+     "type": "web",
+     "x": 380,
+     "y": 280,
+     "size": "M"
+    },
+    {
+     "id": "b",
+     "type": "db",
+     "x": 380,
+     "y": 456,
+     "size": "XL",
+     "kind": "sql"
+    },
+    {
+     "id": "n1",
+     "type": "web",
+     "x": 380,
+     "y": 374,
+     "size": "M",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n2",
+     "type": "web",
+     "x": 592,
+     "y": 280,
+     "size": "M",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n3",
+     "type": "web",
+     "x": 168,
+     "y": 280,
+     "size": "M",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n4",
+     "type": "web",
+     "x": 380,
+     "y": 186,
+     "size": "M",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n5",
+     "type": "lb",
+     "x": 640,
+     "y": 172,
+     "algo": "rr"
+    },
+    {
+     "id": "n16",
+     "type": "lb",
+     "x": 168,
+     "y": 172,
+     "algo": "rr"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "w1",
+     "to": "b"
+    },
+    {
+     "id": "e6",
+     "from": "u",
+     "to": "n5"
+    },
+    {
+     "id": "e7",
+     "from": "n5",
+     "to": "w1"
+    },
+    {
+     "id": "e8",
+     "from": "n5",
+     "to": "n1"
+    },
+    {
+     "id": "e9",
+     "from": "n5",
+     "to": "n2"
+    },
+    {
+     "id": "e10",
+     "from": "n5",
+     "to": "n3"
+    },
+    {
+     "id": "e11",
+     "from": "n5",
+     "to": "n4"
+    },
+    {
+     "id": "e12",
+     "from": "n1",
+     "to": "b"
+    },
+    {
+     "id": "e13",
+     "from": "n2",
+     "to": "b"
+    },
+    {
+     "id": "e14",
+     "from": "n3",
+     "to": "b"
+    },
+    {
+     "id": "e15",
+     "from": "n4",
+     "to": "b"
+    },
+    {
+     "id": "e17",
+     "from": "u",
+     "to": "n16"
+    },
+    {
+     "id": "e18",
+     "from": "n16",
+     "to": "w1"
+    },
+    {
+     "id": "e19",
+     "from": "n16",
+     "to": "n1"
+    },
+    {
+     "id": "e20",
+     "from": "n16",
+     "to": "n2"
+    },
+    {
+     "id": "e21",
+     "from": "n16",
+     "to": "n3"
+    },
+    {
+     "id": "e22",
+     "from": "n16",
+     "to": "n4"
+    }
+   ]
+  },
+  {
+   "mission": 2,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 64
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 640,
+     "y": 64
+    },
+    {
+     "id": "w1",
+     "type": "web",
+     "x": 380,
+     "y": 280,
+     "size": "M"
+    },
+    {
+     "id": "b",
+     "type": "db",
+     "x": 380,
+     "y": 456,
+     "size": "XL",
+     "kind": "sql"
+    },
+    {
+     "id": "n1",
+     "type": "web",
+     "x": 380,
+     "y": 374,
+     "size": "M",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n2",
+     "type": "web",
+     "x": 592,
+     "y": 280,
+     "size": "M",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n3",
+     "type": "web",
+     "x": 168,
+     "y": 280,
+     "size": "M",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n4",
+     "type": "web",
+     "x": 380,
+     "y": 186,
+     "size": "M",
+     "scaling": "fixed",
+     "redirect": "302",
+     "code": "base62",
+     "limit": "none"
+    },
+    {
+     "id": "n5",
+     "type": "lb",
+     "x": 640,
+     "y": 172,
+     "algo": "rr"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "w1",
+     "to": "b"
+    },
+    {
+     "id": "e6",
+     "from": "u",
+     "to": "n5"
+    },
+    {
+     "id": "e7",
+     "from": "n5",
+     "to": "w1"
+    },
+    {
+     "id": "e8",
+     "from": "n5",
+     "to": "n1"
+    },
+    {
+     "id": "e9",
+     "from": "n5",
+     "to": "n2"
+    },
+    {
+     "id": "e10",
+     "from": "n5",
+     "to": "n3"
+    },
+    {
+     "id": "e11",
+     "from": "n5",
+     "to": "n4"
+    },
+    {
+     "id": "e12",
+     "from": "n1",
+     "to": "b"
+    },
+    {
+     "id": "e13",
+     "from": "n2",
+     "to": "b"
+    },
+    {
+     "id": "e14",
+     "from": "n3",
+     "to": "b"
+    },
+    {
+     "id": "e15",
+     "from": "n4",
+     "to": "b"
+    }
+   ]
+  }
+ ]
+}

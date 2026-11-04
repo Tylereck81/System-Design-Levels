@@ -1,0 +1,656 @@
+{
+ "level": 17,
+ "designs": [
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 120,
+     "y": 60
+    },
+    {
+     "id": "l",
+     "type": "lb",
+     "x": 380,
+     "y": 168,
+     "algo": "rr"
+    },
+    {
+     "id": "w1",
+     "type": "web",
+     "x": 250,
+     "y": 276,
+     "size": "L",
+     "scaling": "auto"
+    },
+    {
+     "id": "w2",
+     "type": "web",
+     "x": 510,
+     "y": 276,
+     "size": "L",
+     "scaling": "auto"
+    },
+    {
+     "id": "f",
+     "type": "feedsvc",
+     "x": 380,
+     "y": 384,
+     "fanout": "hybrid",
+     "workers": "4",
+     "inactive": "all"
+    },
+    {
+     "id": "c",
+     "type": "feedcache",
+     "x": 380,
+     "y": 492,
+     "store": "ids"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "u",
+     "to": "l"
+    },
+    {
+     "id": "s3",
+     "from": "l",
+     "to": "w1"
+    },
+    {
+     "id": "s4",
+     "from": "l",
+     "to": "w2"
+    },
+    {
+     "id": "s5",
+     "from": "w1",
+     "to": "f"
+    },
+    {
+     "id": "s6",
+     "from": "w2",
+     "to": "f"
+    },
+    {
+     "id": "s7",
+     "from": "f",
+     "to": "c"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 120,
+     "y": 60
+    },
+    {
+     "id": "l",
+     "type": "lb",
+     "x": 380,
+     "y": 168,
+     "algo": "rr"
+    },
+    {
+     "id": "w1",
+     "type": "web",
+     "x": 250,
+     "y": 276,
+     "size": "L",
+     "scaling": "auto"
+    },
+    {
+     "id": "w2",
+     "type": "web",
+     "x": 510,
+     "y": 276,
+     "size": "L",
+     "scaling": "auto"
+    },
+    {
+     "id": "f",
+     "type": "feedsvc",
+     "x": 380,
+     "y": 384,
+     "fanout": "hybrid",
+     "workers": "4",
+     "inactive": "skip"
+    },
+    {
+     "id": "c",
+     "type": "feedcache",
+     "x": 380,
+     "y": 492,
+     "store": "ids"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "u",
+     "to": "l"
+    },
+    {
+     "id": "s3",
+     "from": "l",
+     "to": "w1"
+    },
+    {
+     "id": "s4",
+     "from": "l",
+     "to": "w2"
+    },
+    {
+     "id": "s5",
+     "from": "w1",
+     "to": "f"
+    },
+    {
+     "id": "s6",
+     "from": "w2",
+     "to": "f"
+    },
+    {
+     "id": "s7",
+     "from": "f",
+     "to": "c"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 120,
+     "y": 60
+    },
+    {
+     "id": "l",
+     "type": "lb",
+     "x": 380,
+     "y": 168,
+     "algo": "rr"
+    },
+    {
+     "id": "w1",
+     "type": "web",
+     "x": 250,
+     "y": 276,
+     "size": "L",
+     "scaling": "auto"
+    },
+    {
+     "id": "w2",
+     "type": "web",
+     "x": 510,
+     "y": 276,
+     "size": "L",
+     "scaling": "auto"
+    },
+    {
+     "id": "f",
+     "type": "feedsvc",
+     "x": 380,
+     "y": 384,
+     "fanout": "read",
+     "workers": "2",
+     "inactive": "all"
+    },
+    {
+     "id": "c",
+     "type": "feedcache",
+     "x": 380,
+     "y": 492,
+     "store": "posts"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "u",
+     "to": "l"
+    },
+    {
+     "id": "s3",
+     "from": "l",
+     "to": "w1"
+    },
+    {
+     "id": "s4",
+     "from": "l",
+     "to": "w2"
+    },
+    {
+     "id": "s5",
+     "from": "w1",
+     "to": "f"
+    },
+    {
+     "id": "s6",
+     "from": "w2",
+     "to": "f"
+    },
+    {
+     "id": "s7",
+     "from": "f",
+     "to": "c"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 120,
+     "y": 60
+    },
+    {
+     "id": "l",
+     "type": "lb",
+     "x": 380,
+     "y": 168,
+     "algo": "rr"
+    },
+    {
+     "id": "w1",
+     "type": "web",
+     "x": 250,
+     "y": 276,
+     "size": "L",
+     "scaling": "auto"
+    },
+    {
+     "id": "w2",
+     "type": "web",
+     "x": 510,
+     "y": 276,
+     "size": "L",
+     "scaling": "auto"
+    },
+    {
+     "id": "f",
+     "type": "feedsvc",
+     "x": 380,
+     "y": 384,
+     "fanout": "write",
+     "workers": "2",
+     "inactive": "all"
+    },
+    {
+     "id": "c",
+     "type": "feedcache",
+     "x": 380,
+     "y": 492,
+     "store": "posts"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "u",
+     "to": "l"
+    },
+    {
+     "id": "s3",
+     "from": "l",
+     "to": "w1"
+    },
+    {
+     "id": "s4",
+     "from": "l",
+     "to": "w2"
+    },
+    {
+     "id": "s5",
+     "from": "w1",
+     "to": "f"
+    },
+    {
+     "id": "s6",
+     "from": "w2",
+     "to": "f"
+    },
+    {
+     "id": "s7",
+     "from": "f",
+     "to": "c"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 120,
+     "y": 60
+    },
+    {
+     "id": "l",
+     "type": "lb",
+     "x": 380,
+     "y": 168,
+     "algo": "rr"
+    },
+    {
+     "id": "w1",
+     "type": "web",
+     "x": 250,
+     "y": 276,
+     "size": "L",
+     "scaling": "auto"
+    },
+    {
+     "id": "w2",
+     "type": "web",
+     "x": 510,
+     "y": 276,
+     "size": "L",
+     "scaling": "auto"
+    },
+    {
+     "id": "f",
+     "type": "feedsvc",
+     "x": 380,
+     "y": 384,
+     "fanout": "write",
+     "workers": "4",
+     "inactive": "all"
+    },
+    {
+     "id": "c",
+     "type": "feedcache",
+     "x": 380,
+     "y": 492,
+     "store": "ids"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "u",
+     "to": "l"
+    },
+    {
+     "id": "s3",
+     "from": "l",
+     "to": "w1"
+    },
+    {
+     "id": "s4",
+     "from": "l",
+     "to": "w2"
+    },
+    {
+     "id": "s5",
+     "from": "w1",
+     "to": "f"
+    },
+    {
+     "id": "s6",
+     "from": "w2",
+     "to": "f"
+    },
+    {
+     "id": "s7",
+     "from": "f",
+     "to": "c"
+    }
+   ]
+  },
+  {
+   "mission": 1,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 120,
+     "y": 60
+    },
+    {
+     "id": "l",
+     "type": "lb",
+     "x": 380,
+     "y": 168,
+     "algo": "rr"
+    },
+    {
+     "id": "w1",
+     "type": "web",
+     "x": 250,
+     "y": 276,
+     "size": "L",
+     "scaling": "auto"
+    },
+    {
+     "id": "w2",
+     "type": "web",
+     "x": 510,
+     "y": 276,
+     "size": "L",
+     "scaling": "auto"
+    },
+    {
+     "id": "f",
+     "type": "feedsvc",
+     "x": 380,
+     "y": 384,
+     "fanout": "hybrid",
+     "workers": "4",
+     "inactive": "all"
+    },
+    {
+     "id": "c",
+     "type": "feedcache",
+     "x": 380,
+     "y": 492,
+     "store": "ids"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "u",
+     "to": "l"
+    },
+    {
+     "id": "s3",
+     "from": "l",
+     "to": "w1"
+    },
+    {
+     "id": "s4",
+     "from": "l",
+     "to": "w2"
+    },
+    {
+     "id": "s5",
+     "from": "w1",
+     "to": "f"
+    },
+    {
+     "id": "s6",
+     "from": "w2",
+     "to": "f"
+    },
+    {
+     "id": "s7",
+     "from": "f",
+     "to": "c"
+    }
+   ]
+  },
+  {
+   "mission": 2,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 60
+    },
+    {
+     "id": "d",
+     "type": "dns",
+     "x": 120,
+     "y": 60
+    },
+    {
+     "id": "l",
+     "type": "lb",
+     "x": 380,
+     "y": 168,
+     "algo": "rr"
+    },
+    {
+     "id": "w1",
+     "type": "web",
+     "x": 250,
+     "y": 276,
+     "size": "L",
+     "scaling": "auto"
+    },
+    {
+     "id": "w2",
+     "type": "web",
+     "x": 510,
+     "y": 276,
+     "size": "L",
+     "scaling": "auto"
+    },
+    {
+     "id": "f",
+     "type": "feedsvc",
+     "x": 380,
+     "y": 384,
+     "fanout": "hybrid",
+     "workers": "4",
+     "inactive": "skip"
+    },
+    {
+     "id": "c",
+     "type": "feedcache",
+     "x": 380,
+     "y": 492,
+     "store": "ids"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "d"
+    },
+    {
+     "id": "s2",
+     "from": "u",
+     "to": "l"
+    },
+    {
+     "id": "s3",
+     "from": "l",
+     "to": "w1"
+    },
+    {
+     "id": "s4",
+     "from": "l",
+     "to": "w2"
+    },
+    {
+     "id": "s5",
+     "from": "w1",
+     "to": "f"
+    },
+    {
+     "id": "s6",
+     "from": "w2",
+     "to": "f"
+    },
+    {
+     "id": "s7",
+     "from": "f",
+     "to": "c"
+    }
+   ]
+  }
+ ]
+}

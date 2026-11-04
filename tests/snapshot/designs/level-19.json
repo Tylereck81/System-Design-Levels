@@ -1,0 +1,456 @@
+{
+ "level": 19,
+ "designs": [
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 70
+    },
+    {
+     "id": "a",
+     "type": "tapi",
+     "x": 380,
+     "y": 230,
+     "count": "4",
+     "browser": "off"
+    },
+    {
+     "id": "t",
+     "type": "trie",
+     "x": 380,
+     "y": 390,
+     "method": "table",
+     "shards": "3",
+     "split": "letter",
+     "rebuild": "daily"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "a"
+    },
+    {
+     "id": "s2",
+     "from": "a",
+     "to": "t"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 70
+    },
+    {
+     "id": "a",
+     "type": "tapi",
+     "x": 380,
+     "y": 230,
+     "count": "4",
+     "browser": "off"
+    },
+    {
+     "id": "t",
+     "type": "trie",
+     "x": 380,
+     "y": 390,
+     "method": "table",
+     "shards": "3",
+     "split": "letter",
+     "rebuild": "hourly"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "a"
+    },
+    {
+     "id": "s2",
+     "from": "a",
+     "to": "t"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 70
+    },
+    {
+     "id": "a",
+     "type": "tapi",
+     "x": 380,
+     "y": 230,
+     "count": "4",
+     "browser": "off"
+    },
+    {
+     "id": "t",
+     "type": "trie",
+     "x": 380,
+     "y": 390,
+     "method": "table",
+     "shards": "3",
+     "split": "letter",
+     "rebuild": "weekly"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "a"
+    },
+    {
+     "id": "s2",
+     "from": "a",
+     "to": "t"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 70
+    },
+    {
+     "id": "a",
+     "type": "tapi",
+     "x": 380,
+     "y": 230,
+     "count": "4",
+     "browser": "off"
+    },
+    {
+     "id": "t",
+     "type": "trie",
+     "x": 380,
+     "y": 390,
+     "method": "topk",
+     "shards": "3",
+     "split": "letter",
+     "rebuild": "weekly"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "a"
+    },
+    {
+     "id": "s2",
+     "from": "a",
+     "to": "t"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 70
+    },
+    {
+     "id": "a",
+     "type": "tapi",
+     "x": 380,
+     "y": 230,
+     "count": "4",
+     "browser": "off"
+    },
+    {
+     "id": "t",
+     "type": "trie",
+     "x": 380,
+     "y": 390,
+     "method": "trie",
+     "shards": "3",
+     "split": "letter",
+     "rebuild": "weekly"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "a"
+    },
+    {
+     "id": "s2",
+     "from": "a",
+     "to": "t"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 70
+    },
+    {
+     "id": "a",
+     "type": "tapi",
+     "x": 380,
+     "y": 230,
+     "count": "4",
+     "browser": "on"
+    },
+    {
+     "id": "t",
+     "type": "trie",
+     "x": 380,
+     "y": 390,
+     "method": "topk",
+     "shards": "3",
+     "split": "letter",
+     "rebuild": "weekly"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "a"
+    },
+    {
+     "id": "s2",
+     "from": "a",
+     "to": "t"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 70
+    },
+    {
+     "id": "a",
+     "type": "tapi",
+     "x": 380,
+     "y": 230,
+     "count": "6",
+     "browser": "on"
+    },
+    {
+     "id": "t",
+     "type": "trie",
+     "x": 380,
+     "y": 390,
+     "method": "topk",
+     "shards": "3",
+     "split": "letter",
+     "rebuild": "weekly"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "a"
+    },
+    {
+     "id": "s2",
+     "from": "a",
+     "to": "t"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 70
+    },
+    {
+     "id": "a",
+     "type": "tapi",
+     "x": 380,
+     "y": 230,
+     "count": "6",
+     "browser": "on"
+    },
+    {
+     "id": "t",
+     "type": "trie",
+     "x": 380,
+     "y": 390,
+     "method": "topk",
+     "shards": "3",
+     "split": "map",
+     "rebuild": "weekly"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "a"
+    },
+    {
+     "id": "s2",
+     "from": "a",
+     "to": "t"
+    }
+   ]
+  },
+  {
+   "mission": 0,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 70
+    },
+    {
+     "id": "a",
+     "type": "tapi",
+     "x": 380,
+     "y": 230,
+     "count": "6",
+     "browser": "on"
+    },
+    {
+     "id": "t",
+     "type": "trie",
+     "x": 380,
+     "y": 390,
+     "method": "topk",
+     "shards": "4",
+     "split": "letter",
+     "rebuild": "weekly"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "a"
+    },
+    {
+     "id": "s2",
+     "from": "a",
+     "to": "t"
+    }
+   ]
+  },
+  {
+   "mission": 1,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 70
+    },
+    {
+     "id": "a",
+     "type": "tapi",
+     "x": 380,
+     "y": 230,
+     "count": "6",
+     "browser": "on"
+    },
+    {
+     "id": "t",
+     "type": "trie",
+     "x": 380,
+     "y": 390,
+     "method": "topk",
+     "shards": "3",
+     "split": "map",
+     "rebuild": "weekly"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "a"
+    },
+    {
+     "id": "s2",
+     "from": "a",
+     "to": "t"
+    }
+   ]
+  },
+  {
+   "mission": 2,
+   "nodes": [
+    {
+     "id": "u",
+     "type": "users",
+     "x": 380,
+     "y": 70
+    },
+    {
+     "id": "a",
+     "type": "tapi",
+     "x": 380,
+     "y": 230,
+     "count": "6",
+     "browser": "on"
+    },
+    {
+     "id": "t",
+     "type": "trie",
+     "x": 380,
+     "y": 390,
+     "method": "topk",
+     "shards": "3",
+     "split": "map",
+     "rebuild": "hourly"
+    }
+   ],
+   "edges": [
+    {
+     "id": "s1",
+     "from": "u",
+     "to": "a"
+    },
+    {
+     "id": "s2",
+     "from": "a",
+     "to": "t"
+    }
+   ]
+  }
+ ]
+}
