@@ -11,6 +11,7 @@ import { togglePlay } from '../ui/controls.js';
 import { log } from '../ui/log.js';
 import { afterDesignChange } from '../main.js';
 import { dropMissingCrashes, downIds, trafficFactor } from './experiments.js';
+import { placeDots } from './dots.js';
 
 /* ---------------- Palette ---------------- */
 export const countType = (t) => S.nodes.filter(n => n.type === t).length;
@@ -149,7 +150,7 @@ cv.addEventListener('pointermove', (e) => {
     const p = svgPt(e); const n = byId(drag.id); if (!n) { drag = null; return; }
     n.x = clampX(p.x - drag.ox); n.y = clampY(p.y - drag.oy);
     nodeRefs[n.id].g.setAttribute('transform', `translate(${n.x - NW / 2} ${n.y - NH / 2})`);
-    renderEdges();
+    renderEdges(); placeDots();
   }
 });
 export const endCanvas = (e) => {
@@ -166,7 +167,7 @@ export const endCanvas = (e) => {
     if (!d.moved) { select({ kind: 'node', id: d.id }); return; }
     const n = byId(d.id);
     if (n) { const s = freeSpot(n.x, n.y, n.id); n.x = s.x; n.y = s.y; }
-    renderCanvas(); save();
+    renderCanvas(); placeDots(); save();
   }
 };
 cv.addEventListener('pointerup', endCanvas);
@@ -187,7 +188,7 @@ cv.addEventListener('keydown', (e) => {
     e.preventDefault();
     const step = e.shiftKey ? 40 : 10;
     n.x = clampX(n.x + mv[0] * step); n.y = clampY(n.y + mv[1] * step);
-    setRefocus(n.id); renderCanvas(); save();
+    setRefocus(n.id); renderCanvas(); placeDots(); save();
   }
 });
 
