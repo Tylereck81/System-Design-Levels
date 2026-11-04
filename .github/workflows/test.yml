@@ -24,7 +24,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npm test
+      # Two steps, so a failing Node test does not hide the browser tests' results. The browser tests still do not
+      # run after a failed install: their errors would bury the real one.
+      - id: unit
+        run: npm run test:unit
+      - run: npm run test:e2e
+        if: ${{ success() || steps.unit.outcome == 'failure' }}
       - uses: actions/upload-artifact@v7
         if: failure()
         with:

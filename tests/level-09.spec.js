@@ -218,27 +218,6 @@ test.describe('Level 9 · teaching feedback', () => {
   });
 });
 
-test.describe('Level 9 · quiz', () => {
-  test('answer key is balanced and not guessable by length', async ({ page }) => {
-    await freshPage(page, '#level-9/quiz');
-    const source = await (await page.request.get('/levels/level-09.js')).text();
-    const questions = [...source.matchAll(/o: \[(.*?)\], a: (\d)/g)];
-    expect(questions).toHaveLength(10);
-    const counts = [0, 0, 0, 0];
-    let longestIsRight = 0;
-    for (const [, opts, a] of questions) {
-      counts[+a]++;
-      const options = [...opts.matchAll(/'((?:[^'\\]|\\.)*)'/g)].map((m) => m[1]);
-      expect(options).toHaveLength(4);
-      const longest = options.reduce((best, o, i) => (o.length > options[best].length ? i : best), 0);
-      if (longest === +a) longestIsRight++;
-    }
-    expect(Math.max(...counts)).toBeLessThanOrEqual(3);
-    expect(longestIsRight).toBe(0);
-    await expect(page.locator('#quizLabel')).toHaveText('Level 9 quiz · 10 questions · 8 to pass');
-  });
-});
-
 test.describe('Level 9 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-9/build');

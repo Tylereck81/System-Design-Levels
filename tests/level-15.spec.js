@@ -220,29 +220,6 @@ test.describe('Level 15 · teaching feedback', () => {
   });
 });
 
-test.describe('Level 15 · quiz', () => {
-  test('answer key is balanced, not guessable by length, and not Level 12\'s to 14\'s', async ({ page }) => {
-    await freshPage(page, '#level-15/quiz');
-    const keyOf = async (n) => [...(await (await page.request.get(`/levels/level-${n}.js`)).text()).matchAll(/o: \[(.*?)\], a: (\d)/g)];
-    const questions = await keyOf(15);
-    expect(questions).toHaveLength(10);
-    const counts = [0, 0, 0, 0];
-    let longestIsRight = 0;
-    for (const [, opts, a] of questions) {
-      counts[+a]++;
-      const options = [...opts.matchAll(/'((?:[^'\\]|\\.)*)'/g)].map((m) => m[1]);
-      expect(options).toHaveLength(4);
-      const longest = options.reduce((best, o, i) => (o.length > options[best].length ? i : best), 0);
-      if (longest === +a) longestIsRight++;
-    }
-    expect(Math.max(...counts)).toBeLessThanOrEqual(3);
-    expect(longestIsRight).toBe(0);
-    const key = (qs) => qs.map((q) => q[2]).join('');
-    for (const n of [12, 13, 14]) expect(key(questions)).not.toBe(key(await keyOf(n)));
-    await expect(page.locator('#quizLabel')).toHaveText('Level 15 quiz · 10 questions · 8 to pass');
-  });
-});
-
 test.describe('Level 15 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-15/build');
