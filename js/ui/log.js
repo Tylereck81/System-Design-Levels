@@ -2,7 +2,8 @@
 import { fmt } from '../format.js';
 import { $, el } from '../dom.js';
 import { TARGET_MS, TXT, S, run, byId, nameOf, lowerName } from '../state.js';
-import { T, serverSpec } from '../engine/components.js';
+import { T } from '../engine/catalog.js';
+import { serverSpec } from '../engine/components.js';
 import { activeExps, anyOn, crashing, expectMet, textOf, notMetKey } from '../engine/experiments.js';
 
 export let logLines = [];

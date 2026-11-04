@@ -10,10 +10,9 @@ import { chatOutcome } from './chat.js';
 import { typeaheadOutcome } from './typeahead.js';
 import { videoOutcome } from './video.js';
 import { mbPerUpload, storageBill, reconnect, ONLINE } from './sync.js';
-import { COMPONENTS, T, roleOf, isServer, isReplica, isCache, isEdge, isStore, isSticky, scales, sessionsOn, holdsSessions, copiesFor, isLocated, isFar, isGeo, replicates, isQueue, isOffload, isQuorum, quorumOf, isIdGen, idSettingOf, idSpof, linkSettingsOf, createQueries, downloaderOf, crawlSettingsOf, notifySettingsOf, feedSettingsOf, chatSettingsOf, typeaheadSettingsOf, videoSettingsOf, syncSettingsOf, isClustered, clusterSize, clusterLayout, clusterHit, shardShares, keyedShards, limiterRule, hitRate, edgeHit, fallsBack, staleSecs, costOf, serverSpec, splitRule } from './components.js';
+import { COMPONENTS, T } from './catalog.js';
+import { roleOf, isServer, isReplica, isCache, isEdge, isStore, isSticky, scales, sessionsOn, holdsSessions, copiesFor, isLocated, isFar, isGeo, replicates, isQueue, isOffload, isQuorum, quorumOf, isIdGen, idSettingOf, idSpof, linkSettingsOf, createQueries, downloaderOf, crawlSettingsOf, notifySettingsOf, feedSettingsOf, chatSettingsOf, typeaheadSettingsOf, videoSettingsOf, syncSettingsOf, isClustered, clusterSize, clusterLayout, clusterHit, shardShares, keyedShards, limiterRule, hitRate, edgeHit, fallsBack, staleSecs, costOf, serverSpec, splitRule } from './components.js';
 import { activeExps, downIds, trafficFactor, uploadFactor, dayShift, botEdge, resizeBy, partitioned, clockBack, viralClicks, bulkCreates, expFlag, textOf, PEAK } from './experiments.js';
-
-export { SIZES, T } from './components.js';
 
 const outs = (id) => S.edges.filter(e => e.from === id).map(e => byId(e.to)).filter(Boolean);
 /** Servers `n` sends requests to. A connection that copies data between servers of a type that syncs carries none. */

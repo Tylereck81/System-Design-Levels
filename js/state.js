@@ -1,6 +1,6 @@
 // Level data, game state and saved progress.
 import { level } from './level.js';
-import { SIZES, COMPONENTS } from './engine/components.js';
+import { SIZES, COMPONENTS } from './engine/catalog.js';
 
 export const TARGET_MS = level.targets.latencyMs;
 export const TARGET_SERVED = level.targets.servedPct;
