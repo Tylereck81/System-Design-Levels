@@ -1,4 +1,4 @@
-// Records the designs the tests build, as input for the simulation snapshot (see README.md).
+// Records the designs the tests build, as input for the simulation snapshot (see tests/model-snapshot.spec.js).
 // Off unless SDL_CAPTURE=1, so normal runs are unaffected.
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { join, basename } from 'node:path';
@@ -10,15 +10,14 @@ const SNAPSHOT_SPEC = 'model-snapshot.spec.js'; // it measures recorded designs;
 
 /**
  * In the page: wrap the test hooks as soon as the game publishes them, and log each distinct design once, with the
- * level the page started with and the mission it was measured on. A design counts when a test asks the model about it,
- * or when its mission becomes verified (through a test's fast-forward or through real-time play).
+ * address the game started from (it names the level) and the mission it was measured on. A design counts when a test
+ * asks the model about it, or when its mission becomes verified (through a test's fast-forward or real-time play).
  */
 function watchDesigns(prefix) {
   const logged = new Set(), verified = new Set();
-  let level = null; // the level this page booted with; a later hash change reloads the page
+  let route = null; // the address when the game started; going to another level reloads the page
   const record = (S) => {
-    if (level == null) return;
-    const json = JSON.stringify({ level, mission: S.mission, nodes: S.nodes, edges: S.edges });
+    const json = JSON.stringify({ route, mission: S.mission, nodes: S.nodes, edges: S.edges });
     if (logged.has(json)) return;
     logged.add(json);
     console.log(prefix + json);
@@ -34,7 +33,7 @@ function watchDesigns(prefix) {
     get: () => current,
     set: (sdl) => {
       current = sdl;
-      import('/js/level.js').then((m) => { level = m.entry.id; }); // already loaded: the game has started
+      route = location.hash;
       const { model, step } = sdl;
       sdl.model = (...args) => { record(sdl.S); return model(...args); };
       sdl.step = (...args) => { step(...args); checkVerified(sdl.S); };

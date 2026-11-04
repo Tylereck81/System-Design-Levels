@@ -1,16 +1,44 @@
 import { test, expect } from '@playwright/test';
-import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { freshPage } from './helpers.js';
 import { LEVELS } from '../levels/index.js';
 import { DESIGNS_DIR, EXPECTED_DIR, fileOf } from './snapshot/files.js';
 
-// Refactor guard: the full simulation result for every level, on the designs the other tests build, must stay the
-// same. These expected values are recorded from the engine, not worked out by hand: they prove a refactor changed no
-// number, not that the numbers are right (the hand-computed tests do that). See tests/snapshot/README.md.
+/*
+ * Simulation snapshot: a refactor guard.
+ *
+ * The full simulation result for every level, on the designs the other tests build, must stay the same. The expected
+ * values are recorded from the engine, not worked out by hand: they prove a refactor changed no number, not that the
+ * numbers are right (the hand-computed tests do that).
+ *
+ *   tests/snapshot/designs/level-NN.json   recorded designs, one per line, with the mission each was measured on
+ *   tests/snapshot/expected/level-NN.json  one line per case, m<mission>/d<design>/<experiment or calm>/<moment>: the
+ *                                          model's result (without the graph view) and the mission's goals
+ *
+ * Numbers match within a small tolerance (sums done in another order differ in their last bits); goal results and
+ * the values shown are compared exactly. Not covered: the frame loop (goal holding, experiment timers, completion),
+ * which crash candidate the game picks (every candidate is measured), mock interviews, the animation and the page.
+ *
+ * When it fails, in a refactor: the change altered the simulation. Find out why and fix the code; never update the
+ * snapshot to make it pass. Two cases need the owner instead: only a goal's shown value or result differs while its
+ * number matches (it sits on a rounding or target boundary), or only a value near zero moved by a tiny amount (rounding
+ * noise from subtracting large flows). In a formula or constant change the owner approved, update in the same PR and
+ * say which values changed and why:
+ *
+ *   SDL_SNAPSHOT_UPDATE=1 npx playwright test model-snapshot --project=chromium
+ *
+ * Record the designs again after adding a level or many tests, on a commit whose numbers are known to be right
+ * (normally main), never in a PR that changes the engine:
+ *
+ *   SDL_CAPTURE=1 npx playwright test --project=chromium   (tests/snapshot/capture.js records each distinct design a
+ *                                                           test measures or verifies; this spec never records)
+ *   node tests/snapshot/collect.mjs                       (writes designs/, at most 16 per mission)
+ *   SDL_SNAPSHOT_UPDATE=1 npx playwright test model-snapshot --project=chromium
+ */
 
 const UPDATE = process.env.SDL_SNAPSHOT_UPDATE === '1';
-const UPDATE_PROJECT = 'chromium'; // one engine writes the expected files, so they never mix browsers
+const PROJECT = 'chromium'; // recorded and checked in one engine: other engines may round Math.sin differently
 // Sums done in another order differ in their last bits. A number may differ by RELATIVE of its size, plus NOISE times
 // the case's traffic for values that come out near zero after subtracting flows. Real changes are far larger.
 const RELATIVE = 1e-9;
@@ -87,7 +115,8 @@ async function measureLevel({ designs, backlogJobs, dayHours }) {
 function differences(expected, actual, noise, path = '', found = []) {
   const at = (k) => (path ? `${path}.${k}` : k);
   if (typeof expected === 'number' && typeof actual === 'number') {
-    if (Math.abs(expected - actual) > RELATIVE * Math.max(Math.abs(expected), Math.abs(actual)) + noise) found.push(`${path}: expected ${expected}, got ${actual}`);
+    const allowed = RELATIVE * Math.max(Math.abs(expected), Math.abs(actual)) + noise;
+    if (Math.abs(expected - actual) > allowed) found.push(`${path}: expected ${expected}, got ${actual}`);
   } else if (Array.isArray(expected) !== Array.isArray(actual)) {
     found.push(`${path}: expected ${Array.isArray(expected) ? 'a list' : 'not a list'}, got ${JSON.stringify(actual)}`);
   } else if (expected && actual && typeof expected === 'object' && typeof actual === 'object') {
@@ -99,18 +128,24 @@ function differences(expected, actual, noise, path = '', found = []) {
 }
 
 test.describe('Simulation snapshot', () => {
+  test.skip(({ browserName }) => browserName !== PROJECT, `recorded in ${PROJECT} only`);
+
   test('there are snapshot files for exactly the playable levels', () => {
     const wanted = LEVELS.map((l) => fileOf(l.id)).sort();
-    const jsonIn = (dir) => readdirSync(dir).filter((f) => f.endsWith('.json')).sort();
+    const jsonIn = (dir) => (existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('.json')).sort() : []);
     expect(jsonIn(DESIGNS_DIR)).toEqual(wanted);
-    if (!UPDATE) expect(jsonIn(EXPECTED_DIR)).toEqual(wanted);
+    // An update also removes the expected files of levels that no longer exist.
+    if (UPDATE) {
+      for (const f of jsonIn(EXPECTED_DIR)) if (!wanted.includes(f)) rmSync(join(EXPECTED_DIR, f));
+    } else {
+      expect(jsonIn(EXPECTED_DIR)).toEqual(wanted);
+    }
   });
 
   for (const { id } of LEVELS) {
     test(`Level ${id} gives the recorded numbers`, async ({ page }) => {
-      if (UPDATE) expect(test.info().project.name, `update the snapshot with --project=${UPDATE_PROJECT}`).toBe(UPDATE_PROJECT);
       const designsFile = join(DESIGNS_DIR, fileOf(id)), expectedFile = join(EXPECTED_DIR, fileOf(id));
-      expect(existsSync(designsFile), `${designsFile} is missing: see tests/snapshot/README.md`).toBe(true);
+      expect(existsSync(designsFile), `${designsFile} is missing: see the header of tests/model-snapshot.spec.js`).toBe(true);
       const { designs } = JSON.parse(readFileSync(designsFile, 'utf8'));
       await freshPage(page, `#level-${id}/build`);
       const results = await page.evaluate(measureLevel, { designs, backlogJobs: BACKLOG_JOBS, dayHours: DAY_HOURS });
@@ -121,7 +156,7 @@ test.describe('Simulation snapshot', () => {
         test.info().annotations.push({ type: 'updated', description: `${expectedFile}: ${lines.length} cases` });
         return;
       }
-      expect(existsSync(expectedFile), `${expectedFile} is missing: see tests/snapshot/README.md`).toBe(true);
+      expect(existsSync(expectedFile), `${expectedFile} is missing: see the header of tests/model-snapshot.spec.js`).toBe(true);
       const expected = JSON.parse(readFileSync(expectedFile, 'utf8'));
       const found = [];
       for (const name of new Set([...Object.keys(expected), ...Object.keys(results)])) {

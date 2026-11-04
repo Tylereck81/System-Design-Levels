@@ -1,5 +1,5 @@
-// Where the simulation snapshot keeps its files (see README.md). Paths are found from this file, not from the folder
-// a command runs in.
+// Where the simulation snapshot keeps its files (see tests/model-snapshot.spec.js). Paths are found from this file,
+// not from the folder a command runs in.
 import { fileURLToPath } from 'node:url';
 
 const here = (path) => fileURLToPath(new URL(path, import.meta.url));
