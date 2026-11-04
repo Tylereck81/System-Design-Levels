@@ -49,7 +49,8 @@ function placeDot(d) {
   const e = atNode ? 1 : ease(Math.min(1, d.t / d.dur));
   const p1 = edgePoint(a, b.x, b.y, 0), p2 = edgePoint(b, a.x, a.y, 0);
   d.x = p1.x + (p2.x - p1.x) * e; d.y = p1.y + (p2.y - p1.y) * e;
-  const ox = d.dead || d.jit ? d.jx : 0, oy = d.dead ? d.jy * 0.5 : d.jit ? d.jy : 0;
+  const rest = !d.dead && d.dwell > 0 && d.jit;
+  const ox = d.dead || rest ? d.jx : 0, oy = d.dead ? d.jy * 0.5 : rest ? d.jy : 0;
   d.c.setAttribute('cx', (d.x + ox).toFixed(1)); d.c.setAttribute('cy', (d.y + oy).toFixed(1));
 }
 
@@ -69,7 +70,7 @@ export function moveDots(dt) {
     const a = byId(d.route[d.i]), b = byId(d.route[d.i + 1]);
     if (!a || !b) { d.c.remove(); dots.splice(k, 1); if (d.onDone) run.dnsFlying = false; continue; }
     if (d.dwell > 0) { d.dwell -= dt; continue; }
-    d.t += dt; d.jit = false;
+    d.t += dt;
     placeDot(d);
     if (d.t >= d.dur) {
       d.i++;
