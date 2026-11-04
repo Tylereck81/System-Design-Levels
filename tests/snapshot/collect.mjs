@@ -5,15 +5,12 @@ import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from 
 import { join } from 'node:path';
 import { LEVELS } from '../../levels/index.js';
 import { parseRoute } from '../../js/route.js';
-import { CAPTURE_DIR, DESIGNS_DIR, fileOf } from './files.js';
+import { CAPTURE_DIR, DESIGNS_DIR, fileOf, canonical } from './common.js';
 
 const MAX_PER_MISSION = Number(process.argv[2]) || 16;
 
 /** Up to `max` items spread evenly over a sorted list, so the pick does not depend on the order tests ran in. */
 const spread = (items, max) => (items.length <= max ? items : Array.from({ length: max }, (_, i) => items[Math.floor(i * items.length / max)]));
-/** JSON with every object's keys sorted, so the same design built in another order gives the same text. */
-const canonical = (value) => JSON.stringify(value, (_, x) => (x && typeof x === 'object' && !Array.isArray(x)
-  ? Object.fromEntries(Object.keys(x).sort().map((k) => [k, x[k]])) : x));
 /** The level the game opens for an address: an unknown level means Level 1, as in js/boot.js. */
 const levelOf = (route) => { const id = parseRoute(route).level; return id === 'mock' ? id : (LEVELS.find((l) => l.id === id) || LEVELS[0]).id; };
 
@@ -33,6 +30,13 @@ for (const file of readdirSync(CAPTURE_DIR).filter((f) => f.endsWith('.ndjson'))
     if (!missions.has(mission)) missions.set(mission, new Set());
     missions.get(mission).add(canonical({ nodes, edges }));
   }
+}
+
+// A capture of only some tests would shrink the snapshot without anyone noticing, so it writes nothing.
+const missing = LEVELS.filter((l) => !byLevel.has(l.id)).map((l) => l.id);
+if (missing.length) {
+  console.error(`No designs recorded for level ${missing.join(', ')}. Capture the whole suite, then collect again.`);
+  process.exit(1);
 }
 
 mkdirSync(DESIGNS_DIR, { recursive: true });

@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync, rmSync
 import { join } from 'node:path';
 import { freshPage } from './helpers.js';
 import { LEVELS } from '../levels/index.js';
-import { DESIGNS_DIR, EXPECTED_DIR, fileOf } from './snapshot/files.js';
+import { DESIGNS_DIR, EXPECTED_DIR, fileOf, designId } from './snapshot/common.js';
 
 /*
  * Simulation snapshot: a refactor guard.
@@ -13,7 +13,7 @@ import { DESIGNS_DIR, EXPECTED_DIR, fileOf } from './snapshot/files.js';
  * numbers are right (the hand-computed tests do that).
  *
  *   tests/snapshot/designs/level-NN.json   recorded designs, one per line, with the mission each was measured on
- *   tests/snapshot/expected/level-NN.json  one line per case, m<mission>/d<design>/<experiment or calm>/<moment>: the
+ *   tests/snapshot/expected/level-NN.json  one line per case, m<mission>/<design id>/<experiment or calm>/<moment>: the
  *                                          model's result (without the graph view) and the mission's goals
  *
  * Numbers match within a small tolerance (sums done in another order differ in their last bits); goal results and
@@ -52,7 +52,7 @@ const DAY_HOURS = [3, 12, 18];
  * has queues). When the design is ready to run, as the game requires, it is also measured with each experiment
  * running (now, and at the peak when it has a required outcome): a crash on each component it could take down, a day
  * at three hours. Each result also records the mission's goals: met or not, and the value shown.
- * Returns { case name: result as JSON }.
+ * Each design carries an id made from its content. Returns { case name: result as JSON }.
  */
 async function measureLevel({ designs, backlogJobs, dayHours }) {
   const { S, run, model } = window.__sdl;
@@ -75,38 +75,45 @@ async function measureLevel({ designs, backlogJobs, dayHours }) {
     if (exp.kind === 'day') return dayHours.map((h) => [`${exp.id}@${h}h`, (on) => { on.t = exp.secs * (h + 0.5) / 24; }]);
     return [[exp.id, () => {}]];
   };
+  const stray = designs.find((d) => !level.missions[d.mission]);
+  if (stray) throw new Error(`design ${stray.id} is for mission ${stray.mission + 1}, which this level no longer has: record the designs again`);
   const out = {};
-  const start = { nodes: level.startNodes, edges: level.startEdges || [] };
+  const start = { id: 'start', nodes: level.startNodes, edges: level.startEdges || [] };
   level.missions.forEach((_, mission) => {
-    [start, ...designs.filter((d) => d.mission === mission)].forEach((design, d) => {
-      const at = (name, result) => { out[`m${mission}/d${d}/${name}`] = json(result); };
+    for (const design of [start, ...designs.filter((d) => d.mission === mission)]) {
+      /** Run one case and keep its result; an error says which case it came from. */
+      const at = (name, measure) => {
+        const key = `m${mission}/${design.id}/${name}`;
+        try { out[key] = json(measure()); } catch (err) { throw new Error(`${key}: ${err.message}`); }
+      };
       S.nodes = structuredClone(design.nodes);
       S.edges = structuredClone(design.edges);
       S.mission = mission;
       run.on = {}; run.queues = {}; run.t = 0;
-      const calm = model();
-      at('calm/t0', calm);
-      run.t = 1.3;
-      at('calm/t1.3', model());
-      run.t = 0;
-      at('calm/peak', model({ peak: true }));
+      let calm;
+      at('calm/t0', () => (calm = model()));
+      at('calm/t1.3', () => { run.t = 1.3; const r = model(); run.t = 0; return r; });
+      at('calm/peak', () => model({ peak: true }));
       const queues = Object.keys(calm.queues);
       if (queues.length) {
-        run.queues = Object.fromEntries(queues.map((id) => [id, backlogJobs]));
-        at('backlog/t0', model());
-        run.queues = {};
+        at('backlog/t0', () => {
+          run.queues = Object.fromEntries(queues.map((id) => [id, backlogJobs]));
+          const r = model();
+          run.queues = {};
+          return r;
+        });
       }
-      if (!calm.g.ready) return; // the game runs no experiment on a design that isn't ready
+      if (!calm.g.ready) continue; // the game runs no experiment on a design that isn't ready
       for (const exp of level.experiments || []) {
         for (const [name, adjust] of variants(exp, calm.g)) {
           startExp(exp, calm.g);
           adjust(run.on[exp.id]);
-          at(`${name}/now`, model());
-          if (exp.expect) at(`${name}/peak`, model({ peak: true })); // the game judges a required outcome at the peak
+          at(`${name}/now`, () => model());
+          if (exp.expect) at(`${name}/peak`, () => model({ peak: true })); // the game judges a required outcome at the peak
           run.on = {};
         }
       }
-    });
+    }
   });
   return out;
 }
@@ -146,7 +153,7 @@ test.describe('Simulation snapshot', () => {
     test(`Level ${id} gives the recorded numbers`, async ({ page }) => {
       const designsFile = join(DESIGNS_DIR, fileOf(id)), expectedFile = join(EXPECTED_DIR, fileOf(id));
       expect(existsSync(designsFile), `${designsFile} is missing: see the header of tests/model-snapshot.spec.js`).toBe(true);
-      const { designs } = JSON.parse(readFileSync(designsFile, 'utf8'));
+      const designs = JSON.parse(readFileSync(designsFile, 'utf8')).designs.map((d) => ({ ...d, id: designId(d) }));
       await freshPage(page, `#level-${id}/build`);
       const results = await page.evaluate(measureLevel, { designs, backlogJobs: BACKLOG_JOBS, dayHours: DAY_HOURS });
       if (UPDATE) {

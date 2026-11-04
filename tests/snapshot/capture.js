@@ -3,7 +3,7 @@
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { test } from '@playwright/test';
-import { CAPTURE_DIR } from './files.js';
+import { CAPTURE_DIR } from './common.js';
 
 const PREFIX = 'SDL_CAPTURE ';
 const SNAPSHOT_SPEC = 'model-snapshot.spec.js'; // it measures recorded designs; recording them again would loop
