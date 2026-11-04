@@ -10,9 +10,9 @@
   "scripts": {
     "start": "serve -l 4173 .",
     "test": "npm run lint && npm run test:unit && npm run test:e2e",
-    "test:unit": "node --test tests/unit/levels.test.mjs tests/unit/catalog.test.mjs",
+    "test:unit": "node --test tests/unit/levels.test.mjs tests/unit/catalog.test.mjs tests/unit/workloads.test.mjs",
     "test:e2e": "playwright test --project=chromium",
-    "lint": "eslint js levels tests \"*.js\" --max-warnings 49",
+    "lint": "eslint js levels tests \"*.js\" --max-warnings 48",
     "test:webkit": "playwright test --project=webkit",
     "test:ui": "playwright test --ui"
   },
