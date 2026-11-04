@@ -4,6 +4,10 @@ import { fmt } from '../js/format.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 
+// The web server Users reach first, and the database it connects to (null when there is none).
+const webOf = (g) => g.entry.find((n) => n.type === 'web') || null;
+const dbOf = (g) => { const web = webOf(g); return web ? g.next(web).find((n) => n.type === 'db') || null : null; };
+
 const servedGoal = { id: 'served', type: 'metric', text: `Serve at least ${targets.servedPct}% of requests`, test: (m) => m.servedPct >= targets.servedPct, val: (m) => m.servedPct.toFixed(1) + '%' };
 const latGoal = { id: 'lat', type: 'metric', text: `Response time under ${targets.latencyMs} ms`, test: (m) => m.latency != null && m.latency < targets.latencyMs, val: (m) => m.latency == null ? '—' : fmt(m.latency) + ' ms' };
 
@@ -57,7 +61,7 @@ export default {
       story: 'You just launched example.com and about 100,000 people use it each day. Everything runs on one server: your code and your data.',
       goals: [
         { id: 'dns', type: 'struct', text: 'Users can look up example.com in DNS', test: (g) => g.hasDNS },
-        { id: 'web', type: 'struct', text: 'Requests reach a web server', test: (g) => !!g.web },
+        { id: 'web', type: 'struct', text: 'Requests reach a web server', test: (g) => !!webOf(g) },
         servedGoal, latGoal,
       ],
       hint: 'Drag DNS and a Web server onto the canvas. Then drag from the + under Users onto each of them (or select Users and use Connections in the inspector), and press Play.',
@@ -67,8 +71,8 @@ export default {
       title: 'Separate the data tier', ref: 'Two tiers', qps: 150, budget: 150,
       story: 'Traffic tripled: about 300,000 people a day, 150 requests per second at peak. Your one server runs both the code and the database, so they compete for the same CPU. The app stores users, products and orders, and every order links a user to products.',
       goals: [
-        { id: 'tier', type: 'struct', text: 'Data lives on its own database server', test: (g) => !!g.db },
-        { id: 'kind', type: 'struct', text: 'Pick the right database type for this data', test: (g) => !!g.db && g.db.kind === 'sql' },
+        { id: 'tier', type: 'struct', text: 'Data lives on its own database server', test: (g) => !!dbOf(g) },
+        { id: 'kind', type: 'struct', text: 'Pick the right database type for this data', test: (g) => dbOf(g)?.kind === 'sql' },
         servedGoal, latGoal,
         { id: 'cost', type: 'struct', text: 'Spend at most $150 per month', test: (g) => g.cost <= 150, val: (m, g) => '$' + g.cost },
       ],
@@ -108,7 +112,7 @@ export default {
   // kind 'spike' multiplies traffic by `factor`. Each counts once it has run for 1.5 simulated seconds.
   experiments: [
     {
-      id: 'crash', kind: 'crash', target: (g) => g.web,
+      id: 'crash', kind: 'crash', target: webOf,
       label: 'Crash web server', labelOn: 'Restart web server',
       needsDesign: 'Build the design first: connect Users to DNS and to a web server, then crash it.',
       on: 'You pulled the plug on the web server.', onTone: 'bad',

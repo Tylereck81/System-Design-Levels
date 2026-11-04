@@ -2,7 +2,8 @@
 import { fmt } from '../format.js';
 import { $, el, keepFocus } from '../dom.js';
 import { TYPES, OK_PAIRS, pairKey, nameOf, lowerName, edgeInfo, MISSIONS, S, sel, run, byId, setSel, trafficHidden } from '../state.js';
-import { T, COMPONENTS, roleOf, runsAlone, holdsSessions, scales, dayCopies, serverSpec, sizesOf, choiceOf, isEdge, isClustered, costOf, monthlyFileGB } from '../engine/components.js';
+import { T, COMPONENTS, choiceOf, sizesOf } from '../engine/catalog.js';
+import { roleOf, runsAlone, holdsSessions, scales, dayCopies, serverSpec, isEdge, isClustered, costOf, monthlyFileGB } from '../engine/components.js';
 import { ringBox, paintRing } from './ring-view.js';
 import { tryConnect, disconnect, removeSel, promote } from '../engine/interaction.js';
 import { log } from './log.js';

@@ -17,10 +17,8 @@ export const trafficFactor = () => { const h = dayHour(); return activeExps().fi
 export const botEdge = () => activeExps().some(e => e.botEdge);
 /** True while a running experiment splits the network in two. */
 export const partitioned = () => activeExps().some(e => e.partition);
-/** Extra clicks a second on one link from the running experiments (a link gone viral). */
-export const viralClicks = () => activeExps().reduce((s, e) => s + (e.viral || 0), 0);
-/** New links a second one account creates in bulk in the running experiments. */
-export const bulkCreates = () => activeExps().reduce((s, e) => s + (e.bulk || 0), 0);
+/** The sum of number `key` over the running experiments (0 when none sets it), e.g. a viral link's extra clicks. */
+export const expTotal = (key) => activeExps().reduce((s, e) => s + (e[key] || 0), 0);
 /** True while a running experiment has flag `key` set (e.g. a crawler's slowDns, flood or trap). */
 export const expFlag = (key) => activeExps().some(e => e[key]);
 /** True while a running experiment sets an ID generator's clock back. */

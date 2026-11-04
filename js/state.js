@@ -1,6 +1,6 @@
 // Level data, game state and saved progress.
 import { level } from './level.js';
-import { SIZES, COMPONENTS } from './engine/components.js';
+import { SIZES, COMPONENTS, choiceOf, sizesOf } from './engine/catalog.js';
 
 export const TARGET_MS = level.targets.latencyMs;
 export const TARGET_SERVED = level.targets.servedPct;
@@ -94,10 +94,10 @@ export function load(data) {
   if (!['lesson', 'build', 'quiz'].includes(S.tab)) S.tab = 'lesson';
   for (const n of S.nodes) {
     const c = COMPONENTS[n.type], t = TYPES[n.type];
-    if (c.sized && !(c.sizes || SIZES)[n.size]) n.size = 'S';
+    if (c.sized && !sizesOf(n.type)[n.size]) n.size = 'S';
     if (c.kinds && !Object.keys(c.kinds).includes(n.kind)) n.kind = t.kinds ? null : Object.keys(c.kinds)[0];
     if (c.algos && !c.algos[n.algo]) n.algo = c.defaultAlgo;
-    for (const k in c.choices || {}) if (!c.choices[k].options[n[k]]) n[k] = c.choices[k].default;
+    for (const k in c.choices || {}) n[k] = choiceOf(n, k);
     if (c.replicated && t.roles && !t.roles[n.role]) n.role = 'replica';
   }
   // One primary per type: any extra one goes back to being a replica.
