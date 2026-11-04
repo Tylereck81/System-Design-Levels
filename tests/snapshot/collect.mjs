@@ -1,13 +1,17 @@
 // Turns the designs recorded by a capture run into tests/snapshot/designs/level-NN.json.
 // How and when to use it: see the header of tests/snapshot.spec.js.
-// Usage: node tests/snapshot/collect.mjs [max designs per mission, default 16]
+// Usage: node tests/snapshot/collect.mjs [--max=16] [--accept-fewer]
+//   --max           most designs kept per mission (default 16)
+//   --accept-fewer  write even when a mission ends up with fewer designs than it has now (after removing tests)
 import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { parseArgs } from 'node:util';
 import { LEVELS } from '../../levels/index.js';
 import { parseRoute } from '../../js/route.js';
 import { CAPTURE_DIR, DESIGNS_DIR, fileOf, canonical } from './common.js';
 
-const MAX_PER_MISSION = Number(process.argv[2]) || 16;
+const { values: args } = parseArgs({ options: { max: { type: 'string', default: '16' }, 'accept-fewer': { type: 'boolean', default: false } } });
+const MAX_PER_MISSION = Number(args.max) || 16;
 
 /** Up to `max` items spread evenly over a sorted list, so the pick does not depend on the order tests ran in. */
 const spread = (items, max) => (items.length <= max ? items : Array.from({ length: max }, (_, i) => items[Math.floor(i * items.length / max)]));
@@ -30,8 +34,10 @@ for (const file of readdirSync(CAPTURE_DIR).filter((f) => f.endsWith('.ndjson'))
   }
 }
 
-// Work out every file first; write nothing if the capture lost coverage (it may have run only some tests).
-const output = [], lost = [];
+// Work out every file first. Write nothing if a mission the level still has would end up with fewer designs than now:
+// the capture may have run only some tests, or some failed. --accept-fewer writes anyway (after removing tests).
+const output = [], fewer = [];
+const countBy = (designs) => designs.reduce((m, d) => m.set(d.mission, (m.get(d.mission) || 0) + 1), new Map());
 for (const entry of LEVELS) {
   const data = (await entry.load()).default;
   const start = canonical({ nodes: data.startNodes, edges: data.startEdges || [] }); // the spec measures it itself
@@ -44,12 +50,17 @@ for (const entry of LEVELS) {
     }
   }
   const file = join(DESIGNS_DIR, fileOf(entry.id));
-  const before = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')).designs : [];
-  const now = new Set(lines.map((l) => JSON.parse(l).mission));
-  for (const mission of new Set(before.map((d) => d.mission))) if (!now.has(mission)) lost.push(`level ${entry.id} mission ${mission + 1}`);
+  const before = countBy(existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')).designs : []);
+  const now = countBy(lines.map((l) => JSON.parse(l)));
+  for (const [mission, had] of before) {
+    const has = now.get(mission) || 0;
+    if (data.missions[mission] && has < had) fewer.push(`level ${entry.id} mission ${mission + 1} (${had} → ${has})`);
+  }
   output.push({ file, text: `{"level": ${entry.id}, "designs": [\n${lines.join(',\n')}\n]}\n`, report: `${fileOf(entry.id)} ${found.join(', ') || 'none found'} → ${lines.length} kept` });
 }
-if (lost.length) fail(`This capture has no designs for ${lost.join(', ')}, which have some now. Capture the whole suite, then collect again.`);
+if (fewer.length && !args['accept-fewer']) {
+  fail(`This capture has fewer designs for ${fewer.join(', ')}. Capture the whole suite and collect again, or pass --accept-fewer if tests were removed on purpose.`);
+}
 
 mkdirSync(DESIGNS_DIR, { recursive: true });
 for (const { file, text, report } of output) { writeFileSync(file, text); console.log(report); }

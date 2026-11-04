@@ -36,7 +36,7 @@ import { DESIGNS_DIR, EXPECTED_DIR, fileOf, designId } from './snapshot/common.j
  *                                    (tests/snapshot/capture.js records each distinct design a test measures or
  *                                    verifies; this spec never records)
  *                                 2. node tests/snapshot/collect.mjs (writes designs/, at most 16 per mission; refuses
- *                                    a capture that lost a level or a mission's designs)
+ *                                    a capture that gives any mission fewer designs, unless --accept-fewer)
  *                                 3. update the expected files as above
  */
 
@@ -172,7 +172,9 @@ test.describe('Simulation snapshot', () => {
       for (const name of new Set([...Object.keys(expected), ...Object.keys(results)])) {
         const want = expected[name], got = results[name] && JSON.parse(results[name]);
         if (!want || !got) { found.push(`${name}: ${want ? 'no longer measured' : 'new case, not in the expected file'}`); continue; }
-        differences(want, got, NOISE * Math.max(1, Math.abs(want.qps)), name, found);
+        // A traffic that is not a finite number gives no slack: NaN would let every number pass.
+        const traffic = Number.isFinite(want.qps) ? Math.abs(want.qps) : 0;
+        differences(want, got, NOISE * Math.max(1, traffic), name, found);
       }
       expect(found.slice(0, 15), `${found.length} values differ from ${expectedFile}`).toEqual([]);
     });
