@@ -18,6 +18,7 @@ Closes #
 
 - [ ] `npm test` passes locally
 - [ ] Played it in the browser at phone (390 px) and laptop widths, if the UI changed
+- [ ] Screenshots below, if the UI changed
 
 **Not tested:** <!-- what wasn't checked, and why. "Nothing" is a valid answer. -->
 
