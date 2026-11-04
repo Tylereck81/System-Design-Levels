@@ -106,6 +106,7 @@ export const COMPONENTS = {
     role: 'server', sized: true, base: T.web, unit: 'req/s', alone: { missing: ['db', 'shards'], capFactor: 0.5, base: T.web + T.db }, files: { per: T.file / T.web, base: T.file },
     jobs: { per: 2000, base: T.job }, // a web server of a size does as many jobs as a worker of that size
     stateful: true,
+    links: true, // it carries a URL shortener's settings (see links.js), read by the link workload
     choices: {
       scaling: { options: { fixed: {}, auto: { auto: true } }, default: 'fixed' },
       // A URL shortener's settings (see links.js); levels that don't list them keep the defaults, which change nothing.
@@ -187,14 +188,14 @@ export const COMPONENTS = {
   },
   // A notification system (see notify.js). The notification server can check opt-outs and limit each user's
   //   notifications; the message queues are one shared queue or one per channel; the workers send to the providers,
-  //   with a notification log to retry from and a duplicate check.
+  //   with a notification log to retry from and a duplicate check. notify: which of the three a type is.
   notifier: {
-    role: 'server', cap: 2000, base: 5, cost: 150, unit: 'requests/s',
+    role: 'server', cap: 2000, base: 5, cost: 150, unit: 'requests/s', notify: 'server',
     choices: { check: { options: { off: {}, on: { on: true } }, default: 'off' }, limit: { options: { off: {}, on: { on: true } }, default: 'off' } },
   },
-  nqueue: { role: 'server', cap: 100000, base: 2, cost: 50, unit: 'messages/s', managed: true, choices: { layout: { options: { one: {}, channel: { perChannel: true } }, default: 'one' } } },
+  nqueue: { role: 'server', cap: 100000, base: 2, cost: 50, unit: 'messages/s', managed: true, notify: 'queue', choices: { layout: { options: { one: {}, channel: { perChannel: true } }, default: 'one' } } },
   nworker: {
-    role: 'server', cap: 1000 / SEND_MS, base: SEND_MS, cost: 90, unit: 'notifications/s', notify: true,
+    role: 'server', cap: 1000 / SEND_MS, base: SEND_MS, cost: 90, unit: 'notifications/s', notify: 'worker',
     choices: {
       count: { options: { 2: { count: 2 }, 3: { count: 3 }, 4: { count: 4 }, 5: { count: 5 }, 6: { count: 6 }, 8: { count: 8 } }, default: '4' },
       log: { options: { off: {}, on: { on: true } }, default: 'off' },
@@ -215,9 +216,9 @@ export const COMPONENTS = {
   feedcache: { role: 'server', cap: 1000000, base: 1, cost: 0, unit: 'lookups/s', managed: true, feedCache: true, choices: { store: { options: { posts: {}, ids: { ids: true } }, default: 'posts' } } },
   // A chat system (see chat.js). The chat servers hold users' connections (polling, long polling or WebSocket),
   //   find a new server through service discovery when one dies, and track presence; the message store keeps every
-  //   message and can push a notification to offline recipients.
+  //   message and can push a notification to offline recipients. chat: which of the two a type is.
   chatsrv: {
-    role: 'server', cap: 20000, base: 5, cost: 300, unit: 'messages/s', chat: true,
+    role: 'server', cap: 20000, base: 5, cost: 300, unit: 'messages/s', chat: 'server',
     choices: {
       count: { options: { 2: { count: 2 }, 3: { count: 3 }, 4: { count: 4 }, 5: { count: 5 }, 6: { count: 6 } }, default: '3' },
       protocol: { options: { poll: {}, long: {}, ws: {} }, default: 'poll' },
@@ -225,7 +226,7 @@ export const COMPONENTS = {
       presence: { options: { disconnect: {}, heartbeat: { on: true } }, default: 'disconnect' },
     },
   },
-  msgstore: { role: 'server', cap: 1000000, base: 3, cost: 500, unit: 'messages/s', managed: true, choices: { offline: { options: { wait: {}, push: { on: true } }, default: 'wait' } } },
+  msgstore: { role: 'server', cap: 1000000, base: 3, cost: 500, unit: 'messages/s', managed: true, chat: 'store', choices: { offline: { options: { wait: {}, push: { on: true } }, default: 'wait' } } },
   // Search autocomplete (see typeahead.js). API servers answer keystroke requests and can let browsers cache them;
   //   the trie cache finds the top 5 for a prefix (a table query, a trie walk, or the 5 kept per node), split into
   //   shards by letter range or by a shard map, rebuilt from the logs weekly, daily or hourly.

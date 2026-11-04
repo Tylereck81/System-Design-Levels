@@ -230,10 +230,10 @@ export function costOf(n, work = 0) {
   if (c.video === 'serve') return Math.round(videoOutcome(videoSettingsOf(null, null, n), { rate: 1 }).bill);
   if (c.typeahead === 'api') return c.cost * typeaheadSettingsOf(n, null).apis;
   if (c.typeahead === 'trie') return c.cost * typeaheadSettingsOf(null, n).shards + COMPONENTS[n.type].choices.rebuild.options[choiceOf(n, 'rebuild')].cost;
-  if (c.chat) return c.cost * chatSettingsOf(n, null).servers;
+  if (c.chat === 'server') return c.cost * chatSettingsOf(n, null).servers;
   if (c.feed) return c.cost + 100 * feedSettingsOf(n, null).workers;
   if (c.feedCache) return Math.round(2 * feedCacheGB(n));
-  if (c.notify) return c.cost * notifySettingsOf(null, null, n).workers;
+  if (c.notify === 'worker') return c.cost * notifySettingsOf(null, null, n).workers;
   if (c.crawl === 'download') return c.cost * downloaderOf(n).count;
   if (c.ids) { const id = idSettingOf(n); return id.method === 'uuid' ? 0 : c.cost * id.servers; }
   if (c.sized && scales(n)) { const k = dayCopies(work, serverSpec(n).cap); return Math.round(sizesOf(n.type)[n.size].cost * k.reduce((a, b) => a + b, 0) / k.length); }
