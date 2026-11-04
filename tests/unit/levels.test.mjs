@@ -9,9 +9,10 @@ const QUESTIONS = 10;
 const OPTIONS = 4;
 const PASS_SCORE = 8;
 const MAX_SAME_LETTER = 3; // no answer letter (A–D) is right more than 3 times
-// The right answer must not be the longest option, so length gives nothing away. The first three levels' quizzes are
-// older and still have a few; their counts may only go down. A tie for longest is not counted.
-const LONGEST_RIGHT_ALLOWED = { 1: 3, 2: 2, 3: 1 };
+// The right answer must not be the longest option, so length gives nothing away. When options tie for longest, the
+// first of them counts as the longest. The first three levels' quizzes are older and still have a few: these are their
+// exact counts, so fixing one of those quizzes means lowering its number here, and it can never go back up.
+const LONGEST_RIGHT_EXACT = { 1: 3, 2: 2, 3: 1 };
 
 /** Import a module; an error is returned instead of thrown, so it fails one test, by name, and the others still run. */
 const attempt = async (load) => { try { return { value: await load() }; } catch (error) { return { error }; } };
@@ -21,6 +22,8 @@ const levels = await Promise.all(LEVELS.map(async (entry) => {
   return { entry, data: value?.default, error };
 }));
 const loaded = levels.filter((l) => l.data);
+// The checks across levels skip a level whose quiz is missing: its own quiz test already fails, by name.
+const withQuiz = loaded.filter(({ data }) => Array.isArray(data.quiz?.questions));
 // levels/mock.js imports one real level when it loads, so it can fail with it.
 const mockModule = await attempt(() => import('../../levels/mock.js'));
 
@@ -54,14 +57,15 @@ for (const { entry, data, error } of levels) {
       if (longestIndex(q.o) === q.a) longestIsRight++;
     });
     assert.ok(Math.max(...timesRight) <= MAX_SAME_LETTER, `answer letters A–D are right ${timesRight.join(', ')} times`);
-    const allowed = LONGEST_RIGHT_ALLOWED[entry.id] ?? 0;
-    assert.ok(longestIsRight <= allowed, `the right answer is the longest option ${longestIsRight} times (at most ${allowed})`);
+    const legacy = LONGEST_RIGHT_EXACT[entry.id];
+    if (legacy === undefined) assert.equal(longestIsRight, 0, `the right answer is the longest option ${longestIsRight} times`);
+    else assert.equal(longestIsRight, legacy, `the right answer is the longest option ${longestIsRight} times: set LONGEST_RIGHT_EXACT[${entry.id}] to it only if it went down`);
   });
 }
 
 test('no two levels have the same answer key', () => {
   const byKey = new Map();
-  for (const { entry, data } of loaded) {
+  for (const { entry, data } of withQuiz) {
     const key = data.quiz.questions.map((q) => q.a).join('');
     assert.ok(!byKey.has(key), `Level ${entry.id} has the same answer key as Level ${byKey.get(key)}`);
     byKey.set(key, entry.id);
@@ -70,19 +74,23 @@ test('no two levels have the same answer key', () => {
 
 // A mock interview is built from one real level; the game picks which at random, so each is built here.
 const mocks = mockModule.value
-  ? loaded.filter(({ entry }) => MOCK_LEVELS.includes(entry.id)).map(({ entry, data }) => ({ id: entry.id, data: mockModule.value.mockOf(data, entry.id) }))
+  ? loaded.filter(({ entry }) => MOCK_LEVELS.includes(entry.id)).map(({ entry, data }) => {
+    try { return { id: entry.id, data: mockModule.value.mockOf(data, entry.id) }; } catch (error) { return { id: entry.id, error }; }
+  })
   : [];
 
 test('every mock interview problem has a level and passes validateLevel', () => {
   assert.ifError(mockModule.error);
   assert.deepEqual(mocks.map((m) => m.id), MOCK_LEVELS);
-  for (const { id, data } of mocks) {
+  for (const { id, data, error } of mocks) {
+    assert.ifError(error);
     assert.deepEqual(validateLevel(data), [], `mock interview from Level ${id}`);
     assert.equal(data.saveKey, `sdl-mock-${id}-v1`);
   }
 });
 
 test('save keys are unique', () => {
-  const keys = loaded.map(({ data }) => data.saveKey).concat(mocks.map(({ data }) => data.saveKey));
+  // A missing key fails its level's own test, so only the keys that exist are compared.
+  const keys = [...loaded, ...mocks].map(({ data }) => data?.saveKey).filter((k) => typeof k === 'string');
   assert.equal(new Set(keys).size, keys.length);
 });
