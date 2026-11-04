@@ -23,18 +23,21 @@ import { DESIGNS_DIR, EXPECTED_DIR, fileOf, designId } from './snapshot/common.j
  * When it fails, in a refactor: the change altered the simulation. Find out why and fix the code; never update the
  * snapshot to make it pass. Two cases need the owner instead: only a goal's shown value or result differs while its
  * number matches (it sits on a rounding or target boundary), or only a value near zero moved by a tiny amount (rounding
- * noise from subtracting large flows). In a formula or constant change the owner approved, update in the same PR and
- * say which values changed and why:
+ * noise from subtracting large flows).
  *
- *   SDL_SNAPSHOT_UPDATE=1 npx playwright test model-snapshot --project=chromium
+ * The expected files change only with the owner's approval, in two cases. A formula or constant change: update in
+ * the same PR and say which values changed and why. New designs (a new level, or many new tests): record again on a
+ * commit whose numbers are known to be right (normally main), never in a PR that changes the engine.
  *
- * Record the designs again after adding a level or many tests, on a commit whose numbers are known to be right
- * (normally main), never in a PR that changes the engine:
- *
- *   SDL_CAPTURE=1 npx playwright test --project=chromium   (tests/snapshot/capture.js records each distinct design a
- *                                                           test measures or verifies; this spec never records)
- *   node tests/snapshot/collect.mjs                       (writes designs/, at most 16 per mission)
- *   SDL_SNAPSHOT_UPDATE=1 npx playwright test model-snapshot --project=chromium
+ *   Update the expected files     bash:        SDL_SNAPSHOT_UPDATE=1 npx playwright test snapshot.spec --project=chromium
+ *                                 PowerShell:  $env:SDL_SNAPSHOT_UPDATE='1'; npx playwright test snapshot.spec
+ *                                              --project=chromium; Remove-Item Env:SDL_SNAPSHOT_UPDATE
+ *   Record the designs again      1. SDL_CAPTURE=1 (as above) with the whole suite: npx playwright test --project=chromium
+ *                                    (tests/snapshot/capture.js records each distinct design a test measures or
+ *                                    verifies; this spec never records)
+ *                                 2. node tests/snapshot/collect.mjs (writes designs/, at most 16 per mission; refuses
+ *                                    a capture that lost a level or a mission's designs)
+ *                                 3. update the expected files as above
  */
 
 const UPDATE = process.env.SDL_SNAPSHOT_UPDATE === '1';
@@ -152,7 +155,7 @@ test.describe('Simulation snapshot', () => {
   for (const { id } of LEVELS) {
     test(`Level ${id} gives the recorded numbers`, async ({ page }) => {
       const designsFile = join(DESIGNS_DIR, fileOf(id)), expectedFile = join(EXPECTED_DIR, fileOf(id));
-      expect(existsSync(designsFile), `${designsFile} is missing: see the header of tests/model-snapshot.spec.js`).toBe(true);
+      expect(existsSync(designsFile), `${designsFile} is missing: see the header of tests/snapshot.spec.js`).toBe(true);
       const designs = JSON.parse(readFileSync(designsFile, 'utf8')).designs.map((d) => ({ ...d, id: designId(d) }));
       await freshPage(page, `#level-${id}/build`);
       const results = await page.evaluate(measureLevel, { designs, backlogJobs: BACKLOG_JOBS, dayHours: DAY_HOURS });
@@ -163,7 +166,7 @@ test.describe('Simulation snapshot', () => {
         test.info().annotations.push({ type: 'updated', description: `${expectedFile}: ${lines.length} cases` });
         return;
       }
-      expect(existsSync(expectedFile), `${expectedFile} is missing: see the header of tests/model-snapshot.spec.js`).toBe(true);
+      expect(existsSync(expectedFile), `${expectedFile} is missing: see the header of tests/snapshot.spec.js`).toBe(true);
       const expected = JSON.parse(readFileSync(expectedFile, 'utf8'));
       const found = [];
       for (const name of new Set([...Object.keys(expected), ...Object.keys(results)])) {

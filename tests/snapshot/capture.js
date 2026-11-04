@@ -1,4 +1,4 @@
-// Records the designs the tests build, as input for the simulation snapshot (see tests/model-snapshot.spec.js).
+// Records the designs the tests build, as input for the simulation snapshot (see tests/snapshot.spec.js).
 // Off unless SDL_CAPTURE=1, so normal runs are unaffected.
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { join, basename } from 'node:path';
@@ -6,7 +6,7 @@ import { test } from '@playwright/test';
 import { CAPTURE_DIR } from './common.js';
 
 const PREFIX = 'SDL_CAPTURE ';
-const SNAPSHOT_SPEC = 'model-snapshot.spec.js'; // it measures recorded designs; recording them again would loop
+const SNAPSHOT_SPEC = 'snapshot.spec.js'; // it measures recorded designs; recording them again would loop
 
 /**
  * In the page: wrap the test hooks as soon as the game publishes them, and log each distinct design once, with the
@@ -35,16 +35,19 @@ function watchDesigns(prefix) {
       current = sdl;
       route = location.hash;
       const { model, step } = sdl;
-      sdl.model = (...args) => { record(sdl.S); return model(...args); };
+      sdl.model = (...args) => { const r = model(...args); record(sdl.S); return r; }; // a design the model rejects is not kept
       sdl.step = (...args) => { step(...args); checkVerified(sdl.S); };
       setInterval(() => checkVerified(sdl.S), 100); // play in real time runs the game's own step, not the hook
     },
   });
 }
 
-/** Start recording designs for this page when SDL_CAPTURE=1. Call before the first navigation. */
+const installed = new WeakSet();
+
+/** Start recording designs for this page when SDL_CAPTURE=1. Call before the first navigation; more calls do nothing. */
 export async function installCapture(page) {
-  if (process.env.SDL_CAPTURE !== '1' || basename(test.info().file) === SNAPSHOT_SPEC) return;
+  if (process.env.SDL_CAPTURE !== '1' || basename(test.info().file) === SNAPSHOT_SPEC || installed.has(page)) return;
+  installed.add(page);
   mkdirSync(CAPTURE_DIR, { recursive: true });
   const file = join(CAPTURE_DIR, `${process.pid}.ndjson`);
   page.on('console', (msg) => {

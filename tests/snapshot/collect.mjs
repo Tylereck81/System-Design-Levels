@@ -1,5 +1,5 @@
 // Turns the designs recorded by a capture run into tests/snapshot/designs/level-NN.json.
-// How and when to use it: see the header of tests/model-snapshot.spec.js.
+// How and when to use it: see the header of tests/snapshot.spec.js.
 // Usage: node tests/snapshot/collect.mjs [max designs per mission, default 16]
 import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -13,11 +13,9 @@ const MAX_PER_MISSION = Number(process.argv[2]) || 16;
 const spread = (items, max) => (items.length <= max ? items : Array.from({ length: max }, (_, i) => items[Math.floor(i * items.length / max)]));
 /** The level the game opens for an address: an unknown level means Level 1, as in js/boot.js. */
 const levelOf = (route) => { const id = parseRoute(route).level; return id === 'mock' ? id : (LEVELS.find((l) => l.id === id) || LEVELS[0]).id; };
+const fail = (message) => { console.error(message); process.exit(1); };
 
-if (!existsSync(CAPTURE_DIR)) {
-  console.error(`Nothing to collect: ${CAPTURE_DIR} does not exist. Run the tests with SDL_CAPTURE=1 first.`);
-  process.exit(1);
-}
+if (!existsSync(CAPTURE_DIR)) fail(`Nothing to collect: ${CAPTURE_DIR} does not exist. Run the tests with SDL_CAPTURE=1 first.`);
 
 const byLevel = new Map(); // level id → mission → Set of designs as canonical JSON
 for (const file of readdirSync(CAPTURE_DIR).filter((f) => f.endsWith('.ndjson'))) {
@@ -32,23 +30,26 @@ for (const file of readdirSync(CAPTURE_DIR).filter((f) => f.endsWith('.ndjson'))
   }
 }
 
-// A capture of only some tests would shrink the snapshot without anyone noticing, so it writes nothing.
-const missing = LEVELS.filter((l) => !byLevel.has(l.id)).map((l) => l.id);
-if (missing.length) {
-  console.error(`No designs recorded for level ${missing.join(', ')}. Capture the whole suite, then collect again.`);
-  process.exit(1);
-}
-
-mkdirSync(DESIGNS_DIR, { recursive: true });
+// Work out every file first; write nothing if the capture lost coverage (it may have run only some tests).
+const output = [], lost = [];
 for (const entry of LEVELS) {
-  const missions = byLevel.get(entry.id) || new Map();
   const data = (await entry.load()).default;
   const start = canonical({ nodes: data.startNodes, edges: data.startEdges || [] }); // the spec measures it itself
-  const lines = [];
-  for (const [mission, designs] of [...missions].sort((a, b) => a[0] - b[0])) {
-    const kept = spread([...designs].filter((d) => d !== start).sort(), MAX_PER_MISSION);
-    for (const design of kept) lines.push(JSON.stringify({ mission, ...JSON.parse(design) }));
+  const lines = [], found = [];
+  for (const [mission, designs] of [...(byLevel.get(entry.id) || new Map())].sort((a, b) => a[0] - b[0])) {
+    if (!data.missions[mission]) continue; // a test set a mission the level does not have
+    found.push(`m${mission}: ${designs.size} found`);
+    for (const design of spread([...designs].filter((d) => d !== start).sort(), MAX_PER_MISSION)) {
+      lines.push(JSON.stringify({ mission, ...JSON.parse(design) }));
+    }
   }
-  writeFileSync(join(DESIGNS_DIR, fileOf(entry.id)), `{"level": ${entry.id}, "designs": [\n${lines.join(',\n')}\n]}\n`);
-  console.log(fileOf(entry.id), [...missions].map(([m, d]) => `m${m}: ${d.size} found`).join(', ') || 'none found', `→ ${lines.length} kept`);
+  const file = join(DESIGNS_DIR, fileOf(entry.id));
+  const before = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')).designs : [];
+  const now = new Set(lines.map((l) => JSON.parse(l).mission));
+  for (const mission of new Set(before.map((d) => d.mission))) if (!now.has(mission)) lost.push(`level ${entry.id} mission ${mission + 1}`);
+  output.push({ file, text: `{"level": ${entry.id}, "designs": [\n${lines.join(',\n')}\n]}\n`, report: `${fileOf(entry.id)} ${found.join(', ') || 'none found'} → ${lines.length} kept` });
 }
+if (lost.length) fail(`This capture has no designs for ${lost.join(', ')}, which have some now. Capture the whole suite, then collect again.`);
+
+mkdirSync(DESIGNS_DIR, { recursive: true });
+for (const { file, text, report } of output) { writeFileSync(file, text); console.log(report); }
