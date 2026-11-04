@@ -1,9 +1,12 @@
-// ESLint: catches dead code, unreachable code and unsafe patterns before review does. Run with `npm run lint`.
+// ESLint: catches dead code, unreachable code and unsafe patterns before review does. Run with `npm run lint`
+// (part of `npm test`).
 import js from '@eslint/js';
 import globals from 'globals';
 
+const SLEEP = 'Wait for a state instead of a fixed time: playFor, fastForward or a web-first assertion (tests/helpers.js).';
+
 export default [
-  { ignores: ['node_modules/', 'test-results/', 'playwright-report/', 'tests/snapshot/designs/', 'tests/snapshot/expected/'] },
+  { ignores: ['node_modules/', 'test-results/', 'playwright-report/'] },
   js.configs.recommended,
   {
     // Everything: plain ES modules, no build step.
@@ -19,30 +22,35 @@ export default [
       'no-eval': 'error',
       'no-implied-eval': 'error',
       'no-new-func': 'error',
-      // Warnings for now: they mark code to split up, which later refactors do.
+    },
+  },
+  {
+    // The game: runs in the browser. Size and complexity are warnings, held by `--max-warnings` in the lint script so
+    // they can only go down; the refactors that split this code lower that number.
+    files: ['js/**/*.js', 'levels/**/*.js'],
+    languageOptions: { globals: globals.browser },
+    rules: {
       complexity: ['warn', 15],
       'max-lines-per-function': ['warn', { max: 60, skipBlankLines: true, skipComments: true }],
       'max-len': ['warn', { code: 160, ignoreStrings: true, ignoreTemplateLiterals: true, ignoreUrls: true }],
     },
   },
   {
-    // The game: runs in the browser.
-    files: ['js/**/*.js', 'levels/**/*.js'],
-    languageOptions: { globals: globals.browser },
+    // Tooling at the root runs in Node.
+    files: ['*.js'],
+    languageOptions: { globals: globals.node },
   },
   {
-    // Tests and tooling run in Node; code inside page.evaluate runs in the browser.
-    files: ['tests/**/*.{js,mjs}', '*.js'],
+    // Tests run in Node, and the code inside page.evaluate runs in the browser, in the same file.
+    files: ['tests/**/*.{js,mjs}'],
     languageOptions: { globals: { ...globals.node, ...globals.browser } },
     rules: {
-      // A page.evaluate callback runs in the browser and cannot see the test's variables, so it takes its arguments
-      // under the same names on purpose.
+      // A page.evaluate callback cannot see the test's variables, so it takes its arguments under the same names.
       'no-shadow': 'off',
-      'no-restricted-properties': ['error', {
-        object: 'page',
-        property: 'waitForTimeout',
-        message: 'Wait for a state instead of a fixed time: playFor, fastForward or a web-first assertion (tests/helpers.js).',
-      }],
+      'no-restricted-syntax': ['error',
+        { selector: "CallExpression[callee.property.name='waitForTimeout']", message: SLEEP },
+        { selector: "CallExpression[callee.name='setTimeout']", message: SLEEP },
+      ],
     },
   },
 ];

@@ -436,7 +436,7 @@ function loadPhase(g, qps, sizing, down, r, day, backlog, U) {
     const sp = serverSpec(n), Lb = bots.get(n.id) || 0, Lr = L - Lb, u = L / sp.cap, d = Math.max(0, 1 - sp.cap / L);
     const rule = limiterRule(n, !!backlog && botEdge()), sg = storeGroup(n), back = depGroups(n).length > 0; // the monthly cost (no backlog) ignores experiments
     const peers = g.entry.filter(c => COMPONENTS[c.type].limits && !down.has(c.id)).length || 1;
-    const q = rule.q * (sg ? 1 : peers); // B: the bots' requests a second, worked out at the top of loadPhase
+    const q = rule.q * (sg ? 1 : peers);
     const botPass = B ? Math.min(Lb, botKeys() * T.keyLimit * q * Lb / B) : 0;
     const s = back ? (Lr * (1 - rule.fb) + botPass) * (1 - d) : 0;
     served.set(n.id, s);
