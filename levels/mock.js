@@ -6,10 +6,10 @@ import { STEPS, PROBLEM_KEY } from './mock-steps.js';
 
 function chosenProblem() {
   let id = null;
-  try { id = Number(localStorage.getItem(PROBLEM_KEY)); } catch (e) { /* storage unavailable */ }
+  try { id = Number(localStorage.getItem(PROBLEM_KEY)); } catch { /* storage unavailable */ }
   if (MOCK_LEVELS.includes(id)) return id;
   id = MOCK_LEVELS[Math.floor(Math.random() * MOCK_LEVELS.length)];
-  try { localStorage.setItem(PROBLEM_KEY, String(id)); } catch (e) { /* storage unavailable */ }
+  try { localStorage.setItem(PROBLEM_KEY, String(id)); } catch { /* storage unavailable */ }
   return id;
 }
 

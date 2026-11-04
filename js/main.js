@@ -42,7 +42,7 @@ export function setTab(t, focusTab) {
   S.tab = t;
   if (t !== 'build' && run.playing) { run.playing = false; paintControls(); }
   renderTabs(); save();
-  try { history.replaceState(null, '', routeHash(entry.id, t)); } catch (e) { /* ignore */ }
+  try { history.replaceState(null, '', routeHash(entry.id, t)); } catch { /* ignore */ }
   if (t === 'build') { renderCanvas(true); renderHUD(); }
   if (focusTab) $('tab-' + t).focus();
   window.scrollTo({ top: 0 });
@@ -66,7 +66,7 @@ window.addEventListener('hashchange', () => {
 });
 /** Show this level's own address for `tab` when the address bar holds another form of it (or a wrong one). */
 function fixAddress(tab) {
-  if (location.hash && location.hash !== routeHash(entry.id, tab)) { try { history.replaceState(null, '', routeHash(entry.id, tab)); } catch (e) { /* ignore */ } }
+  if (location.hash && location.hash !== routeHash(entry.id, tab)) { try { history.replaceState(null, '', routeHash(entry.id, tab)); } catch { /* ignore */ } }
 }
 
 export function afterChange(forceFit) {
@@ -88,7 +88,7 @@ export function afterDesignChange({ keepResults = false } = {}) {
 }
 
 function start(data) {
-  try { load(data); } catch (e) { setS(fresh()); }
+  try { load(data); } catch { setS(fresh()); }
   const route = parseRoute(location.hash);
   if (TABS.includes(route.tab)) S.tab = route.tab;
   if (!TABS.includes(S.tab)) S.tab = 'lesson';

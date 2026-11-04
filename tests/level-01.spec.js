@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import {
-  QUIZ_KEY_L1, freshPage, fastForward, state, nodeIds, model, logText,
+  QUIZ_KEY_L1, freshPage, fastForward, playFor, state, nodeIds, model, logText,
   tap, dragBetween, unlockMissions, buildBasic, trackErrors, reloadGame,
 } from './helpers.js';
 
@@ -131,9 +131,7 @@ test.describe('Level 1 · robustness', () => {
     expect(await logText(page)).toContain('Build the design first');
     await buildBasic(page);
     await page.click('#playBtn');
-    const t0 = await state(page, () => window.__sdl.run.t);
-    await page.waitForTimeout(800);
-    expect(await state(page, () => window.__sdl.run.t)).toBeGreaterThan(t0);
+    await playFor(page, 0.2); // fails if the frame loop stops moving the clock
     // crash, then delete the crashed server
     await page.click('#exp-crash');
     const ids = await nodeIds(page);
@@ -263,8 +261,8 @@ test.describe('Level 1 · teaching feedback', () => {
     await tap(page, `[data-node="${ids.web}"] .node-box`);
     await page.click('#insp .seg:not(.two) button:nth-child(1)'); // downgrade to S
     await fastForward(page, 1);
-    await page.waitForTimeout(300);
     expect(await state(page, () => window.__sdl.S.verified[2])).toBe(false);
+    // The game is still playing, so its next frame repaints the goals; toHaveClass waits for it.
     await expect(page.locator('#goals li:nth-child(2)')).toHaveClass('fail');
   });
 
@@ -447,7 +445,7 @@ test.describe('Level 1 · accessibility', () => {
           if (tab === 'build') {
             await buildBasic(page);
             await page.click('#playBtn');
-            await page.waitForTimeout(500);
+            await playFor(page, 0.5);
           }
           if (tab === 'quiz') {
             const q = page.locator('.q').nth(0);

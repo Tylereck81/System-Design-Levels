@@ -17,7 +17,7 @@ export function paintRing(n) {
   if (box.dataset.key === key) return;
   box.dataset.key = key;
   const added = resize > 0 ? lay.names.at(-1) : null;
-  let svg = '';
+  let svg;
   if (!method.mod) {
     const pts = ringPoints(lay.names, method.vnodes), R = 70, c = 90;
     const at = (p, r) => { const a = 2 * Math.PI * p / 2 ** 32 - Math.PI / 2; return [(c + r * Math.cos(a)).toFixed(1), (c + r * Math.sin(a)).toFixed(1)]; };

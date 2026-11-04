@@ -92,7 +92,7 @@ export function renderMock(box, redraw) {
   go.onclick = () => {
     const others = MOCK_LEVELS.filter((id) => id !== level.interview.problem);
     const id = pick.value === 'random' ? others[Math.floor(Math.random() * others.length)] : Number(pick.value);
-    try { localStorage.setItem(PROBLEM_KEY, String(id)); } catch (e) { /* storage unavailable */ }
+    try { localStorage.setItem(PROBLEM_KEY, String(id)); } catch { /* storage unavailable */ }
     location.reload();
   };
   again.append(restart, pick, go);

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, state, logText, reloadGame, trackErrors } from './helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from './helpers.js';
 
 // Level 4: cache tier.
 // The level starts with two load balancers, two XL web servers, an XL primary ('b') and two XL replicas ('r1', 'r2').
@@ -328,7 +328,7 @@ test.describe('Level 4 · layout and accessibility', () => {
           if (tab === 'build') {
             await goTo(page, 0);
             const [id] = await setup(page, { caches: [['L', '600'], ['L', '600']] });
-            await page.click('#playBtn'); await page.waitForTimeout(500);
+            await page.click('#playBtn'); await playFor(page, 0.5);
             await select(page, id);
           }
           const results = await new AxeBuilder({ page }).setLegacyMode().analyze();

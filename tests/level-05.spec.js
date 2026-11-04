@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, state, logText, reloadGame, trackErrors } from './helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from './helpers.js';
 
 // Level 5: CDN for static content.
 // The level starts with Level 4's design: two load balancers ('l1', 'l2'), two XL web servers ('w1', 'w2'),
@@ -383,7 +383,7 @@ test.describe('Level 5 · layout and accessibility', () => {
           if (tab === 'build') {
             await goTo(page, 0);
             const id = await addCdn(page);
-            await page.click('#playBtn'); await page.waitForTimeout(500);
+            await page.click('#playBtn'); await playFor(page, 0.5);
             await select(page, id);
           }
           const results = await new AxeBuilder({ page }).setLegacyMode().analyze();

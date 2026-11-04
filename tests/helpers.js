@@ -3,6 +3,8 @@
 
 import { installCapture } from './snapshot/capture.js';
 
+import { expect } from '@playwright/test';
+
 export const QUIZ_KEY_L1 = [2, 0, 3, 1, 2, 0, 1, 3, 2, 0];
 
 /** Open the game with empty saved progress. */
@@ -25,6 +27,21 @@ export async function reloadGame(page) {
 /** Advance the simulation by `secs` simulated seconds without waiting in real time. */
 export async function fastForward(page, secs) {
   await page.evaluate((n) => { for (let i = 0; i < n; i++) window.__sdl.step(0.02); }, Math.round(secs * 50));
+}
+
+/**
+ * Wait while the game plays in real time until its own frame loop has moved the clock on by `secs` simulated seconds
+ * (unlike fastForward, the page draws every frame). It waits on the clock, not on a fixed time, so a slow machine
+ * only makes it take longer; a clock that stops fails within 10 s, with a message.
+ */
+export async function playFor(page, secs) {
+  const clock = () => page.evaluate(() => ({ playing: window.__sdl.run.playing, t: window.__sdl.run.t }));
+  const start = await clock();
+  expect(start.playing, 'the game is playing (press Play first)').toBe(true);
+  await expect.poll(async () => (await clock()).t - start.t, {
+    message: `the frame loop moves the clock on by ${secs} s`,
+    timeout: 10_000,
+  }).toBeGreaterThanOrEqual(secs);
 }
 
 export const state = (page, fn) => page.evaluate(fn);

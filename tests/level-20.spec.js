@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, state, logText, reloadGame, trackErrors } from './helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from './helpers.js';
 
 // Level 20: Video platform.
 // Creators ('u') upload through the upload service ('p': through the API servers, whole files) to transcoding ('t':
@@ -76,7 +76,7 @@ test.describe('Level 20 · numbers', () => {
   test('uploads: the API servers\' links, pre-signed URLs and chunks', async ({ page }) => {
     await freshPage(page, '#level-20/build');
     // 9.3 × 1.03 uploads a second; 4 API servers × 125 MB/s ÷ 250 MB = 2 videos a second; 5% of whole files fail.
-    let r = await measure(page);
+    const r = await measure(page);
     expect(r.qps).toBeCloseTo(9.579, 6);
     expect(r.o.uploaded).toBeCloseTo(2 / 9.579 * 0.95, 9);
     expect(r.cost).toBe(800 + 10 * 500 + 3600000);
@@ -248,7 +248,7 @@ test.describe('Level 20 · layout and accessibility', () => {
           await page.click(`#tab-${tab}`);
           if (tab === 'build') {
             await page.evaluate(() => { window.__sdl.S.est = true; window.__sdl.afterChange(true); });
-            await page.click('#playBtn'); await page.waitForTimeout(500);
+            await page.click('#playBtn'); await playFor(page, 0.5);
             await select(page, 'p');
           }
           const results = await new AxeBuilder({ page }).setLegacyMode().analyze();
