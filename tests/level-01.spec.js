@@ -131,9 +131,7 @@ test.describe('Level 1 · robustness', () => {
     expect(await logText(page)).toContain('Build the design first');
     await buildBasic(page);
     await page.click('#playBtn');
-    const t0 = await state(page, () => window.__sdl.run.t);
-    await playFor(page, 0.2);
-    expect(await state(page, () => window.__sdl.run.t)).toBeGreaterThan(t0);
+    await playFor(page, 0.2); // fails if the frame loop stops moving the clock
     // crash, then delete the crashed server
     await page.click('#exp-crash');
     const ids = await nodeIds(page);
@@ -264,7 +262,8 @@ test.describe('Level 1 · teaching feedback', () => {
     await page.click('#insp .seg:not(.two) button:nth-child(1)'); // downgrade to S
     await fastForward(page, 1);
     expect(await state(page, () => window.__sdl.S.verified[2])).toBe(false);
-    await expect(page.locator('#goals li:nth-child(2)')).toHaveClass('fail'); // waits for the next repaint
+    // The game is still playing, so its next frame repaints the goals; toHaveClass waits for it.
+    await expect(page.locator('#goals li:nth-child(2)')).toHaveClass('fail');
   });
 
   test('the log explains slow responses, single-server capacity and the NoSQL cost', async ({ page }) => {
