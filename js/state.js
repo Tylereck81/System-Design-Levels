@@ -12,9 +12,9 @@ export const OK_PAIRS = level.connections.ok;
 export const BAD_PAIRS = level.connections.bad;
 export const pairKey = (a, b) => [a, b].sort().join('|');
 /** A component's display name: its role's name when the level gives roles (e.g. "Read replica"). */
+export const nameOf = (n) => { const t = TYPES[n.type], r = t.roles && n.role && t.roles[n.role]; return r ? r.name : t.nameOf ? t.nameOf(n) : t.name; };
 /** A component's name inside a sentence: its role's lowercase name when the level gives one (e.g. "primary database"). */
 export const lowerName = (n) => { const t = TYPES[n.type], r = t.roles && n.role && t.roles[n.role]; return (r && r.lower) || nameOf(n).toLowerCase(); };
-export const nameOf = (n) => { const t = TYPES[n.type], r = t.roles && n.role && t.roles[n.role]; return r ? r.name : t.nameOf ? t.nameOf(n) : t.name; };
 /** Label and description of the connection a → b; a level can word it by the receiver's role. */
 export const edgeInfo = (a, b) => {
   const info = OK_PAIRS[pairKey(a.type, b.type)], byRole = info && info.byRole && b.role && info.byRole[b.role];
@@ -67,7 +67,7 @@ export function validState(src) {
 }
 export function load(data) {
   let src = data && data.S ? data.S : null;
-  if (!src) { try { src = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch (e) { src = null; } }
+  if (!src) { try { src = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch { src = null; } }
   if (!validState(src)) return;
   const f = fresh();
   S = Object.assign(f, src);
@@ -105,7 +105,7 @@ export function load(data) {
   const maxId = Math.max(0, ...S.nodes.concat(S.edges).map(x => parseInt(String(x.id).replace(/\D/g, ''), 10) || 0));
   S.seq = Math.max(Number.isInteger(src.seq) ? src.seq : 1, maxId + 1);
 }
-export function save() { try { localStorage.setItem(LS_KEY, JSON.stringify(S)); } catch (e) { /* storage unavailable */ } }
+export function save() { try { localStorage.setItem(LS_KEY, JSON.stringify(S)); } catch { /* storage unavailable */ } }
 export const byId = (id) => S.nodes.find(n => n.id === id);
 
 export function setS(v) { S = v; }

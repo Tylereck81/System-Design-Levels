@@ -1,8 +1,6 @@
 // Simulation loop: stepping, target checks and the animation frame.
 import { MISSIONS, TXT, HOLD, EXPERIMENTS, S, run, save } from '../state.js';
 import { level } from '../level.js';
-
-const OBSERVE_SECS = 1.5; // an experiment counts once it has run this long
 import { model, sampleRoute } from './model.js';
 import { anyOn, crashing, expectMet, textOf, activeExps, dayHour, stopExp } from './experiments.js';
 import { tagsG, paintLive } from './canvas.js';
@@ -13,6 +11,8 @@ import { renderMission, paintGoals } from '../ui/mission.js';
 import { paintControls } from '../ui/controls.js';
 import { log, observe } from '../ui/log.js';
 import { renderTabs } from '../main.js';
+
+const OBSERVE_SECS = 1.5; // an experiment counts once it has run this long
 
 export function stopRun(full) {
   run.playing = false; run.on = {}; run.hold = 0; run.spawnAcc = 0;

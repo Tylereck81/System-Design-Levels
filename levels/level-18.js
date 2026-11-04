@@ -18,7 +18,6 @@ const delayGoal = { id: 'delay', type: 'metric', text: 'Messages arrive within 0
 const pushGoal = { id: 'push', type: 'metric', text: 'Offline friends are told at once', test: (m) => !!m.chat && m.chat.notified === 1, val: (m) => (m.chat ? (m.chat.notified ? 'push' : 'next open') : '—') };
 const presenceOk = (m) => !!m.chat && m.chat.presenceLoad <= PRESENCE_CAP && m.chat.flips === 0;
 const presenceGoal = { id: 'presence', type: 'metric', text: 'Green dots keep up and don\'t flicker', test: presenceOk, val: (m) => (m.chat ? `${fmt(m.chat.presenceLoad / 1000)}k/s` : '—') };
-const fmtDelay = (s) => (s < 1 ? `${fmt(s * 1000)} ms` : `${s.toFixed(1)} s`);
 
 export default {
   id: 18,

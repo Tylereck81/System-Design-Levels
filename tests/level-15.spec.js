@@ -76,7 +76,7 @@ test.describe('Level 15 · numbers', () => {
   test('downloaders: threads or one DNS lookup at a time, whichever is lower', async ({ page }) => {
     await freshPage(page, '#level-15/build');
     // 4 machines, 10 ms lookups one at a time: 100 pages a second each, against 800 × 1.03 at peak.
-    let r = await measure(page);
+    const r = await measure(page);
     expect(r.qps).toBeCloseTo(824, 6);
     expect(r.cap).toBe(400);
     expect(r.served).toBeCloseTo(100 * 400 / 824, 6);

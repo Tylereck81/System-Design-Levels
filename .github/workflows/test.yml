@@ -22,15 +22,19 @@ jobs:
         with:
           node-version-file: .nvmrc # the project's Node version; package.json's engines asks the same locally
           cache: npm
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      # Two steps, so a failing Node test does not hide the browser tests' results. The browser tests still do not
-      # run after a failed install: their errors would bury the real one.
-      - id: unit
-        run: npm run test:unit
+      - id: deps
+        run: npm ci
+      - id: browsers
+        run: npx playwright install --with-deps chromium
+      # Each check runs whenever what it needs installed, so one failing check never hides another's results,
+      # and nothing runs after a failed install (its errors would bury the real one).
+      - run: npm run lint
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
+      - run: npm run test:unit
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
       # A test that only passed on its retry is flaky: it fails the job instead of hiding behind the retry.
       - run: npm run test:e2e -- --fail-on-flaky-tests
-        if: ${{ success() || steps.unit.outcome == 'failure' }}
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
