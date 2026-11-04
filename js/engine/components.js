@@ -1,7 +1,7 @@
 // Component helpers: what each component does with its settings, its capacity, cost and failure mode. The data they
 // read (component types, sizes, time constants) is in catalog.js.
 import { S, byId, WORKLOAD, MISSIONS } from '../state.js';
-import { SIZES, T, COMPONENTS, choiceOf } from './catalog.js';
+import { T, COMPONENTS, choiceOf, sizesOf, countOf } from './catalog.js';
 import { serverNames, keyShares, movedShare } from './hashring.js';
 import { idOutcome } from './ids.js';
 import { CREATE_QUERIES } from './links.js';
@@ -158,8 +158,6 @@ export function shardShares(n, H) {
   shares[0] += H;
   return shares;
 }
-/** How many servers a fixed choice runs (1 unless its scaling option gives a count). */
-export const countOf = (n) => { const c = COMPONENTS[n.type] || {}; return (c.choices && c.choices.scaling && c.choices.scaling.options[choiceOf(n, 'scaling')].count) || 1; };
 /** True for the far region ('far'), false for the near one, for a located server. */
 export const isFar = (n) => choiceOf(n, 'region') === 'far';
 /** True when DNS answers by the user's location (GeoDNS), with health checks. */
@@ -182,7 +180,7 @@ export const sessionsOn = () => !!MISSIONS[S.mission].sessions;
 export function holdsSessions(n) {
   return sessionsOn() && !!(COMPONENTS[n.type] || {}).stateful && !S.edges.some(e => e.from === n.id && isStore(byId(e.to) || {}));
 }
-export const sizesOf = (type) => (COMPONENTS[type] || {}).sizes || SIZES;
+
 /**
  * Share of reads a cache server answers, when its sender splits keys over `servers` cache servers.
  * Popularity follows the 80/20 rule at every scale (80% of reads go to the top 20% of items, and so on), so memory

@@ -1,6 +1,6 @@
-// The component catalog: every component type's role, capacity, base time, cost and behaviour flags, the server sizes
-// and the time constants. Data only: it imports nothing but constants from the pure outcome modules, so any module
-// can import it (js/state.js included) without an import cycle.
+// The component catalog: every component type's role, capacity, base time, cost and behaviour flags, the server sizes,
+// the time constants, and pure lookups over them (choiceOf, sizesOf, countOf). It imports nothing but constants from
+// the pure outcome modules, so any module can import it (js/state.js included) without an import cycle.
 import { THREADS, PAGE_MS } from './crawl.js';
 import { SEND_MS } from './notify.js';
 import { API_CAP, SHARD_CAP } from './typeahead.js';
@@ -19,7 +19,7 @@ export const T = {
   web: 20, // ms, a web server's work for one request
   db: 10, // ms, one SQL query
   dc: 0.5, // ms, round trip between servers inside a data center
-  dns: 5, // $ a month for DNS, a provider's service (a price kept with the times it goes with)
+  dns: 5, // $ a month for DNS, a provider's service
   nosqlLookup: 3, // ms, one NoSQL lookup
   nosqlLookups: 3, // lookups a request needs when relational data sits in a NoSQL store (no joins)
   lb: 1, // ms, a load balancer's work for one request
@@ -332,3 +332,6 @@ export function choiceOf(n, key) {
   const ch = COMPONENTS[n.type].choices[key];
   return ch.options[n[key]] ? n[key] : ch.default;
 }
+export const sizesOf = (type) => (COMPONENTS[type] || {}).sizes || SIZES;
+/** How many servers a fixed choice runs (1 unless its scaling option gives a count). */
+export const countOf = (n) => { const c = COMPONENTS[n.type] || {}; return (c.choices && c.choices.scaling && c.choices.scaling.options[choiceOf(n, 'scaling')].count) || 1; };

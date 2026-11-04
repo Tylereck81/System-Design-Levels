@@ -2,8 +2,8 @@
 import { fmt } from '../format.js';
 import { $, svgEl } from '../dom.js';
 import { TYPES, nameOf, edgeInfo, S, sel, connectFrom, refocus, run, byId, setRefocus } from '../state.js';
-import { SIZES, COMPONENTS } from './catalog.js';
-import { runsAlone, serverSpec, sizesOf } from './components.js';
+import { SIZES, COMPONENTS, sizesOf } from './catalog.js';
+import { runsAlone, serverSpec } from './components.js';
 import { drawIcon } from './icons.js';
 import { crashing } from './experiments.js';
 import { standbyPeers } from './model.js';
