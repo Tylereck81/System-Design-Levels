@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, state, logText, reloadGame, trackErrors } from './helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from './helpers.js';
 
 // Level 2: load balancer and horizontal scaling.
 
@@ -480,7 +480,7 @@ test.describe('Level 2 · layout and accessibility', () => {
         await freshPage(page, '#level-2/lesson');
         for (const tab of ['lesson', 'build', 'quiz']) {
           await page.click(`#tab-${tab}`);
-          if (tab === 'build') { await build(page, { webs: ['S', 'S', 'S', 'S'], lbs: 2 }); await page.click('#playBtn'); await page.waitForTimeout(500); }
+          if (tab === 'build') { await build(page, { webs: ['S', 'S', 'S', 'S'], lbs: 2 }); await page.click('#playBtn'); await playFor(page, 0.5); }
           const results = await new AxeBuilder({ page }).setLegacyMode().analyze();
           expect(results.violations.map((v) => `${tab}: ${v.id} (${v.nodes.length})`)).toEqual([]);
         }

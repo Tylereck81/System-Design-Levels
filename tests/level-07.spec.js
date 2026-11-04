@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, state, logText, reloadGame, trackErrors } from './helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from './helpers.js';
 
 // Level 7: Multiple data centers.
 // The level starts with one data center in Frankfurt ('f', size L, standing for Level 6's whole design), DNS ('d',
@@ -280,7 +280,7 @@ test.describe('Level 7 · layout and accessibility', () => {
           if (tab === 'build') {
             const v = await addVirginia(page);
             await connect(page, v, 'f');
-            await page.click('#playBtn'); await page.waitForTimeout(500);
+            await page.click('#playBtn'); await playFor(page, 0.5);
             await select(page, 'd');
           }
           const results = await new AxeBuilder({ page }).setLegacyMode().analyze();

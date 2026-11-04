@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, state, logText, reloadGame, trackErrors } from './helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from './helpers.js';
 
 // Level 15: Web crawler.
 // The level is a pipeline: the URL frontier ('u', one FIFO queue) hands 800 URLs a second to the downloaders ('h',
@@ -266,7 +266,7 @@ test.describe('Level 15 · layout and accessibility', () => {
           await page.click(`#tab-${tab}`);
           if (tab === 'build') {
             await page.evaluate(() => { window.__sdl.S.est = true; window.__sdl.afterChange(true); });
-            await page.click('#playBtn'); await page.waitForTimeout(500);
+            await page.click('#playBtn'); await playFor(page, 0.5);
             await select(page, 'h');
           }
           const results = await new AxeBuilder({ page }).setLegacyMode().analyze();

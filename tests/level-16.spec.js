@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, state, logText, reloadGame, trackErrors } from './helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from './helpers.js';
 
 // Level 16: Notification system.
 // Services ('u') call the notification server ('n'), which queues ('q', one shared queue) for the workers ('w',
@@ -255,7 +255,7 @@ test.describe('Level 16 · layout and accessibility', () => {
           await page.click(`#tab-${tab}`);
           if (tab === 'build') {
             await page.evaluate(() => { window.__sdl.S.est = true; window.__sdl.afterChange(true); });
-            await page.click('#playBtn'); await page.waitForTimeout(500);
+            await page.click('#playBtn'); await playFor(page, 0.5);
             await select(page, 'w');
           }
           const results = await new AxeBuilder({ page }).setLegacyMode().analyze();

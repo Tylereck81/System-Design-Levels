@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, state, logText, reloadGame, trackErrors } from './helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from './helpers.js';
 
 // Level 21: Cloud file sync.
 // Users ('u') → one load balancer ('l') → block servers ('b': 2, whole files, no compression) → cloud storage ('s':
@@ -256,7 +256,7 @@ test.describe('Level 21 · layout and accessibility', () => {
           await page.click(`#tab-${tab}`);
           if (tab === 'build') {
             await page.evaluate(() => { window.__sdl.S.est = true; window.__sdl.afterChange(true); });
-            await page.click('#playBtn'); await page.waitForTimeout(500);
+            await page.click('#playBtn'); await playFor(page, 0.5);
             await select(page, 'b');
           }
           const results = await new AxeBuilder({ page }).setLegacyMode().analyze();

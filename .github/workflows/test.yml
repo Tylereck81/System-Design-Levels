@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: lts/*
+          node-version-file: .nvmrc # the same Node major version as development machines
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
@@ -28,7 +28,8 @@ jobs:
       # run after a failed install: their errors would bury the real one.
       - id: unit
         run: npm run test:unit
-      - run: npm run test:e2e
+      # A test that only passed on its retry is flaky: it fails the job instead of hiding behind the retry.
+      - run: npm run test:e2e -- --fail-on-flaky-tests
         if: ${{ success() || steps.unit.outcome == 'failure' }}
       - uses: actions/upload-artifact@v7
         if: failure()

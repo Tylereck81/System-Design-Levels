@@ -4,6 +4,9 @@
   "private": true,
   "description": "A drag-and-drop game for learning system design interviews, where you build architectures and watch simulated traffic.",
   "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "start": "serve -l 4173 .",
     "test": "npm run test:unit && npm run test:e2e",

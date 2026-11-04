@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import {
-  QUIZ_KEY_L1, freshPage, fastForward, state, nodeIds, model, logText,
+  QUIZ_KEY_L1, freshPage, fastForward, playFor, state, nodeIds, model, logText,
   tap, dragBetween, unlockMissions, buildBasic, trackErrors, reloadGame,
 } from './helpers.js';
 
@@ -132,7 +132,7 @@ test.describe('Level 1 · robustness', () => {
     await buildBasic(page);
     await page.click('#playBtn');
     const t0 = await state(page, () => window.__sdl.run.t);
-    await page.waitForTimeout(800);
+    await playFor(page, 0.2);
     expect(await state(page, () => window.__sdl.run.t)).toBeGreaterThan(t0);
     // crash, then delete the crashed server
     await page.click('#exp-crash');
@@ -263,9 +263,8 @@ test.describe('Level 1 · teaching feedback', () => {
     await tap(page, `[data-node="${ids.web}"] .node-box`);
     await page.click('#insp .seg:not(.two) button:nth-child(1)'); // downgrade to S
     await fastForward(page, 1);
-    await page.waitForTimeout(300);
     expect(await state(page, () => window.__sdl.S.verified[2])).toBe(false);
-    await expect(page.locator('#goals li:nth-child(2)')).toHaveClass('fail');
+    await expect(page.locator('#goals li:nth-child(2)')).toHaveClass('fail'); // waits for the next repaint
   });
 
   test('the log explains slow responses, single-server capacity and the NoSQL cost', async ({ page }) => {
@@ -447,7 +446,7 @@ test.describe('Level 1 · accessibility', () => {
           if (tab === 'build') {
             await buildBasic(page);
             await page.click('#playBtn');
-            await page.waitForTimeout(500);
+            await playFor(page, 0.5);
           }
           if (tab === 'quiz') {
             const q = page.locator('.q').nth(0);

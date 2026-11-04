@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, state, logText, reloadGame, trackErrors } from './helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from './helpers.js';
 
 // Level 6: Stateless web tier and autoscaling.
 // The level starts with Level 5's design: a CDN ('k'), two load balancers ('l1', 'l2') using round robin, two XL web
@@ -353,7 +353,7 @@ test.describe('Level 6 · layout and accessibility', () => {
             await goTo(page, 2);
             await addStore(page);
             await set(page, 'w1', { scaling: 'auto', size: 'M' });
-            await page.click('#playBtn'); await page.waitForTimeout(500);
+            await page.click('#playBtn'); await playFor(page, 0.5);
             await select(page, 'w1');
           }
           const results = await new AxeBuilder({ page }).setLegacyMode().analyze();

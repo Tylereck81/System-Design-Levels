@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, state, logText, reloadGame, trackErrors } from './helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from './helpers.js';
 
 // Level 9: Scale the data tier with sharding.
 // The level starts inside one data center: Users ('u'), DNS ('d'), one load balancer ('l'), two autoscaled groups of
@@ -270,7 +270,7 @@ test.describe('Level 9 · layout and accessibility', () => {
             await goTo(page, 2);
             const z = await addShards(page, { hot: 'own' });
             await addNoSql(page);
-            await page.click('#playBtn'); await page.waitForTimeout(500);
+            await page.click('#playBtn'); await playFor(page, 0.5);
             await select(page, z);
           }
           const results = await new AxeBuilder({ page }).setLegacyMode().analyze();

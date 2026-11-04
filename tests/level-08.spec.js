@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, state, logText, reloadGame, trackErrors } from './helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from './helpers.js';
 
 // Level 8: Message queue, workers and monitoring.
 // The level starts inside one data center: Users ('u'), DNS ('d'), one load balancer ('l'), two XL web servers
@@ -311,7 +311,7 @@ test.describe('Level 8 · layout and accessibility', () => {
             await goTo(page, 1);
             const { q, k } = await addQueue(page);
             await addMonitor(page, q);
-            await page.click('#playBtn'); await page.waitForTimeout(500);
+            await page.click('#playBtn'); await playFor(page, 0.5);
             await select(page, k);
           }
           const results = await new AxeBuilder({ page }).setLegacyMode().analyze();

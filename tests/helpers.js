@@ -27,6 +27,16 @@ export async function fastForward(page, secs) {
   await page.evaluate((n) => { for (let i = 0; i < n; i++) window.__sdl.step(0.02); }, Math.round(secs * 50));
 }
 
+/**
+ * Wait while the game plays in real time until its own frame loop has moved the clock on by `secs` simulated seconds
+ * (unlike fastForward, the page draws every frame). It waits on the clock, not on a fixed time, so a slow machine
+ * only makes it take longer.
+ */
+export async function playFor(page, secs) {
+  const start = await page.evaluate(() => window.__sdl.run.t);
+  await page.waitForFunction(([t0, s]) => window.__sdl.run.t >= t0 + s, [start, secs]);
+}
+
 export const state = (page, fn) => page.evaluate(fn);
 export const nodeIds = (page) => page.evaluate(() => Object.fromEntries(window.__sdl.S.nodes.map((n) => [n.type, n.id])));
 export const model = (page) => page.evaluate(() => {
