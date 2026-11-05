@@ -1,6 +1,7 @@
 // Level 13: Unique ID generator.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { fmt } from '../js/format.js';
+import { costGoal, servedAtLeast, fmtPct } from './shared/goals.js';
 import { DB_IDS, CLOCK_BACK_MS } from '../js/engine/ids.js';
 import level2 from './level-02.js';
 import level6 from './level-06.js';
@@ -8,23 +9,22 @@ import level10 from './level-10.js';
 import level12 from './level-12.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
+const PCT = { wholeUpTo: 0, wholeFrom: 1 }; // percentages: whole numbers, with one decimal between 0% and 1%
 const BUDGET = 1900;
 const IDS_PER_REQUEST = 4;
 const QPS = 3000; // requests a second, so 12,000 IDs a second
 
-const pct = (x) => x.toFixed(x > 0 && x < 1 ? 1 : 0) + '%';
-const costGoal = (max) => ({ id: 'cost', type: 'struct', text: `Spend at most $${fmt(max)} per month`, test: (g) => g.cost <= max, val: (m, g) => '$' + fmt(g.cost) });
 // The generator's setting as the canvas shows it (saved settings are checked on load, so these are valid options).
 const idOf = (n) => ({ method: n.method || 'uuid', servers: Number(n.servers) || 1, wait: n.clock === 'wait' });
 const unique = (m) => m.idDupPct != null && m.idDupPct < 1e-9;
-const served99 = (m) => m.servedPct >= targets.servedPct;
-const uniqueGoal = { id: 'unique', type: 'metric', text: 'Every ID is unique', test: unique, val: (m) => (m.idDupPct == null ? '—' : pct(m.idDupPct) + ' repeat') };
+const served99 = servedAtLeast(targets.servedPct);
+const uniqueGoal = { id: 'unique', type: 'metric', text: 'Every ID is unique', test: unique, val: (m) => (m.idDupPct == null ? '—' : fmtPct(m.idDupPct, PCT) + ' repeat') };
 const numericGoal = { id: 'numeric', type: 'metric', text: 'IDs are numbers only', test: (m) => m.idNumeric === true, val: (m) => (m.idNumeric == null ? '—' : m.idNumeric ? 'digits' : 'hex text') };
 const bitsGoal = { id: 'bits', type: 'metric', text: 'IDs fit in 64 bits', test: (m) => m.idBits != null && m.idBits <= 64, val: (m) => (m.idBits == null ? '—' : m.idBits + ' bits') };
 const orderGoal = { id: 'ordered', type: 'metric', text: 'An ID made later is always larger', test: (m) => m.idOrdered === true, val: (m) => (m.idOrdered == null ? '—' : m.idOrdered ? 'yes' : 'no') };
 const rateGoal = { id: 'rate', type: 'metric', text: `Make ${fmt(QPS * IDS_PER_REQUEST)} IDs a second (${targets.servedPct}% of requests served)`, test: served99, val: (m) => (m.idMade == null ? m.servedPct.toFixed(1) + '%' : fmt(m.idMade) + '/s') };
-const spofGoal = { id: 'nospof', type: 'metric', text: 'The generator keeps working if one server fails', test: (m) => m.idSpof === false, val: (m) => (m.idSpof == null ? '—' : m.idSpof ? '1 server' : 'yes') };
-const requirements = [uniqueGoal, numericGoal, bitsGoal, rateGoal, spofGoal];
+const survivesFailureGoal = { id: 'nospof', type: 'metric', text: 'The generator keeps working if one server fails', test: (m) => m.idSpof === false, val: (m) => (m.idSpof == null ? '—' : m.idSpof ? '1 server' : 'yes') };
+const requirements = [uniqueGoal, numericGoal, bitsGoal, rateGoal, survivesFailureGoal];
 const methodName = { step: 'Multi-primary', uuid: 'UUID', ticket: 'Ticket server', snow: 'Timestamp-based' };
 
 export default {
@@ -155,7 +155,7 @@ export default {
       title: 'Newest orders first', ref: 'Clock synchronization', qps: QPS, budget: BUDGET,
       story: 'Support screens list orders by ID, newest first, so an ID made later must be larger. The generators keep their clocks in sync over the network (NTP), and a sync can set a clock back. Keep IDs unique and in order when it does.',
       goals: [
-        uniqueGoal, numericGoal, bitsGoal, orderGoal, rateGoal, spofGoal, costGoal(BUDGET),
+        uniqueGoal, numericGoal, bitsGoal, orderGoal, rateGoal, survivesFailureGoal, costGoal(BUDGET),
         { id: 'clock', type: 'exp', text: 'Break it: set a generator\'s clock back; IDs still unique and in order' },
       ],
       hint: 'Only a timestamp-based ID follows time across servers. When its clock goes back it would reuse milliseconds it has already used: set it to wait until the clock passes its last ID.',
@@ -185,7 +185,7 @@ export default {
       expect: (m) => unique(m) && served99(m),
       notMet: (m) => (unique(m)
         ? `Only ${m.servedPct.toFixed(1)}% served. The generator can't keep up.`
-        : `${pct(m.idDupPct)} of IDs repeat one already handed out. Each server must make IDs no other server can: give each its own machine ID.`),
+        : `${fmtPct(m.idDupPct, PCT)} of IDs repeat one already handed out. Each server must make IDs no other server can: give each its own machine ID.`),
       observed: () => 'Observed: a server joined, and no ID repeated.',
     },
     {
@@ -197,7 +197,7 @@ export default {
       expect: (m) => unique(m) && m.idOrdered === true && served99(m),
       notMet: (m) => (m.idOrdered !== true && unique(m)
         ? 'IDs are not in time order: only timestamp-based IDs follow time across servers.'
-        : !unique(m) ? `${pct(m.idDupPct)} of IDs repeat. A generator whose clock went back must wait until it passes its last ID.` : `Only ${m.servedPct.toFixed(1)}% served.`),
+        : !unique(m) ? `${fmtPct(m.idDupPct, PCT)} of IDs repeat. A generator whose clock went back must wait until it passes its last ID.` : `Only ${m.servedPct.toFixed(1)}% served.`),
       observed: () => 'Observed: the clock went back, and IDs stayed unique and in order.',
     },
   ],
@@ -207,7 +207,7 @@ export default {
     ...level2.text,
     idNote: (x) => {
       if (!(x.dup > 0)) return null;
-      const p = pct(100 * x.dup);
+      const p = fmtPct(100 * x.dup, PCT);
       if (x.method === 'ticket') return `Each ticket server counts 1, 2, 3… on its own, so ${p} of IDs repeat one already handed out. Use one ticket server, or multi-primary, where each counts up by a step from its own start.`;
       if (x.method === 'step') return `The new server counts up by the new step from its own start, onto numbers already handed out: ${p} of IDs repeat. Multi-primary can't grow without renumbering every server.`;
       return `A clock set back makes its generator reuse milliseconds it has already used: ${p} of IDs repeat, and go backwards in time. Set the generator to wait until its clock passes its last ID.`;

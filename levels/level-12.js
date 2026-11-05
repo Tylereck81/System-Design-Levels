@@ -1,6 +1,6 @@
 // Level 12: Distributed key-value store.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
-import { fmt } from '../js/format.js';
+import { servedGoal, latGoal, costGoal, servedAtLeast, fmtPct } from './shared/goals.js';
 import level2 from './level-02.js';
 import level6 from './level-06.js';
 import level10 from './level-10.js';
@@ -8,18 +8,14 @@ import level10 from './level-10.js';
 const targets = { latencyMs: 150, servedPct: 99 };
 const BUDGET = 1600;
 
-const pct = (x) => x.toFixed(1) + '%';
-const servedGoal = { id: 'served', type: 'metric', text: `Serve at least ${targets.servedPct}% of requests`, test: (m) => m.servedPct >= targets.servedPct, val: (m) => m.servedPct.toFixed(1) + '%' };
-const latGoal = { id: 'lat', type: 'metric', text: `Response time under ${targets.latencyMs} ms`, test: (m) => m.latency != null && m.latency < targets.latencyMs, val: (m) => m.latency == null ? '—' : fmt(m.latency) + ' ms' };
-const costGoal = (max) => ({ id: 'cost', type: 'struct', text: `Spend at most $${fmt(max)} per month`, test: (g) => g.cost <= max, val: (m, g) => '$' + fmt(g.cost) });
 // The store's setting as the canvas shows it (saved settings are checked on load, so these are valid options).
 const quorumOf = (n) => { const N = Number(n.n) || 3; return { N, W: Math.min(N, Number(n.w) || 1), R: Math.min(N, Number(n.r) || 1), sloppy: n.mode === 'sloppy' }; };
 const replicasGoal = { id: 'replicas', type: 'metric', text: 'Every key kept on at least 3 replicas', test: (m) => !!m.kvQuorum && m.kvQuorum.N >= 3, val: (m) => (m.kvQuorum ? `N = ${m.kvQuorum.N}` : '—') };
 const fresh = (m) => m.kvStalePct != null && m.kvStalePct < 1e-9;
-const freshGoal = { id: 'fresh', type: 'metric', text: 'No read returns an old seat map', test: fresh, val: (m) => (m.kvStalePct == null ? '—' : pct(m.kvStalePct)) };
+const freshGoal = { id: 'fresh', type: 'metric', text: 'No read returns an old seat map', test: fresh, val: (m) => (m.kvStalePct == null ? '—' : fmtPct(m.kvStalePct)) };
 const writeGoal = { id: 'durable', type: 'metric', text: 'Each cart change confirmed by at least 2 replicas', test: (m) => !!m.kvQuorum && m.kvQuorum.W >= 2, val: (m) => (m.kvQuorum ? `W = ${m.kvQuorum.W}` : '—') };
 const fastGoal = { id: 'fastread', type: 'metric', text: 'Seat reads answered by the store in 2 ms', test: (m) => m.kvReadMs != null && m.kvReadMs <= 2, val: (m) => (m.kvReadMs == null ? '—' : m.kvReadMs + ' ms') };
-const served99 = (m) => m.servedPct >= targets.servedPct;
+const served99 = servedAtLeast(targets.servedPct);
 const CART = 1; // the mission that keeps answering through the partition; the others must never be stale
 
 export default {
@@ -136,7 +132,7 @@ export default {
       story: 'Seat maps are stored on 3 replicas, and both reads and writes wait for just one. A seat map read right after a booking can come from a replica the booking hasn\'t reached yet, and the seat is sold twice. Make every read return the latest seat map. In a network partition, errors are fine; selling a seat twice is not.',
       goals: [
         { id: 'est', type: 'gate', text: 'Estimate the read quorum' },
-        servedGoal, latGoal, replicasGoal, freshGoal, costGoal(BUDGET),
+        servedGoal(targets), latGoal(targets), replicasGoal, freshGoal, costGoal(BUDGET),
         { id: 'partition', type: 'exp', text: 'Break it: split the network; still no old seat maps' },
       ],
       hint: 'Select the key-value store and pick W and R with W + R > N, such as W = 2 and R = 2. Keep the strict quorum: in a partition, the cut-off side must fail rather than answer from old data.',
@@ -146,7 +142,7 @@ export default {
       title: 'Carts that always work', ref: 'Sloppy quorum', qps: 2000, writes: 0.3, budget: BUDGET,
       story: 'Shopping carts are different: a cart that sometimes misses the last item added is annoying, but a cart that returns an error loses the sale. Every change must still be stored on 2 replicas before it is confirmed. Keep carts working through a network partition.',
       goals: [
-        servedGoal, latGoal, replicasGoal, writeGoal, costGoal(BUDGET),
+        servedGoal(targets), latGoal(targets), replicasGoal, writeGoal, costGoal(BUDGET),
         { id: 'partition', type: 'exp', text: 'Break it: split the network; at least 99% still served' },
       ],
       hint: 'With a strict quorum of W = 2, the cut-off side has only one replica, so its writes fail. Switch to a sloppy quorum: other nodes stand in and hand the data back later.',
@@ -156,7 +152,7 @@ export default {
       title: 'Seat maps on every page', ref: 'Fast reads', qps: 2000, writes: 0.05, budget: BUDGET,
       story: 'Seat maps now show on every page, and the store must answer reads in 2 ms: only the nearest replica is that fast. Reads still may never return an old seat map. Bookings are rare, so writes can be slower.',
       goals: [
-        servedGoal, latGoal, replicasGoal, freshGoal, fastGoal, costGoal(BUDGET),
+        servedGoal(targets), latGoal(targets), replicasGoal, freshGoal, fastGoal, costGoal(BUDGET),
         { id: 'partition', type: 'exp', text: 'Break it: split the network; still no old seat maps' },
       ],
       hint: 'R = 1 answers from the fastest replica. To keep W + R > N, writes must then wait for all of them: W = N.',
@@ -174,11 +170,11 @@ export default {
       off: 'The network is healed. Replicas catch up with the writes they missed.',
       expect: (m) => (m.mission === CART ? served99(m) : fresh(m)),
       notMet: (m) => (m.mission === CART
-        ? `Only ${m.servedPct.toFixed(1)}% served: ${pct(m.kvFailPct)} of requests fail where their side of the partition can't reach W replicas. Use a sloppy quorum.`
-        : `${pct(m.kvStalePct)} of reads return an old seat map. ${m.kvFailPct > 0 ? '' : 'Both sides keep answering, so each misses the other\'s bookings. '}Keep W + R > N with a strict quorum, so the cut-off side fails instead.`),
+        ? `Only ${m.servedPct.toFixed(1)}% served: ${fmtPct(m.kvFailPct)} of requests fail where their side of the partition can't reach W replicas. Use a sloppy quorum.`
+        : `${fmtPct(m.kvStalePct)} of reads return an old seat map. ${m.kvFailPct > 0 ? '' : 'Both sides keep answering, so each misses the other\'s bookings. '}Keep W + R > N with a strict quorum, so the cut-off side fails instead.`),
       observed: (m) => (m.mission === CART
-        ? `Observed: the network split, and ${m.servedPct.toFixed(1)}% of requests were still served. ${pct(m.kvStalePct)} of cart reads missed a change from the other side.`
-        : `Observed: the network split, and no read returned an old seat map. ${pct(m.kvFailPct)} of requests failed instead.`),
+        ? `Observed: the network split, and ${m.servedPct.toFixed(1)}% of requests were still served. ${fmtPct(m.kvStalePct)} of cart reads missed a change from the other side.`
+        : `Observed: the network split, and no read returned an old seat map. ${fmtPct(m.kvFailPct)} of requests failed instead.`),
     },
   ],
 

@@ -1,21 +1,20 @@
 // Level 20: Video platform.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { fmt } from '../js/format.js';
+import { servedGoal, costGoal, servedAtLeast, fmtPct, fmtMoney } from './shared/goals.js';
 import { VIDEO_MB, VIEWS_DAY, VIEW_GB, API_SERVERS, API_MBPS, FAIL, PATCHY_FAIL, TRANSCODE_RATE, IN_FLIGHT, POPULAR, CDN_GB, OWN_GB } from '../js/engine/video.js';
 import level2 from './level-02.js';
 import level10 from './level-10.js';
 
 const targets = { latencyMs: 1000, servedPct: 99 };
+const MONEY = { millions: true }; // bills reach millions of dollars: "$1.25M"
 const RATE = 9.3; // videos uploaded a second at the peak
 const GROWTH = 1.2;
 const BUDGET = 3700000;
 const TIGHT = 3600000;
 
-const pct = (x) => x.toFixed(1) + '%';
-const money = (x) => '$' + (x >= 1e6 ? (x / 1e6).toFixed(2) + 'M' : fmt(x));
-const costGoal = (max) => ({ id: 'cost', type: 'struct', text: `Spend at most ${money(max)} per month`, test: (g) => g.cost <= max, val: (m, g) => money(g.cost) });
-const served99 = (m) => m.servedPct >= targets.servedPct;
-const servedGoal = { id: 'served', type: 'metric', text: `Publish ${targets.servedPct}% of uploaded videos`, test: served99, val: (m) => pct(m.servedPct) };
+const served99 = servedAtLeast(targets.servedPct);
+const publishedGoal = servedGoal(targets, { text: `Publish ${targets.servedPct}% of uploaded videos` });
 const ON = (key, label, options) => ({ key, label, options });
 
 export default {
@@ -134,7 +133,7 @@ export default {
       story: `Creators upload ${RATE} videos a second at the peak, mostly from phones, and every byte passes through ${API_SERVERS} API servers. Publish 99% of uploads, even when phones are on patchy networks.`,
       goals: [
         { id: 'est', type: 'gate', text: 'Estimate the new video a day' },
-        servedGoal, costGoal(BUDGET),
+        publishedGoal, costGoal(BUDGET, MONEY),
         { id: 'patchy', type: 'exp', text: 'Break it: patchy networks; still 99% published' },
       ],
       hint: 'Send the bytes straight to storage with a pre-signed URL, and upload in resumable chunks so a drop only resends one chunk.',
@@ -144,7 +143,7 @@ export default {
       title: 'Transcode every video', ref: 'Video transcoding', qps: RATE, budget: BUDGET,
       story: 'Every upload must be encoded into several resolutions and formats before anyone can watch it. Transcoding servers sometimes die mid-video. Publish 99% of uploads, even when one dies.',
       goals: [
-        servedGoal, costGoal(BUDGET),
+        publishedGoal, costGoal(BUDGET, MONEY),
         { id: 'dies', type: 'exp', text: 'Break it: a transcoding server dies; still 99% published' },
       ],
       hint: `Retry the dead server's tasks from temporary storage, and keep one server spare: ${RATE} videos a second needs 10, so run 11.`,
@@ -152,9 +151,9 @@ export default {
     },
     {
       title: 'The CDN bill', ref: 'Cost-saving optimization', qps: RATE, budget: TIGHT,
-      story: `Streaming ${fmt(VIEWS_DAY / 1e6)} million views a day from the CDN costs about $120,000 a day: the biggest bill by far. Most views go to a few popular videos. Get the month under ${money(TIGHT)}, with room for views to grow ${Math.round(100 * (GROWTH - 1))}%.`,
+      story: `Streaming ${fmt(VIEWS_DAY / 1e6)} million views a day from the CDN costs about $120,000 a day: the biggest bill by far. Most views go to a few popular videos. Get the month under ${fmtMoney(TIGHT, MONEY)}, with room for views to grow ${Math.round(100 * (GROWTH - 1))}%.`,
       goals: [
-        servedGoal, costGoal(TIGHT),
+        publishedGoal, costGoal(TIGHT, MONEY),
         { id: 'growth', type: 'exp', text: `Break it: views grow ${Math.round(100 * (GROWTH - 1))}%; the bill stays within budget` },
       ],
       hint: `Put only the popular videos on the CDN, and stream the long tail from your own storage servers at about $${OWN_GB} a GB.`,
@@ -172,9 +171,9 @@ export default {
       off: 'Networks are steady again.',
       expect: served99,
       notMet: (m) => (m.video && !m.video.presigned
-        ? `Only ${pct(m.servedPct)} published: every byte crosses the API servers' links, which carry about ${fmt(API_SERVERS * API_MBPS / VIDEO_MB)} videos a second. Upload straight to storage with a pre-signed URL.`
-        : `Only ${pct(m.servedPct)} published: a dropped whole-file upload starts over and is given up on. Upload in resumable chunks.`),
-      observed: (m) => `Observed: networks got patchy, and ${pct(m.servedPct)} of uploads were still published.`,
+        ? `Only ${fmtPct(m.servedPct)} published: every byte crosses the API servers' links, which carry about ${fmt(API_SERVERS * API_MBPS / VIDEO_MB)} videos a second. Upload straight to storage with a pre-signed URL.`
+        : `Only ${fmtPct(m.servedPct)} published: a dropped whole-file upload starts over and is given up on. Upload in resumable chunks.`),
+      observed: (m) => `Observed: networks got patchy, and ${fmtPct(m.servedPct)} of uploads were still published.`,
     },
     {
       id: 'dies', kind: 'event', workerDies: true,
@@ -185,8 +184,8 @@ export default {
       expect: served99,
       notMet: (m) => (m.video && m.video.lost > 0
         ? `${Math.round(100 * IN_FLIGHT)}% of videos in transcoding were on the dead server and are lost. Retry its tasks from temporary storage.`
-        : `Only ${pct(m.servedPct)} published: the servers left can't keep up. Keep a spare.`),
-      observed: (m) => `Observed: a transcoding server died, and ${pct(m.servedPct)} of videos were still published.`,
+        : `Only ${fmtPct(m.servedPct)} published: the servers left can't keep up. Keep a spare.`),
+      observed: (m) => `Observed: a transcoding server died, and ${fmtPct(m.servedPct)} of videos were still published.`,
     },
     {
       id: 'growth', kind: 'event', growth: true,
@@ -195,8 +194,8 @@ export default {
       on: `Next month: ${Math.round(100 * (GROWTH - 1))}% more views.`, onTone: 'bad',
       off: 'Back to today\'s views.',
       expect: (m) => !!m.video && m.cost - Math.round(m.video.bill / GROWTH) + Math.round(m.video.bill) <= TIGHT,
-      notMet: (m) => `Next month's streaming bill would be ${money(m.video.bill)}. Serve only the popular videos from the CDN.`,
-      observed: (m) => `Observed: views grew, and the month's streaming bill would be ${money(m.video.bill)}, within budget.`,
+      notMet: (m) => `Next month's streaming bill would be ${fmtMoney(m.video.bill, MONEY)}. Serve only the popular videos from the CDN.`,
+      observed: (m) => `Observed: views grew, and the month's streaming bill would be ${fmtMoney(m.video.bill, MONEY)}, within budget.`,
     },
   ],
 

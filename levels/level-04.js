@@ -1,16 +1,13 @@
 // Level 4: Cache tier.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
-import { fmt } from '../js/format.js';
+import { servedGoal, latGoal, costGoal, spofGoal, servedAtLeast } from './shared/goals.js';
 import level2 from './level-02.js';
 import level3 from './level-03.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 const DB_BUSY = 0.7;
 
-const servedGoal = { id: 'served', type: 'metric', text: `Serve at least ${targets.servedPct}% of requests`, test: (m) => m.servedPct >= targets.servedPct, val: (m) => m.servedPct.toFixed(1) + '%' };
-const latGoal = { id: 'lat', type: 'metric', text: `Response time under ${targets.latencyMs} ms`, test: (m) => m.latency != null && m.latency < targets.latencyMs, val: (m) => m.latency == null ? '—' : fmt(m.latency) + ' ms' };
-const costGoal = (max) => ({ id: 'cost', type: 'struct', text: `Spend at most $${fmt(max)} per month`, test: (g) => g.cost <= max, val: (m, g) => '$' + fmt(g.cost) });
-const served99 = (m) => m.servedPct >= targets.servedPct;
+const served99 = servedAtLeast(targets.servedPct);
 const hitGoal = (min) => ({
   id: 'hit', type: 'metric', text: `Cache hit rate at least ${min}%`,
   test: (m) => m.hitRate != null && m.hitRate * 100 >= min,
@@ -22,7 +19,6 @@ const dbBusyGoal = {
   test: (m) => dbLoads(m).length > 0 && dbLoads(m).every((st) => st.util < DB_BUSY),
   val: (m) => (dbLoads(m).length ? Math.round(100 * Math.max(...dbLoads(m).map((st) => st.util))) + '% max' : '—'),
 };
-const spofGoal = { id: 'spof', type: 'metric', text: 'No single point of failure', test: (m) => m.spof === 0, val: (m) => String(m.spof) };
 const duration = (s) => ({ 10: '10 seconds', 60: '1 minute', 600: '10 minutes', 3600: '1 hour' }[s] || `${s} seconds`);
 
 const ttlOptions = [
@@ -137,7 +133,7 @@ export default {
       goals: [
         { id: 'est', type: 'gate', text: 'Estimate the memory for the most-viewed products' },
         hitGoal(80), dbBusyGoal,
-        servedGoal, latGoal, costGoal(2100),
+        servedGoal(targets), latGoal(targets), costGoal(2100),
       ],
       hint: 'Remove one replica, add a cache and connect both web servers to it. 4 GB holds the top 20% of products, but entries also expire, so give it room to spare: more memory, a longer TTL, or both. Select the cache to see its hit rate.',
       takeaway: 'Most reads now end in memory, so one replica is enough and the bill went down. A cache works because a few items get most of the reads. Size it with room to spare: entries expire, and the hot set grows.',
@@ -146,8 +142,8 @@ export default {
       title: 'The cache goes down', ref: 'Cache failure', qps: 2000, writes: 0.2, budget: 2100,
       story: 'The cache is now a single point of failure. A cache server that restarts comes back empty, so every read it used to answer goes to the database until it refills. With one cache, that is all 1,600 reads a second, on one replica. Make sure the site survives losing a cache.',
       goals: [
-        hitGoal(80), spofGoal, dbBusyGoal,
-        servedGoal, latGoal, costGoal(2100),
+        hitGoal(80), spofGoal(), dbBusyGoal,
+        servedGoal(targets), latGoal(targets), costGoal(2100),
         { id: 'crash-cache', type: 'exp', text: 'Break it: crash a cache and still serve at least 99%' },
       ],
       hint: 'Run two cache servers: the web servers split the keys between them, so losing one costs only its half of the hits. Two 4 GB caches hold as much as one 8 GB cache. Connect both web servers to both caches.',
@@ -157,8 +153,8 @@ export default {
       title: 'Prices must be fresh', ref: 'Cache consistency', qps: 2000, writes: 0.2, budget: 2100,
       story: 'A flash sale starts at noon: 300 products drop their price at once, and shoppers must see the new price within a minute. For the sale, the database team also wants a hit rate of at least 86%. Change the prices, then check how long shoppers can still see the old ones.',
       goals: [
-        hitGoal(86), spofGoal, dbBusyGoal,
-        servedGoal, latGoal, costGoal(2100),
+        hitGoal(86), spofGoal(), dbBusyGoal,
+        servedGoal(targets), latGoal(targets), costGoal(2100),
         { id: 'price-change', type: 'exp', text: 'Break it: change prices; shoppers see them within a minute' },
       ],
       hint: 'A 1-minute TTL keeps prices fresh, but 1 read in 7 then finds its item expired, so the hit rate can\'t reach 86%. Keep a long TTL instead, and set "When a product changes" to delete the cached copy on each cache server.',

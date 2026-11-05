@@ -1,6 +1,7 @@
 // Level 19: Search autocomplete.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { fmt } from '../js/format.js';
+import { servedGoal, latGoal, costGoal, servedAtLeast, fmtPct } from './shared/goals.js';
 import { BROWSER_HIT, API_CAP, SHARD_CAP, LOOKUP_MS, LETTER_TOP } from '../js/engine/typeahead.js';
 import level2 from './level-02.js';
 import level10 from './level-10.js';
@@ -10,11 +11,9 @@ const QPS = 55600; // keystroke requests a second at the peak
 const RUSH = 1.15; // a big match on TV
 const PEAK = 1.6; // election night
 
-const pct = (x) => x.toFixed(1) + '%';
-const costGoal = (max) => ({ id: 'cost', type: 'struct', text: `Spend at most $${fmt(max)} per month`, test: (g) => g.cost <= max, val: (m, g) => '$' + fmt(g.cost) });
-const served99 = (m) => m.servedPct >= targets.servedPct;
-const servedGoal = { id: 'served', type: 'metric', text: `Answer ${targets.servedPct}% of keystrokes`, test: served99, val: (m) => pct(m.servedPct) };
-const latGoal = { id: 'lat', type: 'metric', text: `Suggestions in under ${targets.latencyMs} ms`, test: (m) => m.latency != null && m.latency < targets.latencyMs, val: (m) => (m.latency == null ? '—' : fmt(m.latency) + ' ms') };
+const served99 = servedAtLeast(targets.servedPct);
+const answeredGoal = servedGoal(targets, { text: `Answer ${targets.servedPct}% of keystrokes` });
+const suggestGoal = latGoal(targets, { text: `Suggestions in under ${targets.latencyMs} ms` });
 const ok = (m) => served99(m) && m.latency != null && m.latency < targets.latencyMs;
 const fresh = (m) => !!m.typeahead && m.typeahead.staleH <= 1;
 const freshGoal = { id: 'fresh', type: 'metric', text: 'A new trending search shows up within an hour', test: fresh, val: (m) => (m.typeahead ? `${m.typeahead.staleH} h` : '—') };
@@ -125,7 +124,7 @@ export default {
       story: `As people type, suggestions must appear in under 100 ms or the box stutters. Right now each keystroke runs a query over the whole frequency table. Get under 100 ms, and survive a big match on TV (${RUSH}× the traffic).`,
       goals: [
         { id: 'est', type: 'gate', text: 'Estimate requests a second' },
-        servedGoal, latGoal, costGoal(2400),
+        answeredGoal, suggestGoal, costGoal(2400),
         { id: 'rush', type: 'exp', text: `Break it: a big match on TV (${RUSH}×); still answered in time` },
       ],
       hint: `Keep each node's top 5 in the trie: one read. And let browsers cache suggestions for an hour: ${Math.round(100 * BROWSER_HIT)}% of keystrokes never reach you.`,
@@ -135,7 +134,7 @@ export default {
       title: 'Uneven letters', ref: 'Scale the storage', qps: QPS, budget: 2400,
       story: `Election night: ${PEAK}× the usual traffic. The trie is split into equal letter ranges, but searches don't start evenly: far more begin with c or s than with x or z. Keep every keystroke answered in time.`,
       goals: [
-        servedGoal, latGoal, costGoal(2400),
+        answeredGoal, suggestGoal, costGoal(2400),
         { id: 'peak', type: 'exp', text: `Break it: election night (${PEAK}×); still answered in time` },
       ],
       hint: `Add API servers for the peak, and split the trie by a shard map sized from past traffic instead of equal letter ranges: each shard then gets a third, not ${Math.round(100 * LETTER_TOP[3])}%.`,
@@ -145,7 +144,7 @@ export default {
       title: 'What\'s trending', ref: 'Data gathering', qps: QPS, budget: 2700,
       story: 'A storm is named, and everyone starts searching for it. A weekly rebuild won\'t suggest it for days. New trending searches must show up within an hour.',
       goals: [
-        freshGoal, servedGoal, latGoal, costGoal(2700),
+        freshGoal, answeredGoal, suggestGoal, costGoal(2700),
         { id: 'trend', type: 'exp', text: 'Break it: a new search trends; suggested within the hour' },
       ],
       hint: 'Rebuild the trie every hour from the latest logs. Sampling keeps the logs small.',
@@ -162,8 +161,8 @@ export default {
       on: `A big match: ${RUSH}× the keystrokes.`, onTone: 'bad',
       off: 'The match is over.',
       expect: ok,
-      notMet: (m) => `Only ${pct(m.servedPct)} answered in ${m.latency == null ? '—' : fmt(m.latency)} ms. Keep the top 5 at each node, and let browsers cache suggestions.`,
-      observed: (m) => `Observed: the match came, and ${pct(m.servedPct)} of keystrokes were answered in ${fmt(m.latency)} ms.`,
+      notMet: (m) => `Only ${fmtPct(m.servedPct)} answered in ${m.latency == null ? '—' : fmt(m.latency)} ms. Keep the top 5 at each node, and let browsers cache suggestions.`,
+      observed: (m) => `Observed: the match came, and ${fmtPct(m.servedPct)} of keystrokes were answered in ${fmt(m.latency)} ms.`,
     },
     {
       id: 'peak', kind: 'event', factor: PEAK,
@@ -173,9 +172,9 @@ export default {
       off: 'The results are in; traffic calms down.',
       expect: ok,
       notMet: (m) => (m.typeahead && m.typeahead.shardLoad > SHARD_CAP
-        ? `Only ${pct(m.servedPct)} answered: the busiest shard gets ${Math.round(100 * m.typeahead.topShare)}% of lookups, ${fmt(m.typeahead.shardLoad)} a second, more than its ${fmt(SHARD_CAP)}. Split the trie by a shard map.`
-        : `Only ${pct(m.servedPct)} answered: the API servers can't keep up. Add servers.`),
-      observed: (m) => `Observed: election night came, and ${pct(m.servedPct)} of keystrokes were answered.`,
+        ? `Only ${fmtPct(m.servedPct)} answered: the busiest shard gets ${Math.round(100 * m.typeahead.topShare)}% of lookups, ${fmt(m.typeahead.shardLoad)} a second, more than its ${fmt(SHARD_CAP)}. Split the trie by a shard map.`
+        : `Only ${fmtPct(m.servedPct)} answered: the API servers can't keep up. Add servers.`),
+      observed: (m) => `Observed: election night came, and ${fmtPct(m.servedPct)} of keystrokes were answered.`,
     },
     {
       id: 'trend', kind: 'event',

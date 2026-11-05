@@ -1,14 +1,11 @@
 // Level 2: Load balancer and horizontal scaling.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
-import { fmt } from '../js/format.js';
+import { servedGoal, latGoal, costGoal, servedAtLeast } from './shared/goals.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 
-const servedGoal = { id: 'served', type: 'metric', text: `Serve at least ${targets.servedPct}% of requests`, test: (m) => m.servedPct >= targets.servedPct, val: (m) => m.servedPct.toFixed(1) + '%' };
-const latGoal = { id: 'lat', type: 'metric', text: `Response time under ${targets.latencyMs} ms`, test: (m) => m.latency != null && m.latency < targets.latencyMs, val: (m) => m.latency == null ? '—' : fmt(m.latency) + ' ms' };
 const sharedDbGoal = { id: 'shared', type: 'struct', text: 'Every web server uses the shared database', test: (g) => g.everyReaches('web', 'db') };
-const costGoal = (max) => ({ id: 'cost', type: 'struct', text: `Spend at most $${fmt(max)} per month`, test: (g) => g.cost <= max, val: (m, g) => '$' + fmt(g.cost) });
-const served99 = (m) => m.servedPct >= targets.servedPct;
+const served99 = servedAtLeast(targets.servedPct);
 const TIER = { db: 'database', lb: 'load balancer' }; // names for the bottleneck message
 /**
  * The load balancer that reaches the fewest web servers on the path, and how many it reaches (of total). Every load
@@ -105,7 +102,7 @@ export default {
         { id: 'lb', type: 'struct', text: 'Users reach the web servers through a load balancer', test: (g) => g.count('lb') >= 1 && g.everyReaches('lb', 'web') },
         { id: 'pool', type: 'struct', text: 'At least two web servers behind it', test: (g) => g.count('web') >= 2 },
         sharedDbGoal,
-        servedGoal, latGoal, costGoal(500),
+        servedGoal(targets), latGoal(targets), costGoal(500),
         { id: 'crash-web', type: 'exp', text: 'Break it: crash a web server and still serve at least 99%' },
       ],
       hint: 'Add a load balancer and connect Users to it, then connect it to each web server, and each web server to the database. With round robin every server gets the same share, so use one size (or pick weighted or least connections in the load balancer). When your biggest server crashes, the others must carry all 463 req/s between them. Several small servers cost less than a few big ones.',
@@ -131,7 +128,7 @@ export default {
       goals: [
         { id: 'est', type: 'gate', text: 'Estimate the new peak traffic' },
         sharedDbGoal,
-        servedGoal, latGoal, costGoal(950),
+        servedGoal(targets), latGoal(targets), costGoal(950),
         { id: 'crash-web', type: 'exp', text: 'Break it: crash a web server and still serve at least 99%' },
       ],
       hint: 'Every request still reaches the one database, so check it first: a large database handles 800 queries/s. Then add web servers until each is well under 75% busy, plus one spare for the crash test. Same-size servers are simplest; with mixed sizes, switch the load balancer to weighted or least connections.',
@@ -146,7 +143,7 @@ export default {
           val: (m, g) => { const f = fewestReached(g); return g.count('lb') >= 2 && f.n < f.total ? `reaches ${f.n} of ${f.total}` : ''; },
         },
         sharedDbGoal,
-        servedGoal, latGoal, costGoal(1000),
+        servedGoal(targets), latGoal(targets), costGoal(1000),
         { id: 'crash-lb', type: 'exp', text: 'Break it: crash the load balancer and still serve at least 99%' },
       ],
       hint: 'Add a second load balancer, connect Users to it and connect it to every web server. It takes no traffic while the first one is healthy, and takes over all of it when the first one fails.',

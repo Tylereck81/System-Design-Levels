@@ -1,6 +1,7 @@
 // Level 17: News feed.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { fmt } from '../js/format.js';
+import { servedGoal, latGoal, costGoal, fmtPct } from './shared/goals.js';
 import { FRIENDS, USERS, FEED_KEEP, ID_BYTES, POST_BYTES, WORKER_WRITES, INACTIVE, STAR, STARS_FOLLOWED, CACHE_MS, LOOKUP_MS, LOOKUPS_CAP } from '../js/engine/feed.js';
 import level2 from './level-02.js';
 import level6 from './level-06.js';
@@ -13,10 +14,6 @@ const POSTS = 150; // new posts a second at the peak
 const SURGE = 2; // posts on New Year's Eve
 const RUSH = 1.4; // the dinner rush
 
-const pct = (x) => x.toFixed(1) + '%';
-const servedGoal = { id: 'served', type: 'metric', text: `Serve at least ${targets.servedPct}% of requests`, test: (m) => m.servedPct >= targets.servedPct, val: (m) => pct(m.servedPct) };
-const latGoal = { id: 'lat', type: 'metric', text: `Response time under ${targets.latencyMs} ms`, test: (m) => m.latency != null && m.latency < targets.latencyMs, val: (m) => m.latency == null ? '—' : fmt(m.latency) + ' ms' };
-const costGoal = (max) => ({ id: 'cost', type: 'struct', text: `Spend at most $${fmt(max)} per month`, test: (g) => g.cost <= max, val: (m, g) => '$' + fmt(g.cost) });
 const fits = (m) => !!m.feed && m.feed.cacheGB <= 200;
 const cacheGoal = { id: 'cachegb', type: 'metric', text: 'Feed cache under 200 GB', test: fits, val: (m) => (m.feed ? `${fmt(m.feed.cacheGB)} GB` : '—') };
 const quick = (m) => !!m.feed && m.feed.lag <= 5;
@@ -152,7 +149,7 @@ export default {
       story: `${fmt(READS)} feed loads and ${fmt(POSTS)} posts a second at the evening peak. Every load builds the feed from ${FRIENDS} friends' recent posts, and the post store can't keep up. Make feeds fast, keep the feed cache under 200 GB, and survive the dinner rush.`,
       goals: [
         { id: 'est', type: 'gate', text: 'Estimate the feed cache' },
-        servedGoal, latGoal, cacheGoal, costGoal(BUDGET),
+        servedGoal(targets), latGoal(targets), cacheGoal, costGoal(BUDGET),
         { id: 'rush', type: 'exp', text: `Break it: the dinner rush (${RUSH}×); still 99% served under 150 ms` },
       ],
       hint: 'Fan out on write: put each post\'s ID in friends\' feeds when it is posted, so a load reads one list. Store only IDs in the feed cache. Four workers keep up with the posts.',
@@ -162,7 +159,7 @@ export default {
       title: 'A star posts', ref: 'Hotkey problem', qps: READS + POSTS, writes: POSTS / (READS + POSTS), budget: BUDGET,
       story: `A singer with ${fmt(STAR / 1e6)} million followers joins. With fanout on write, one of her posts is ${fmt(STAR / 1e6)} million feed writes, and everyone else's posts queue behind them. Every post must reach friends' feeds within 5 seconds.`,
       goals: [
-        lagGoal, servedGoal, latGoal, cacheGoal, costGoal(BUDGET),
+        lagGoal, servedGoal(targets), latGoal(targets), cacheGoal, costGoal(BUDGET),
         { id: 'star', type: 'exp', text: 'Break it: the star posts; posts still reach feeds within 5 s' },
       ],
       hint: 'Use the hybrid: push most posts, but let followers pull stars\' posts when they load their feed.',
@@ -172,7 +169,7 @@ export default {
       title: 'New Year\'s Eve', ref: 'Fanout cost', qps: READS + POSTS, writes: POSTS / (READS + POSTS), budget: BUDGET,
       story: `At midnight everyone posts: ${SURGE}× the posts. The fanout workers write each into every friend's feed, including friends who haven't opened the app in months. Keep posts reaching feeds within 5 seconds, within the budget.`,
       goals: [
-        lagGoal, servedGoal, latGoal, cacheGoal, costGoal(BUDGET),
+        lagGoal, servedGoal(targets), latGoal(targets), cacheGoal, costGoal(BUDGET),
         { id: 'nye', type: 'exp', text: `Break it: midnight (${SURGE}× posts); posts still reach feeds within 5 s` },
       ],
       hint: `${Math.round(100 * INACTIVE)}% of friends are inactive: skip their feeds and build them when they return. That's fewer writes than buying more workers.`,
@@ -190,9 +187,9 @@ export default {
       off: 'The rush is over.',
       expect: ok,
       notMet: (m) => (m.feed && m.feed.served < 1
-        ? `Only ${pct(m.servedPct)} served: building every feed at load time is ${fmt(m.feed.readMs)} ms and ${FRIENDS} lookups each, more than the post store's ${fmt(LOOKUPS_CAP)} a second. Fan out on write.`
-        : `Only ${pct(m.servedPct)} served in ${m.latency == null ? '—' : fmt(m.latency)} ms. Look for the busiest part.`),
-      observed: (m) => `Observed: the rush came, and ${pct(m.servedPct)} of requests were served in ${fmt(m.latency)} ms.`,
+        ? `Only ${fmtPct(m.servedPct)} served: building every feed at load time is ${fmt(m.feed.readMs)} ms and ${FRIENDS} lookups each, more than the post store's ${fmt(LOOKUPS_CAP)} a second. Fan out on write.`
+        : `Only ${fmtPct(m.servedPct)} served in ${m.latency == null ? '—' : fmt(m.latency)} ms. Look for the busiest part.`),
+      observed: (m) => `Observed: the rush came, and ${fmtPct(m.servedPct)} of requests were served in ${fmt(m.latency)} ms.`,
     },
     {
       id: 'star', kind: 'event', star: true,

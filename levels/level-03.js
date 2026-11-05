@@ -1,15 +1,13 @@
 // Level 3: Database replication.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { fmt } from '../js/format.js';
+import { servedGoal, latGoal, costGoal, spofGoal, servedAtLeast } from './shared/goals.js';
 import level2 from './level-02.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 const DB_BUSY = 0.7;
 
-const servedGoal = { id: 'served', type: 'metric', text: `Serve at least ${targets.servedPct}% of requests`, test: (m) => m.servedPct >= targets.servedPct, val: (m) => m.servedPct.toFixed(1) + '%' };
-const latGoal = { id: 'lat', type: 'metric', text: `Response time under ${targets.latencyMs} ms`, test: (m) => m.latency != null && m.latency < targets.latencyMs, val: (m) => m.latency == null ? '—' : fmt(m.latency) + ' ms' };
-const costGoal = (max) => ({ id: 'cost', type: 'struct', text: `Spend at most $${fmt(max)} per month`, test: (g) => g.cost <= max, val: (m, g) => '$' + fmt(g.cost) });
-const served99 = (m) => m.servedPct >= targets.servedPct;
+const served99 = servedAtLeast(targets.servedPct);
 
 const dbsOf = (g, n) => g.next(n).filter((c) => c.type === 'db');
 const splitGoal = {
@@ -23,7 +21,6 @@ const dbBusyGoal = {
   test: (m) => dbLoads(m).length > 0 && dbLoads(m).every((st) => st.util < DB_BUSY),
   val: (m) => (dbLoads(m).length ? Math.round(100 * Math.max(...dbLoads(m).map((st) => st.util))) + '% max' : '—'),
 };
-const spofGoal = { id: 'spof', type: 'metric', text: 'No single point of failure', test: (m) => m.spof === 0, val: (m) => String(m.spof) };
 
 const replicasUp = (m) => m.g.onPath('db').filter((n) => n.role === 'replica' && !m.down.has(n.id)).length;
 const primaryUp = (m) => m.g.onPath('db').some((n) => n.role === 'primary' && !m.down.has(n.id));
@@ -110,7 +107,7 @@ export default {
       story: 'example.com keeps growing: 1,500 req/s at peak. Nine in ten requests only read data, such as product pages and search; one in ten writes, such as an order. The web servers cope. The one database does not: it is XL, the largest size, and 94% busy, so every query waits in line. Add read replicas: copies that take the reads, while the primary keeps every write.',
       goals: [
         splitGoal, dbBusyGoal,
-        servedGoal, latGoal, costGoal(2400),
+        servedGoal(targets), latGoal(targets), costGoal(2400),
         { id: 'crash-replica', type: 'exp', text: 'Break it: crash a replica and still serve at least 99%' },
       ],
       hint: 'Add a database: it becomes a read replica. Connect both web servers to it. The replicas share the 1,350 reads a second evenly, and each one also applies all 150 writes a second the primary makes. Select a replica to see both numbers. Each replica carries its share of the reads plus every write. Work out how big each must be to stay under 70% busy.',
@@ -138,7 +135,7 @@ export default {
       goals: [
         { id: 'est', type: 'gate', text: 'Estimate the peak writes per second' },
         splitGoal, dbBusyGoal,
-        servedGoal, latGoal, costGoal(2800),
+        servedGoal(targets), latGoal(targets), costGoal(2800),
         { id: 'crash-replica', type: 'exp', text: 'Break it: crash a replica and still serve at least 99%' },
       ],
       hint: 'Each replica carries its share of the reads plus every write. At 400 writes a second, an L replica (800 queries/s) is half busy before it serves a single read, so use XL replicas. Then make sure the replicas left after a crash can still carry the reads.',
@@ -148,8 +145,8 @@ export default {
       title: 'The primary fails', ref: 'Promoting a replica', qps: 2000, writes: 0.2, budget: 2800,
       story: 'Replicas cover for each other, but every write still goes to one primary. If it fails, nobody can place an order. Crash it, then promote a replica: it becomes the new primary and takes the writes. Read what the log says about the newest writes.',
       goals: [
-        splitGoal, spofGoal, dbBusyGoal,
-        servedGoal, latGoal, costGoal(2800),
+        splitGoal, spofGoal(), dbBusyGoal,
+        servedGoal(targets), latGoal(targets), costGoal(2800),
         { id: 'crash-primary', type: 'exp', text: 'Break it: crash the primary, promote a replica, and serve at least 99%' },
       ],
       hint: 'Press Crash primary: every write fails, so only 80% is served. Select a replica on the canvas and press Promote to primary in the inspector. Both web servers must already be connected to it. Then press Restart old primary: it comes back as a replica.',
