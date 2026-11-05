@@ -3,8 +3,8 @@
 import { fmt } from '../js/format.js';
 import { servedGoal, costGoal, servedAtLeast, fmtPct, fmtMoney } from './shared/goals.js';
 import { VIDEO_MB, VIEWS_DAY, VIEW_GB, API_SERVERS, API_MBPS, FAIL, PATCHY_FAIL, TRANSCODE_RATE, IN_FLIGHT, POPULAR, CDN_GB, OWN_GB } from '../js/engine/video.js';
-import level2 from './level-02.js';
-import level10 from './level-10.js';
+import { lbText, levelComplete } from './shared/text.js';
+import { failText, passText } from './shared/quiz.js';
 
 const targets = { latencyMs: 1000, servedPct: 99 };
 const MONEY = { millions: true }; // bills reach millions of dollars: "$1.25M"
@@ -201,15 +201,15 @@ export default {
 
   // Messages the engine shows for this level's design.
   text: {
-    ...level2.text,
+    ...lbText(),
     noWeb: 'Connect the creators to the upload service.',
-    levelComplete: 'Level 20 complete. Take the quiz.',
+    levelComplete: levelComplete(20),
   },
 
   quiz: {
     passScore: 8,
-    passText: 'Level 20 is done. Level 21, Cloud file sync, is next: open it from the level menu at the top.',
-    failText: level10.quiz.failText,
+    passText: passText(20, 'Cloud file sync'),
+    failText,
     questions: [
       { q: 'What does transcoding do?', o: ['Compresses the database', 'Copies every uploaded video to a second backup region overnight', 'Checks the uploader\'s password', 'Encodes a video into formats and bitrates for each device'], a: 3, e: 'Raw video is huge and many devices play only certain formats. Transcoding makes several resolutions, codecs and bitrates, so each viewer gets one that fits their screen and network.', r: 'Video transcoding' },
       { q: 'What is a pre-signed upload URL?', o: ['Short-lived permission to upload one object straight to storage', 'A URL that never expires', 'A link to the video\'s thumbnail, signed by the creator and the platform', 'An encrypted video'], a: 0, e: 'The API server checks the user and returns a URL that allows one upload to one storage location for a short time. The bytes then skip the API servers.', r: 'Safety optimization' },

@@ -3,8 +3,8 @@
 import { fmt } from '../js/format.js';
 import { costGoal, fmtPct } from './shared/goals.js';
 import { DNS_MS, SLOW_DNS_MS, DNS_MISS, DUP_SHARE, PAGE_KB, POLITE, TOP_HOST, FLOOD_SHARE, TRAP_SHARE, TRAP_LINKS, THREADS, PAGE_MS } from '../js/engine/crawl.js';
-import level2 from './level-02.js';
-import level10 from './level-10.js';
+import { lbText, levelComplete } from './shared/text.js';
+import { failText, passText } from './shared/quiz.js';
 
 const targets = { latencyMs: 1000, servedPct: 99 };
 const BUDGET = 1500;
@@ -211,15 +211,15 @@ export default {
 
   // Messages the engine shows for this level's design.
   text: {
-    ...level2.text,
+    ...lbText(),
     noWeb: 'Connect the URL frontier to the downloaders.',
-    levelComplete: 'Level 15 complete. Take the quiz.',
+    levelComplete: levelComplete(15),
   },
 
   quiz: {
     passScore: 8,
-    passText: 'Level 15 is done. Level 16, Notification system, is next: open it from the level menu at the top.',
-    failText: level10.quiz.failText,
+    passText: passText(15, 'Notification system'),
+    failText,
     questions: [
       { q: 'Why do crawlers use breadth-first rather than depth-first search?', o: ['BFS uses less memory on every graph', 'DFS can go very deep on one site', 'BFS finds pages in alphabetical order', 'DFS can\'t follow links'], a: 1, e: 'The web is a huge graph; depth-first can follow one site\'s links down and down. Breadth-first, with a FIFO queue, spreads the crawl across the web.', r: 'DFS vs BFS' },
       { q: 'What makes a crawler polite?', o: ['Crawl only at night', 'Download each page twice', 'One request at a time per host, with a pause', 'Skip every page that has a form on it, to be safe'], a: 2, e: 'Map each host to its own queue, and let a thread download from it one page at a time with a delay in between. The site isn\'t flooded.', r: 'Politeness' },

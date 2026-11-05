@@ -3,8 +3,8 @@
 import { fmt } from '../js/format.js';
 import { servedGoal, costGoal, servedAtLeast, fmtPct } from './shared/goals.js';
 import { SHARES, SEND_MS, TIMEOUT_MS, OPT_OUT, BLAST, IN_FLIGHT } from '../js/engine/notify.js';
-import level2 from './level-02.js';
-import level10 from './level-10.js';
+import { lbText, levelComplete } from './shared/text.js';
+import { failText, passText } from './shared/quiz.js';
 
 const targets = { latencyMs: 1000, servedPct: 99 };
 const BUDGET = 700;
@@ -207,15 +207,15 @@ export default {
 
   // Messages the engine shows for this level's design.
   text: {
-    ...level2.text,
+    ...lbText(),
     noWeb: 'Connect the services to the notification server.',
-    levelComplete: 'Level 16 complete. Take the quiz.',
+    levelComplete: levelComplete(16),
   },
 
   quiz: {
     passScore: 8,
-    passText: 'Level 16 is done. Level 17, News feed, is next: open it from the level menu at the top.',
-    failText: level10.quiz.failText,
+    passText: passText(16, 'News feed'),
+    failText,
     questions: [
       { q: 'Why give each channel its own queue?', o: ['Queues are cheaper that way', 'A provider outage only stalls its own queue', 'Each worker then needs fewer machines behind it', 'Messages arrive in order'], a: 1, e: 'With one shared queue, sends to a dead SMS provider hold up the workers for everyone. A queue per channel keeps push and email moving.', r: 'High-level design' },
       { q: 'What does a push notification to a phone need besides the message?', o: ['The user\'s password', 'The phone number', 'The user\'s email address', 'A device token'], a: 3, e: 'The phone maker\'s push service delivers to a device identified by a device token, which the app registers when it is installed.', r: 'Contact info gathering' },
