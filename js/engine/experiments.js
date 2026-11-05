@@ -13,16 +13,10 @@ export const crashing = () => activeExps().some(e => e.kind === 'crash');
  */
 export const trafficFactor = () => { const h = dayHour(); return activeExps().filter(e => e.factor).reduce((f, e) => f * e.factor, 1) * (h == null ? 1 : WORKLOAD.day[h]); };
 
-/** True while an experiment has bots send each key's quota right around a window edge. */
-export const botEdge = () => activeExps().some(e => e.botEdge);
-/** True while a running experiment splits the network in two. */
-export const partitioned = () => activeExps().some(e => e.partition);
 /** The sum of number `key` over the running experiments (0 when none sets it), e.g. a viral link's extra clicks. */
 export const expTotal = (key) => activeExps().reduce((s, e) => s + (e[key] || 0), 0);
 /** True while a running experiment has flag `key` set (e.g. a crawler's slowDns, flood or trap). */
 export const expFlag = (key) => activeExps().some(e => e[key]);
-/** True while a running experiment sets an ID generator's clock back. */
-export const clockBack = () => activeExps().some(e => e.clockBack);
 /** Servers the running experiments add to (+1) or take from (−1) a cache cluster. */
 export const resizeBy = () => activeExps().reduce((d, e) => d + (e.resize || 0), 0);
 /** Multiplier on the share of uploads from the running experiments (1 when none). */
