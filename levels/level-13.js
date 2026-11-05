@@ -3,10 +3,11 @@
 import { fmt } from '../js/format.js';
 import { costGoal, servedAtLeast, fmtPct } from './shared/goals.js';
 import { DB_IDS, CLOCK_BACK_MS } from '../js/engine/ids.js';
-import level2 from './level-02.js';
-import level6 from './level-06.js';
-import level10 from './level-10.js';
-import level12 from './level-12.js';
+import { dns, lb, NO_DB_NOTE, autoscaleSubOf, scalingChoices } from './shared/components.js';
+import { dnsLookup, usersToLb, lbToWeb, lbBad } from './shared/connections.js';
+import { lbText, levelComplete } from './shared/text.js';
+import { failText, passText } from './shared/quiz.js';
+import { dayTraffic } from './shared/workload.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 const PCT = { wholeUpTo: 0, wholeFrom: 1 }; // percentages: whole numbers, with one decimal between 0% and 1%
@@ -33,18 +34,21 @@ export default {
   saveVersion: 1,
   targets,
   // The day's traffic curve (for the autoscaled web servers). idsPerRequest: new IDs each request asks for.
-  workload: { day: level6.workload.day, idsPerRequest: IDS_PER_REQUEST },
+  workload: { day: dayTraffic(), idsPerRequest: IDS_PER_REQUEST },
 
   components: {
     users: {
       name: 'Users', sub: 'Order food, track it',
       desc: `People on a food delivery app. Each request saves new records, such as an order, a payment, a delivery update or a chat message: ${IDS_PER_REQUEST} on average, and each needs a new ID.`,
     },
-    dns: level2.components.dns,
-    lb: level2.components.lb,
+    dns: dns(),
+    lb: lb(),
     web: {
-      ...level12.components.web,
+      name: 'Web server', short: 'Your back-end code',
       desc: `Runs your back-end code. For each request it gets ${IDS_PER_REQUEST} new IDs from the ID generator, then saves the records. These are autoscaled groups of L servers, as in Level 6.`,
+      noDbNote: NO_DB_NOTE,
+      subOf: autoscaleSubOf,
+      choices: scalingChoices(),
     },
     idgen: {
       name: 'ID generator', short: 'Hands out new IDs',
@@ -100,13 +104,13 @@ export default {
 
   connections: {
     ok: {
-      'dns|users': level2.connections.ok['dns|users'],
-      'lb|users': level2.connections.ok['lb|users'],
-      'lb|web': level2.connections.ok['lb|web'],
+      'dns|users': dnsLookup(),
+      'lb|users': usersToLb(),
+      'lb|web': lbToWeb(),
       'idgen|web': { from: 'web', to: 'idgen', label: 'next IDs', desc: `The web server asks for ${IDS_PER_REQUEST} new IDs per request.` },
     },
     bad: {
-      ...level2.connections.bad,
+      ...lbBad(),
       'idgen|users': 'Users never ask for IDs. Their requests go through the load balancer to a web server, which gets the IDs.',
       'idgen|lb': 'The load balancer spreads requests over web servers. The web servers get the IDs.',
       'dns|idgen': 'The ID generator does not need DNS. Connect the web servers to it.',
@@ -204,7 +208,7 @@ export default {
 
   // Messages the engine shows for this level's design.
   text: {
-    ...level2.text,
+    ...lbText(),
     idNote: (x) => {
       if (!(x.dup > 0)) return null;
       const p = fmtPct(100 * x.dup, PCT);
@@ -212,13 +216,13 @@ export default {
       if (x.method === 'step') return `The new server counts up by the new step from its own start, onto numbers already handed out: ${p} of IDs repeat. Multi-primary can't grow without renumbering every server.`;
       return `A clock set back makes its generator reuse milliseconds it has already used: ${p} of IDs repeat, and go backwards in time. Set the generator to wait until its clock passes its last ID.`;
     },
-    levelComplete: 'Level 13 complete. Take the quiz.',
+    levelComplete: levelComplete(13),
   },
 
   quiz: {
     passScore: 8,
-    passText: 'Level 13 is done. Level 14, URL shortener, is next: open it from the level menu at the top.',
-    failText: level10.quiz.failText,
+    passText: passText(13, 'URL shortener'),
+    failText,
     questions: [
       { q: 'Why isn\'t one database\'s auto_increment enough for IDs at scale?', o: ['It needs 128 bits per ID', 'Its IDs are not numbers', 'Its numbers can repeat after every restart', 'One server caps the rate and can fail'], a: 3, e: 'One database hands out every ID, so its speed caps the whole system and when it fails nothing can be saved. Spread the counter over several databases, and their numbers must be kept apart.', r: 'Why one counter is not enough' },
       { q: 'Multi-primary with 3 servers. Server 2 starts at 2. What are its next IDs?', o: ['3, 4, 5', '2, 5, 8', '2, 4, 6', '6, 9, 12'], a: 1, e: 'Each server adds k = 3, the number of servers, to its last ID: 2, 5, 8. Server 1 gives 1, 4, 7 and server 3 gives 3, 6, 9, so they never meet.', r: 'Multi-primary' },

@@ -1,8 +1,12 @@
 // Level 4: Cache tier.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { servedGoal, latGoal, costGoal, spofGoal, servedAtLeast } from './shared/goals.js';
-import level2 from './level-02.js';
-import level3 from './level-03.js';
+import { shopUsers, dns, lb, NO_DB_NOTE, replicaDb, cache } from './shared/components.js';
+import { dnsLookup, usersToLb, lbToWeb, webToReplicas, webToCache, lbBad, replicaBad, cacheBad } from './shared/connections.js';
+import { lbText, replicaText, levelComplete } from './shared/text.js';
+import { ONE_DNS, TWO_LBS, THREE_CACHES } from './shared/limits.js';
+import { failText, passText } from './shared/quiz.js';
+import { catalogWorkload } from './shared/workload.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 const DB_BUSY = 0.7;
@@ -21,55 +25,34 @@ const dbBusyGoal = {
 };
 const duration = (s) => ({ 10: '10 seconds', 60: '1 minute', 600: '10 minutes', 3600: '1 hour' }[s] || `${s} seconds`);
 
-const ttlOptions = [
-  { id: '10', short: '10 s', name: '10 seconds', sub: 'fresh, but many misses', note: 'A changed price shows within 10 seconds. With a read every 10 seconds or so, about half of reads find the item expired.', log: 'Cache TTL set to 10 seconds.' },
-  { id: '60', short: '1 min', name: '1 minute', sub: 'about 1 read in 7 expired', note: 'A changed price can show for up to 1 minute. About 1 read in 7 finds the item expired and goes to the database.', log: 'Cache TTL set to 1 minute.' },
-  { id: '600', short: '10 min', name: '10 minutes', sub: 'about 1 read in 60 expired', note: 'A changed price can show for up to 10 minutes. About 1 read in 60 finds the item expired.', log: 'Cache TTL set to 10 minutes.' },
-  { id: '3600', short: '1 h', name: '1 hour', sub: 'about 1 read in 360 expired', note: 'A changed price can show for up to an hour. Almost every read of a cached item is a hit.', log: 'Cache TTL set to 1 hour.' },
-];
-
 export default {
   id: 4,
   saveKey: 'sdl-level4-v1',
   saveVersion: 1,
   targets,
   // The product catalog the cache holds: its size, and how often a cached product is read (see the lesson's assumptions).
-  workload: { catalogGB: 20, readGapSecs: 10 },
+  workload: catalogWorkload(),
 
   components: {
-    users: level3.components.users,
-    dns: level2.components.dns,
-    lb: level2.components.lb,
+    users: shopUsers(),
+    dns: dns(),
+    lb: lb(),
     web: {
       name: 'Web server', short: 'Your back-end code',
       desc: 'Runs your back-end code. For each read it asks the cache first; on a miss it reads a replica and stores the answer in the cache. Writes go to the primary database.',
-      noDbNote: level2.components.web.noDbNote,
+      noDbNote: NO_DB_NOTE,
     },
-    db: level3.components.db,
-    cache: {
-      name: 'Cache', short: 'Hot data in memory',
-      desc: 'An in-memory key-value store, such as Redis or Memcached. Web servers check it before the database. Its data lives in memory, so a restart empties it. In this game it handles 10,000 lookups/s.',
-      subOf: (n, size) => `${size.mem} GB · TTL ${(ttlOptions.find((o) => o.id === n.ttl) || ttlOptions[1]).short}`,
-      choices: [
-        { key: 'ttl', label: 'Time to live (TTL)', options: ttlOptions },
-        {
-          key: 'onWrite', label: 'When a product changes',
-          options: [
-            { id: 'ttl', name: 'Wait for the TTL', sub: 'old copy until it expires', note: 'The database changes, but the cached copy stays until its TTL runs out. Shoppers can see the old price for up to one TTL.', log: 'Changed products now stay cached until their TTL ends.' },
-            { id: 'delete', name: 'Delete the cached copy', sub: 'the next read loads the new one', note: 'After writing the database, the web server deletes the key from the cache, and the next read loads the new data. Products change rarely here, so the extra misses are too few to matter.', log: 'Changed products are now deleted from the cache right after the database write.' },
-          ],
-        },
-      ],
-    },
+    db: replicaDb(),
+    cache: cache(),
   },
   palette: ['dns', 'lb', 'web', 'db', 'cache'],
   limits: { dns: 1, lb: 2, web: 2, db: 3, cache: 3 },
   limitMsg: {
-    dns: 'You only need one DNS service for example.com.',
-    lb: 'Two load balancers is the limit: one active, one standby.',
+    dns: ONE_DNS,
+    lb: TWO_LBS,
     web: 'The web tier is big enough in this level: two XL web servers handle 3,200 req/s.',
     db: 'Three databases is the limit here: a primary and two replicas. Let the cache take the rest of the reads.',
-    cache: 'Three cache servers is the limit in this level.',
+    cache: THREE_CACHES,
   },
   // Level 3's design with a primary and two XL replicas.
   startNodes: [
@@ -97,17 +80,13 @@ export default {
 
   connections: {
     ok: {
-      ...level3.connections.ok,
-      'cache|web': { from: 'web', to: 'cache', label: 'lookups', desc: 'For each read the web server asks the cache first, inside the data center (about 0.5 ms round trip). On a miss it reads the database, then stores the answer in the cache.' },
+      'dns|users': dnsLookup(),
+      'lb|users': usersToLb(),
+      'lb|web': lbToWeb(),
+      'db|web': webToReplicas(),
+      'cache|web': webToCache(),
     },
-    bad: {
-      ...level3.connections.bad,
-      'cache|db': 'In cache-aside the cache never talks to the database: the web server reads the database on a miss and fills the cache. Connect each web server to the cache and to the databases.',
-      'cache|users': 'Users never reach the cache. Their requests go through the load balancer to a web server, which checks the cache.',
-      'cache|lb': 'The load balancer only spreads requests over web servers. The web servers check the cache.',
-      'cache|dns': 'The cache does not need DNS. DNS is used by your users\' devices to find the load balancer.',
-      'cache|cache': 'Cache servers are not connected to each other. Connect each web server to every cache; it splits the keys over them.',
-    },
+    bad: { ...lbBad(), ...replicaBad(), ...cacheBad() },
   },
 
   missions: [
@@ -191,12 +170,12 @@ export default {
   ],
 
   // Messages the engine shows for this level's design.
-  text: { ...level3.text, levelComplete: 'Level 4 complete. Take the quiz.' },
+  text: { ...lbText(), ...replicaText(), levelComplete: levelComplete(4) },
 
   quiz: {
     passScore: 8,
-    passText: 'Level 4 is done. Level 5, CDN for static content, is next: open it from the level menu at the top.',
-    failText: (pass) => `You need ${pass} to pass. Reread the lesson sections behind the questions you missed, then try again.`,
+    passText: passText(4, 'CDN for static content'),
+    failText,
     questions: [
       { q: 'A web server uses cache-aside, and the cache does not have product 42. What happens next?', o: ['The cache loads it from the database', 'The request fails, and the shopper retries later', 'The web server reads the DB and caches it', 'It waits for the cache to refresh'], a: 2, e: 'In cache-aside the web server does the work: on a miss it reads the database, stores the answer in the cache, and returns it. The next read of product 42 is a hit.', r: 'Cache-aside' },
       { q: 'Which data is the best fit for a cache?', o: ['Read often, changed rarely', 'Written often, read rarely', 'Read once, then thrown away', 'Changed on every request'], a: 0, e: 'A cache pays off when the same item is read many times before it changes. Data that changes all the time is stale as soon as it is cached, and data read once never gets a hit.', r: 'When to cache' },

@@ -1,8 +1,12 @@
 // Level 6: Stateless web tier and autoscaling.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { servedGoal, latGoal, costGoal, spofGoal, servedAtLeast, fmtPct } from './shared/goals.js';
-import level2 from './level-02.js';
-import level5 from './level-05.js';
+import { regionUsers, dns, lb, NO_DB_NOTE, autoscaleSubOf, scalingChoices, replicaDb, cache, cdn } from './shared/components.js';
+import { dnsLookup, usersToLb, lbToWeb, webToReplicas, webToCache, usersToCdn, cdnToLb, lbBad, replicaBad, cacheBad, cdnBad } from './shared/connections.js';
+import { lbText, replicaText, NO_ORIGIN, levelComplete } from './shared/text.js';
+import { ONE_DNS, TWO_LBS, THREE_DBS, THREE_CACHES, ONE_CDN } from './shared/limits.js';
+import { failText, passText } from './shared/quiz.js';
+import { filesWorkload, dayTraffic } from './shared/workload.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 const PCT = { wholeFrom: 10 }; // percentages: whole numbers from 10% up
@@ -14,51 +18,40 @@ const served99 = servedAtLeast(targets.servedPct);
 const kept = (m) => m.lostPct < LOST_MAX;
 const clock = (h) => String(h).padStart(2, '0') + ':00';
 
-// Traffic over a day as a share of the 20:00 peak, hour by hour. It averages half the peak.
-const day = [0.40, 0.30, 0.22, 0.18, 0.15, 0.16, 0.22, 0.32, 0.42, 0.49, 0.54, 0.56, 0.61, 0.57, 0.54, 0.52, 0.54, 0.61, 0.71, 0.86, 1.00, 0.88, 0.70, 0.50];
+const day = dayTraffic(); // share of the 20:00 peak, hour by hour
+const shopLb = lb();
 
 export default {
   id: 6,
   saveKey: 'sdl-level6-v1',
   saveVersion: 1,
   targets,
-  workload: { ...level5.workload, day },
+  workload: { ...filesWorkload(), day },
 
   components: {
     users: {
-      ...level5.components.users,
+      ...regionUsers(),
       desc: 'Your shoppers: 70% in Europe, near the data center in Frankfurt, and 30% in America. They log in and fill a cart, so every page they open needs their session. Half of all requests are files, which need no session.',
     },
-    dns: level2.components.dns,
+    dns: dns(),
     lb: {
-      ...level2.components.lb,
+      ...shopLb,
       algos: [
-        ...level2.components.lb.algos,
+        ...shopLb.algos,
         { id: 'sticky', short: 'sticky', name: 'Sticky sessions', sub: 'each shopper stays on one server', note: 'The load balancer sets a cookie that names a shopper\'s server and sends all their requests there. Sessions kept in a server\'s memory are always found, but that server is now the only place they live.', log: 'Load balancer set to sticky sessions: each shopper stays on the server they started on.' },
       ],
     },
     web: {
       name: 'Web server', short: 'Your back-end code',
       desc: 'Runs your back-end code for pages, and sends static files when the CDN misses. Every page needs the shopper\'s session: who they are and what is in their cart.',
-      noDbNote: level2.components.web.noDbNote,
+      noDbNote: NO_DB_NOTE,
       statefulNote: 'Keeps the sessions of the shoppers it served in its own memory: it is stateful. A page that lands on another server finds no cart. Connect it to the session store.',
-      subOf: (n, size, st) => {
-        if (n.scaling !== 'auto') return null;
-        return st && st.copies ? `${n.size} · auto, ×${st.copies} now` : `${n.size} · autoscaled`;
-      },
-      choices: [
-        {
-          key: 'scaling', label: 'Scaling',
-          options: [
-            { id: 'fixed', name: 'Fixed', sub: 'one server, all month', note: 'One server of this size runs all month, whatever the traffic.', log: 'Web server set to a fixed single server.' },
-            { id: 'auto', name: 'Autoscale', sub: '1 to 10 servers, by the hour', note: 'This web server becomes a group of servers of its size. Each hour the autoscaler runs as many as keep them at most 60% busy, from 1 to 10, and you pay for the hours each one runs. The load balancer gives each group the same share.', log: 'Web server set to autoscale: a group of 1 to 10 servers of its size.' },
-          ],
-        },
-      ],
+      subOf: autoscaleSubOf,
+      choices: scalingChoices(),
     },
-    db: level5.components.db,
-    cache: level5.components.cache,
-    cdn: level5.components.cdn,
+    db: replicaDb(),
+    cache: cache(),
+    cdn: cdn(),
     session: {
       name: 'Session store', short: 'Shared sessions', sub: 'Managed NoSQL',
       desc: 'A key-value store that holds every shopper\'s session (login and cart) under its session ID, which the browser keeps in a cookie. Web servers read and write sessions here, so any server can handle any shopper. It is a managed NoSQL service: the provider keeps copies on several machines. In this game it handles 10,000 lookups/s, takes 3 ms per lookup and costs $150/month.',
@@ -67,8 +60,12 @@ export default {
   palette: ['dns', 'lb', 'web', 'db', 'cache', 'cdn', 'session'],
   limits: { dns: 1, lb: 2, web: 2, db: 3, cache: 3, cdn: 1, session: 1 },
   limitMsg: {
-    ...level5.limitMsg,
+    dns: ONE_DNS,
+    lb: TWO_LBS,
     web: 'Two web servers is the limit here. To carry more, set them to autoscale: each one becomes a group that runs more servers of its size as traffic grows.',
+    db: THREE_DBS,
+    cache: THREE_CACHES,
+    cdn: ONE_CDN,
     session: 'One session store is enough: the provider runs it on several machines for you.',
   },
   // Level 5's design: a CDN with a 1-day TTL, new names for changed files and fallback to the origin.
@@ -100,11 +97,17 @@ export default {
 
   connections: {
     ok: {
-      ...level5.connections.ok,
+      'dns|users': dnsLookup(),
+      'lb|users': usersToLb(),
+      'lb|web': lbToWeb(),
+      'db|web': webToReplicas(),
+      'cache|web': webToCache(),
+      'cdn|users': usersToCdn(),
+      'cdn|lb': cdnToLb(),
       'session|web': { from: 'web', to: 'session', label: 'sessions', desc: 'Every page reads the shopper\'s session here first, by the session ID in their cookie: one lookup of 3 ms plus the hop. Changes to the cart are written back. The web server keeps nothing in its own memory between requests.' },
     },
     bad: {
-      ...level5.connections.bad,
+      ...lbBad(), ...replicaBad(), ...cacheBad(), ...cdnBad(),
       'lb|session': 'The load balancer does not read sessions. Connect the web servers to the session store: they look up each shopper\'s session.',
       'session|users': 'Browsers only keep a cookie with the session ID. Connect the web servers to the session store.',
       'db|session': 'The database holds products and orders; sessions go in their own store. Connect the web servers to the session store.',
@@ -194,15 +197,17 @@ export default {
 
   // Messages the engine shows for this level's design.
   text: {
-    ...level5.text,
+    ...lbText(),
+    ...replicaText(),
+    noOrigin: NO_ORIGIN,
     sessionMiss: (name, miss) => `${fmtPct(100 * miss, PCT)} of pages reaching the ${name.toLowerCase()} fail: the shopper's session is on another server, so the cart looks empty. Pick sticky sessions on the load balancer, or share sessions in a session store.`,
-    levelComplete: 'Level 6 complete. Take the quiz.',
+    levelComplete: levelComplete(6),
   },
 
   quiz: {
     passScore: 8,
-    passText: 'Level 6 is done. Level 7, Multiple data centers, is next: open it from the level menu at the top.',
-    failText: (pass) => `You need ${pass} to pass. Reread the lesson sections behind the questions you missed, then try again.`,
+    passText: passText(6, 'Multiple data centers'),
+    failText,
     questions: [
       { q: 'What makes a web server stateful?', o: ['It runs on a private IP address in the data center', 'It remembers client data between requests', 'It reads data from a database', 'It sits behind a load balancer'], a: 1, e: 'A stateful server keeps client data, such as a session, from one request to the next. A stateless server keeps nothing between requests and fetches what it needs from a shared store.', r: 'State and sessions' },
       { q: 'Ana\'s cart is in Server 2\'s memory. Her next request goes to Server 3. What does she see?', o: ['Her cart, copied over by the load balancer', 'An error page until Server 2 recovers', 'An empty cart, and maybe a login page', 'Her cart, read from the browser cookie'], a: 2, e: 'Server 3 has no record of Ana\'s session, so her cart looks empty, and if her login was kept there too, she is logged out. Her cookie only holds a session ID.', r: 'State and sessions' },

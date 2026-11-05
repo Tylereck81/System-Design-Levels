@@ -46,6 +46,10 @@ export default [
         selector: `:matches(VariableDeclarator[init.type=/^(ArrowFunctionExpression|FunctionExpression|ObjectExpression)$/], FunctionDeclaration)[id.name=${GOAL_HELPERS}]`,
         message: 'Goal helpers live in levels/shared/goals.js: import them instead of defining them in a level.',
       }],
+      // A level never reads another level's data, so opening one level loads only that level and levels/shared/.
+      'no-restricted-imports': ['error', {
+        patterns: [{ group: ['./level-*'], message: 'Import shared parts from levels/shared/ instead of another level.' }],
+      }],
     },
   },
   {

@@ -1,9 +1,11 @@
 // Level 9: Scale the data tier with sharding.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { servedGoal, latGoal, costGoal } from './shared/goals.js';
-import level2 from './level-02.js';
-import level3 from './level-03.js';
-import level6 from './level-06.js';
+import { dns, lb, NO_DB_NOTE, autoscaleSubOf, scalingChoices, replicaDb, shards } from './shared/components.js';
+import { dnsLookup, usersToLb, lbToWeb, webToReplicas, webToShards, lbBad } from './shared/connections.js';
+import { lbText, replicaText, levelComplete } from './shared/text.js';
+import { failText } from './shared/quiz.js';
+import { dayTraffic } from './shared/workload.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 const BUDGET = 2500;
@@ -17,7 +19,6 @@ const shardGoal = {
   val: (m) => (m.maxShardUtil == null ? '—' : Math.round(m.maxShardUtil * 100) + '%'),
 };
 const noSqlGoal = { id: 'nosql', type: 'struct', text: 'Plays and likes go to a NoSQL store', test: (g) => g.onPath('nosql').length > 0, val: () => '' };
-const keyName = { account: 'account', country: 'country', date: 'sign-up date' };
 
 export default {
   id: 9,
@@ -25,55 +26,24 @@ export default {
   saveVersion: 1,
   targets,
   // The day's traffic curve, for the cost of the autoscaled web servers.
-  workload: { day: level6.workload.day },
+  workload: { day: dayTraffic() },
 
   components: {
     users: {
       name: 'Users', sub: 'Listen and upload',
       desc: 'Listeners and creators. Every page reads or writes account data: profiles, follows, plays and likes. 60% of the queries are writes.',
     },
-    dns: level2.components.dns,
-    lb: level2.components.lb,
+    dns: dns(),
+    lb: lb(),
     web: {
       name: 'Web server', short: 'Your back-end code',
       desc: 'Runs your back-end code: each page makes one database query. These are autoscaled groups of M servers, as in Level 6.',
-      noDbNote: level2.components.web.noDbNote,
-      subOf: level6.components.web.subOf,
-      choices: level6.components.web.choices,
+      noDbNote: NO_DB_NOTE,
+      subOf: autoscaleSubOf,
+      choices: scalingChoices(),
     },
-    db: level3.components.db,
-    shards: {
-      name: 'Sharded database', short: 'Data split by a key',
-      desc: 'Several database servers, each holding part of the data: the shards. Every shard has the same tables; a shard key decides which shard holds each row. The web servers work out the shard from the key on every query.',
-      sizeLabel: 'Shard size (each shard)',
-      subOf: (n) => `${n.count}${n.hot === 'own' ? '+3' : ''} × ${n.size} · ${keyName[n.key] || 'account'}`,
-      choices: [
-        {
-          key: 'count', label: 'Shards (N in key % N)',
-          options: [
-            { id: '2', name: '2 shards', sub: 'key % 2', note: 'Two shards: each holds about half the data.', log: 'Sharded database set to 2 shards.' },
-            { id: '3', name: '3 shards', sub: 'key % 3', note: 'Three shards: each holds about a third of the data.', log: 'Sharded database set to 3 shards.' },
-            { id: '4', name: '4 shards', sub: 'key % 4', note: 'Four shards: each holds about a quarter of the data.', log: 'Sharded database set to 4 shards.' },
-            { id: '8', name: '8 shards', sub: 'key % 8', note: 'Eight shards: each holds about an eighth of the data.', log: 'Sharded database set to 8 shards.' },
-          ],
-        },
-        {
-          key: 'key', label: 'Shard key',
-          options: [
-            { id: 'account', name: 'account_id % N', sub: 'spreads evenly', note: 'Millions of accounts, so the remainder spreads them, and their queries, evenly over the shards. Account 1006 goes to shard 1006 % 4 = 2.', log: 'Shard key set to account_id.' },
-            { id: 'country', name: 'Listener country', sub: 'one country, one shard', note: 'Each country\'s accounts live on one shard. 42% of queries come from one country, and a country can\'t be split, so its shard is far busier than the others.', log: 'Shard key set to country.' },
-            { id: 'date', name: 'Sign-up date ranges', sub: 'newest range is busiest', note: 'Each shard holds a range of sign-up dates. New accounts are the most active, so the newest range gets half of all queries.', log: 'Shard key set to sign-up date ranges.' },
-          ],
-        },
-        {
-          key: 'hot', label: 'Very popular accounts',
-          options: [
-            { id: 'stay', name: 'Where the key puts them', sub: 'no extra shards', note: 'Hot accounts stay on the shard their key gives them, with everyone else\'s data.', log: 'Popular accounts stay on their usual shard.' },
-            { id: 'own', name: 'A shard for each', sub: '+3 shards', note: 'Each of the three hot accounts gets a shard of its own, the same size as the others. The web servers look these accounts up in a short list before using the key.', log: 'Each popular account now has its own shard.' },
-          ],
-        },
-      ],
-    },
+    db: replicaDb(),
+    shards: shards(),
     nosql: {
       name: 'NoSQL store', short: 'Plays and likes', sub: 'Managed · $200',
       desc: 'A key-value store for data that needs no joins: play counts and likes, read and written by key. It is easy to scale by adding machines. A managed service in this game: 20,000 lookups/s, 3 ms each, $200/month.',
@@ -113,15 +83,15 @@ export default {
 
   connections: {
     ok: {
-      'dns|users': level2.connections.ok['dns|users'],
-      'lb|users': level2.connections.ok['lb|users'],
-      'lb|web': level2.connections.ok['lb|web'],
-      'db|web': level3.connections.ok['db|web'],
-      'shards|web': { from: 'web', to: 'shards', label: 'queries', desc: 'For each query the web server works out the shard from the shard key, then queries only that shard (about 0.5 ms round trip).' },
+      'dns|users': dnsLookup(),
+      'lb|users': usersToLb(),
+      'lb|web': lbToWeb(),
+      'db|web': webToReplicas(),
+      'shards|web': webToShards(),
       'nosql|web': { from: 'web', to: 'nosql', label: 'plays, likes', desc: 'Play counts and likes (40% of the queries) go to the NoSQL store, by key. The other queries still go to the database.' },
     },
     bad: {
-      ...level2.connections.bad,
+      ...lbBad(),
       'shards|users': 'Users reach the web servers through the load balancer. Connect the web servers to the sharded database.',
       'lb|shards': 'The load balancer sends requests to web servers. Connect the web servers to the sharded database.',
       'db|shards': 'The sharded database replaces the single primary; it doesn\'t sit behind it. Connect the web servers to it, and remove the old databases.',
@@ -195,14 +165,15 @@ export default {
 
   // Messages the engine shows for this level's design.
   text: {
-    ...level3.text,
-    levelComplete: 'Level 9 complete. Take the quiz.',
+    ...lbText(),
+    ...replicaText(),
+    levelComplete: levelComplete(9),
   },
 
   quiz: {
     passScore: 8,
     passText: 'Level 9 is done, and with it the first part: scaling from one server to millions of users. Level 10, Rate limiter, is next: open it from the level menu at the top.',
-    failText: (pass) => `You need ${pass} to pass. Reread the lesson sections behind the questions you missed, then try again.`,
+    failText,
     questions: [
       { q: 'Why not just keep buying a bigger database server?', o: ['Bigger servers cannot run SQL', 'They hit a size limit and cost far more', 'A bigger server adds network lag to every query', 'Replicas stop working on big servers'], a: 1, e: 'Vertical scaling hits a hardware limit, the biggest server you can buy, and powerful servers cost much more for each unit of capacity. One server is also a single point of failure.', r: 'Vertical scaling' },
       { q: 'What does a shard hold?', o: ['A full copy of all the data, kept for reads only', 'The indexes of every table', 'Part of the rows, in the same tables', 'Only the writes of the last hour'], a: 2, e: 'Each shard has the same schema but holds different rows: the ones its shard key maps to it. A full copy for reads is a replica.', r: 'Sharding' },

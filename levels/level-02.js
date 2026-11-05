@@ -1,6 +1,11 @@
 // Level 2: Load balancer and horizontal scaling.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { servedGoal, latGoal, costGoal, servedAtLeast } from './shared/goals.js';
+import { dns, lb, NO_DB_NOTE, db } from './shared/components.js';
+import { dnsLookup, usersToLb, lbToWeb, webToDb, lbBad } from './shared/connections.js';
+import { lbText, levelComplete } from './shared/text.js';
+import { ONE_DNS, TWO_LBS } from './shared/limits.js';
+import { failText, passText } from './shared/quiz.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 
@@ -13,9 +18,9 @@ const TIER = { db: 'database', lb: 'load balancer' }; // names for the bottlenec
  */
 function fewestReached(g) {
   const lbs = g.entry.filter((n) => n.type === 'lb'), total = g.onPath('web').length; // the first one Users reach is active
-  let lb = null, n = Infinity;
-  for (const x of lbs) { const k = g.reached(x, 'web'); if (k < n) { n = k; lb = x; } }
-  return { lb, n: lb ? n : 0, total, standby: !!lb && lbs.length > 1 && lb !== lbs[0] };
+  let worst = null, n = Infinity;
+  for (const x of lbs) { const k = g.reached(x, 'web'); if (k < n) { n = k; worst = x; } }
+  return { lb: worst, n: worst ? n : 0, total, standby: !!worst && lbs.length > 1 && worst !== lbs[0] };
 }
 const standbyReady = (g) => { const f = fewestReached(g); return g.count('lb') >= 2 && f.total > 0 && f.n === f.total; };
 
@@ -28,39 +33,20 @@ export default {
 
   components: {
     users: { name: 'Users', sub: 'Web + mobile app', desc: 'Your visitors. They look up example.com in DNS, then send HTTP requests to the address DNS returns.' },
-    dns: { name: 'DNS', short: 'Domain → IP address', sub: 'Third-party · $5', desc: 'Turns example.com into the load balancer\'s public IP, 203.0.113.10. Costs $5/month in this game.' },
-    lb: {
-      name: 'Load balancer', short: 'Spreads traffic', sub: 'Active', standbySub: 'Standby',
-      standbyNote: 'Standby: takes no traffic until the active one fails.',
-      algosLabel: 'Routing method',
-      algos: [
-        { id: 'rr', short: 'round robin', name: 'Round robin', sub: 'same share for each', note: 'Each web server in turn, so each gets the same share. Fair when all servers are the same size; with mixed sizes the small one overloads first.', log: 'Load balancer set to round robin: every web server gets the same share.' },
-        { id: 'wrr', short: 'weighted', name: 'Weighted', sub: 'shares follow server size', note: 'Round robin with weights: a server twice the size gets twice the requests. You set the weights; here they follow each server\'s capacity.', log: 'Load balancer set to weighted round robin: shares follow each server\'s capacity.' },
-        { id: 'lc', short: 'least conn', name: 'Least connections', sub: 'to the least busy server', note: 'Sends each request to the server with the fewest requests in progress. Faster servers finish sooner, so they get more. In this game that works out the same as weighted; real systems also gain when some requests take much longer than others.', log: 'Load balancer set to least connections: each request goes to the server with the fewest in progress.' },
-      ],
-      desc: 'Users connect to its public IP, 203.0.113.10. It hands each request to a healthy web server over the private network, using the routing method you pick, and stops using a server that fails its health check. A second load balancer waits as a standby and takes over the same IP if the first one stops sending heartbeats. In this game it handles 5,000 req/s, adds 1 ms and costs $20/month.',
-    },
+    dns: dns(),
+    lb: lb(),
     web: {
       name: 'Web server', short: 'Your back-end code',
       desc: 'Runs your back-end code on a private IP (10.0.0.x). Only the load balancer can reach it. Every web server should use the same shared database.',
-      noDbNote: 'Not connected to the database, so this server keeps its own copy of the data and handles half its capacity. Connect it to the shared database.',
+      noDbNote: NO_DB_NOTE,
     },
-    db: {
-      name: 'Database', short: 'Stores data on disk', desc: 'The one shared database every web server reads and writes. It is still a single machine.',
-      unsetSub: 'Pick SQL or NoSQL',
-      kindsLabel: 'Database type',
-      unsetNote: 'Not chosen yet. The app\'s data is relational: users, products and orders.',
-      kinds: [
-        { id: 'sql', short: 'SQL', name: 'Relational', sub: 'SQL · joins', tone: 'ok', log: 'Database set to relational (SQL). One query fetches an order with its user and products.', note: 'Relational: tables and rows, joins with SQL. One query per request here.' },
-        { id: 'nosql', short: 'NoSQL', name: 'NoSQL', sub: 'no joins', tone: 'warn', log: 'Database set to NoSQL. It cannot join, so each request needs 3 lookups.', note: 'NoSQL: no joins, so 3 lookups per request for this relational data.' },
-      ],
-    },
+    db: db(),
   },
   palette: ['dns', 'lb', 'web', 'db'],
   limits: { dns: 1, lb: 2, web: 6, db: 1 },
   limitMsg: {
-    dns: 'You only need one DNS service for example.com.',
-    lb: 'Two load balancers is the limit: one active, one standby.',
+    dns: ONE_DNS,
+    lb: TWO_LBS,
     web: 'Six web servers is the limit in this level.',
     db: 'One shared database is the limit here. Copies (replicas) arrive in Level 3.',
   },
@@ -77,21 +63,12 @@ export default {
 
   connections: {
     ok: {
-      'dns|users': { from: 'users', to: 'dns', label: 'DNS lookup', desc: 'The device asks DNS for the IP of example.com and gets the load balancer\'s public IP, 203.0.113.10. It happens once, then the answer is cached.' },
-      'lb|users': { from: 'users', to: 'lb', label: 'HTTP requests', desc: 'Users send every request to the load balancer\'s public IP. They never see the web servers.' },
-      'lb|web': { from: 'lb', to: 'web', label: 'private IP', desc: 'The load balancer forwards each request to a web server over the private network (10.0.0.x), inside the same data center (about 0.5 ms).' },
-      'db|web': { from: 'web', to: 'db', label: 'queries', desc: 'The web server reads and writes data in the shared database, inside the same data center (about 0.5 ms round trip).' },
+      'dns|users': dnsLookup(),
+      'lb|users': usersToLb(),
+      'lb|web': lbToWeb(),
+      'db|web': webToDb(),
     },
-    bad: {
-      'users|web': 'Web servers have private IPs now, so users cannot reach them. Connect Users to the load balancer; it forwards each request to a web server.',
-      'dns|lb': 'DNS does not forward traffic. It only tells devices the load balancer\'s IP; then they connect to the load balancer themselves.',
-      'dns|web': 'DNS does not forward traffic, and web servers are on private IPs. DNS points devices at the load balancer.',
-      'db|users': 'Users never talk to the database. Requests go through the load balancer and a web server.',
-      'db|dns': 'The database does not need DNS. DNS is used by your users\' devices to find the load balancer.',
-      'db|lb': 'The load balancer only spreads requests over web servers. The web servers talk to the database.',
-      'lb|lb': 'Connect both load balancers to Users instead. The first is active; the second waits as a standby and takes over the same IP if the heartbeats stop.',
-      'web|web': 'Web servers do not send requests to each other here. Put them all behind the load balancer.',
-    },
+    bad: lbBad(),
   },
 
   missions: [
@@ -186,21 +163,12 @@ export default {
   ],
 
   // Messages the engine shows for this level's design.
-  text: {
-    noWeb: 'Users have no way in. Add a load balancer, connect Users to it, and connect it to the web servers.',
-    noDns: 'Browsers cannot find example.com. Connect Users to DNS so the name resolves to the load balancer\'s IP.',
-    noBackend: 'The load balancer has no web servers to send requests to, so every request fails. Connect it to the web servers.',
-    combinedOver: ' It is not connected to the database, so it keeps its own data and only gets half its capacity.',
-    nosqlOver: ' NoSQL cannot join, so each request costs 3 lookups.',
-    dnsAnswered: 'DNS answered: example.com is at 203.0.113.10, the load balancer\'s public IP. The device caches it.',
-    ipTag: 'IP 203.0.113.10 cached',
-    levelComplete: 'Level 2 complete. Take the quiz.',
-  },
+  text: { ...lbText(), levelComplete: levelComplete(2) },
 
   quiz: {
     passScore: 8,
-    passText: 'Level 2 is done. Level 3, database replication, is next: open it from the level menu at the top.',
-    failText: (pass) => `You need ${pass} to pass. Reread the lesson sections behind the questions you missed, then try again.`,
+    passText: passText(2, 'database replication'),
+    failText,
     questions: [
       { q: 'You put a load balancer in front of your web servers. Which IP does DNS now give users\' devices for example.com?', o: ['The private IP of the first web server', 'The load balancer\'s public IP', 'A web server IP picked at random', 'The database server\'s IP'], a: 1, e: 'Devices connect to the load balancer\'s public IP. The load balancer then forwards each request to a web server over the private network, so users never see the web servers.', r: 'Load balancing' },
       { q: 'Why are the web servers on private IPs once a load balancer is in front?', o: ['Only machines inside the network can reach them', 'Private IPs make every request faster', 'So DNS can cache all of their addresses', 'So each server can store more of the data'], a: 0, e: 'A private IP (for example 10.0.0.11) cannot be reached from the internet. Only the load balancer and other servers inside the network can talk to the web servers, which keeps them out of direct reach.', r: 'Private addresses · RFC 1918' },

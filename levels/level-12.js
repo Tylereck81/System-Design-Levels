@@ -1,9 +1,11 @@
 // Level 12: Distributed key-value store.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { servedGoal, latGoal, costGoal, servedAtLeast, fmtPct } from './shared/goals.js';
-import level2 from './level-02.js';
-import level6 from './level-06.js';
-import level10 from './level-10.js';
+import { dns, lb, NO_DB_NOTE, autoscaleSubOf, scalingChoices } from './shared/components.js';
+import { dnsLookup, usersToLb, lbToWeb, lbBad } from './shared/connections.js';
+import { lbText, levelComplete } from './shared/text.js';
+import { failText, passText } from './shared/quiz.js';
+import { dayTraffic } from './shared/workload.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 const BUDGET = 1600;
@@ -25,21 +27,21 @@ export default {
   targets,
   // The day's traffic curve (for the autoscaled web servers). recentShare: reads whose key was written so recently that
   // the write is still spreading. partitionFar: the users cut off with floor(N / 3) of each key's replicas in a network partition.
-  workload: { day: level6.workload.day, recentShare: 0.2, partitionFar: 0.3 },
+  workload: { day: dayTraffic(), recentShare: 0.2, partitionFar: 0.3 },
 
   components: {
     users: {
       name: 'Users', sub: 'Pick seats, fill carts',
       desc: 'Travellers on an airline\'s site. They open seat maps, pick seats and fill shopping carts. Every page reads or writes one key in the key-value store, such as seats:FL204 or cart:8812.',
     },
-    dns: level2.components.dns,
-    lb: level2.components.lb,
+    dns: dns(),
+    lb: lb(),
     web: {
       name: 'Web server', short: 'Your back-end code',
       desc: 'Runs your back-end code. For each page it calls get(key) or put(key, value) on the key-value store. These are autoscaled groups of L servers, as in Level 6.',
-      noDbNote: level2.components.web.noDbNote,
-      subOf: level6.components.web.subOf,
-      choices: level6.components.web.choices,
+      noDbNote: NO_DB_NOTE,
+      subOf: autoscaleSubOf,
+      choices: scalingChoices(),
     },
     kv: {
       name: 'Key-value store', short: 'Replicated, by key',
@@ -98,13 +100,13 @@ export default {
 
   connections: {
     ok: {
-      'dns|users': level2.connections.ok['dns|users'],
-      'lb|users': level2.connections.ok['lb|users'],
-      'lb|web': level2.connections.ok['lb|web'],
+      'dns|users': dnsLookup(),
+      'lb|users': usersToLb(),
+      'lb|web': lbToWeb(),
       'kv|web': { from: 'web', to: 'kv', label: 'get / put', desc: 'The web server calls get(key) or put(key, value). A node acting as coordinator sends it to the key\'s replicas and waits for the quorum.' },
     },
     bad: {
-      ...level2.connections.bad,
+      ...lbBad(),
       'kv|users': 'Users never reach the store directly. Their requests go through the load balancer to a web server, which calls the store.',
       'kv|lb': 'The load balancer spreads requests over web servers. The web servers call the key-value store.',
       'dns|kv': 'The store does not need DNS. Connect the web servers to it.',
@@ -180,7 +182,7 @@ export default {
 
   // Messages the engine shows for this level's design.
   text: {
-    ...level2.text,
+    ...lbText(),
     kvNote: (kv) => {
       if (kv.failed > 0) {
         // A share of 1 means neither side of the partition has enough replicas; less means only the cut-off side.
@@ -195,13 +197,13 @@ export default {
         ? 'in the partition both sides keep answering, so a read can miss writes made on the other side.'
         : `W + R = ${kv.W + kv.R}, not more than N = ${kv.N}, so a read can miss every replica the latest write has reached.`);
     },
-    levelComplete: 'Level 12 complete. Take the quiz.',
+    levelComplete: levelComplete(12),
   },
 
   quiz: {
     passScore: 8,
-    passText: 'Level 12 is done. Level 13, Unique ID generator, is next: open it from the level menu at the top.',
-    failText: level10.quiz.failText,
+    passText: passText(12, 'Unique ID generator'),
+    failText,
     questions: [
       { q: 'Why can\'t a real distributed store be "CA" (consistent and available, but not partition tolerant)?', o: ['Disks are too slow to keep up', 'Consistency needs a single server', 'CA systems cost too much to run', 'Networks do fail'], a: 3, e: 'Networks fail, so a distributed system must keep working through partitions. When one happens, it has to give up either consistency (answer from old data) or availability (return errors).', r: 'CAP theorem' },
       { q: 'N = 3, W = 2, R = 2. Why does every read see the latest write?', o: ['Every replica is written before the reply', 'Reads always go to the leader', 'Read and write sets overlap', 'The coordinator caches every value'], a: 2, e: 'Any 2 replicas read share at least one with the 2 that took the write, because 2 + 2 > 3. The read returns the newest version among them.', r: 'Quorum consensus' },

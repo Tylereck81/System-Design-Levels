@@ -3,8 +3,8 @@
 import { fmt } from '../js/format.js';
 import { servedGoal, costGoal, servedAtLeast, fmtPct } from './shared/goals.js';
 import { ONLINE, CONN_KB, SERVER_CONNS, MSG_CAP, REQ_CAP, POLL_S, LONG_S, OFFLINE, NIGHT_OFFLINE, FRIENDS, PRESENCE_CAP, HEARTBEAT_S, TRAIN, DROPS_MIN } from '../js/engine/chat.js';
-import level10 from './level-10.js';
-import level2 from './level-02.js';
+import { lbText, levelComplete } from './shared/text.js';
+import { failText, passText } from './shared/quiz.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 const BUDGET = 1800;
@@ -199,15 +199,15 @@ export default {
 
   // Messages the engine shows for this level's design.
   text: {
-    ...level2.text,
+    ...lbText(),
     noWeb: 'Connect the users to the chat servers.',
-    levelComplete: 'Level 18 complete. Take the quiz.',
+    levelComplete: levelComplete(18),
   },
 
   quiz: {
     passScore: 8,
-    passText: 'Level 18 is done. Level 19, Search autocomplete, is next: open it from the level menu at the top.',
-    failText: level10.quiz.failText,
+    passText: passText(18, 'Search autocomplete'),
+    failText,
     questions: [
       { q: 'Why is WebSocket the usual choice for receiving chat messages?', o: ['It needs no server memory for each open connection', 'The server can push over one open connection', 'It works only on mobile', 'It replaces the database'], a: 1, e: 'HTTP is started by the client. WebSocket upgrades one HTTP connection into a persistent two-way one, so the server sends each message as it arrives.', r: 'WebSocket' },
       { q: 'What goes wrong with long polling behind a round-robin load balancer?', o: ['Messages are encrypted twice', 'Requests never time out, so the servers slowly fill up with held connections', 'Clients can\'t send', 'The message may land on a server not holding the recipient\'s request'], a: 3, e: 'HTTP servers are stateless; the sender\'s message can reach a server that isn\'t holding the recipient\'s waiting request, so it waits for the next poll.', r: 'Long polling' },

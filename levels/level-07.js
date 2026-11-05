@@ -3,8 +3,12 @@
 // From this level on, one box stands for a whole data center: the design built in Levels 2 to 6.
 import { fmt } from '../js/format.js';
 import { servedGoal, latGoal, costGoal, spofGoal, servedAtLeast, fmtPct } from './shared/goals.js';
-import level2 from './level-02.js';
-import level5 from './level-05.js';
+import { regionUsers, cdn } from './shared/components.js';
+import { dnsLookup, usersToCdn, CDN_DNS_BAD } from './shared/connections.js';
+import { lbText, replicaText, levelComplete } from './shared/text.js';
+import { ONE_DNS, ONE_CDN } from './shared/limits.js';
+import { failText, passText } from './shared/quiz.js';
+import { filesWorkload } from './shared/workload.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 const PCT = { wholeFrom: 10 }; // percentages: whole numbers from 10% up
@@ -26,11 +30,11 @@ export default {
   saveKey: 'sdl-level7-v1',
   saveVersion: 1,
   targets,
-  workload: level5.workload,
+  workload: filesWorkload(),
 
   components: {
     users: {
-      ...level5.components.users,
+      ...regionUsers(),
       regions: null, // round trips depend on which data center each region reaches
       desc: 'Your shoppers: 70% in Europe and 30% in America. Each region is 40 ms from a data center of its own, and 120 ms from one across the ocean. Half of all requests are files, which come from the CDN.',
     },
@@ -48,7 +52,7 @@ export default {
         },
       ],
     },
-    cdn: level5.components.cdn,
+    cdn: cdn(),
     dc: {
       name: 'Data center', short: 'Your whole design',
       nameOf: (n) => `${place(n)} DC`,
@@ -69,8 +73,8 @@ export default {
   palette: ['dns', 'cdn', 'dc'],
   limits: { dns: 1, cdn: 1, dc: 2 },
   limitMsg: {
-    dns: level5.limitMsg.dns,
-    cdn: level5.limitMsg.cdn,
+    dns: ONE_DNS,
+    cdn: ONE_CDN,
     dc: 'Two data centers is the limit here: one for each region.',
   },
   // Level 6's design, now one data center in Frankfurt, sized to carry every page; and Level 5's CDN.
@@ -87,16 +91,16 @@ export default {
 
   connections: {
     ok: {
-      'dns|users': level2.connections.ok['dns|users'],
-      'cdn|users': level5.connections.ok['cdn|users'],
+      'dns|users': dnsLookup(),
+      'cdn|users': usersToCdn(),
       'dc|users': { from: 'users', to: 'dc', label: 'pages', desc: 'Shoppers send page requests to the data center DNS gave them the address of. Each data center has its own public IP.' },
       'cdn|dc': { from: 'cdn', to: 'dc', label: 'misses', desc: 'The CDN\'s origin. When an edge does not have a file, it fetches it from this data center.' },
       'dc|dc': { from: 'dc', to: 'dc', label: 'replicates', desc: 'Copies this data center\'s data (accounts, carts and orders) to the other one, asynchronously: each change is sent after it is saved, so the copy runs about a second behind. Connect both ways so either one can take over.' },
     },
     bad: {
       'dc|dns': 'DNS answers name lookups off the request path. Connect Users to DNS, and Users to each data center.',
-      'cdn|dns': level5.connections.bad['cdn|dns'],
-      'cdn|cdn': level5.connections.bad['cdn|cdn'],
+      'cdn|dns': CDN_DNS_BAD,
+      'cdn|cdn': ONE_CDN,
     },
   },
 
@@ -157,19 +161,20 @@ export default {
 
   // Messages the engine shows for this level's design.
   text: {
-    ...level5.text,
+    ...lbText(),
+    ...replicaText(),
     noWeb: 'Users have no way in. Connect Users to a data center.',
     noDns: 'Browsers cannot find example.com. Connect Users to DNS.',
     noOrigin: 'The CDN has no origin: on a miss it has nowhere to fetch a file from, so it never holds any. Connect the CDN to a data center.',
     dnsAnswered: 'DNS answered with a data center\'s address. The device caches it until the answer expires.',
     ipTag: 'Address cached',
-    levelComplete: 'Level 7 complete. Take the quiz.',
+    levelComplete: levelComplete(7),
   },
 
   quiz: {
     passScore: 8,
-    passText: 'Level 7 is done. Level 8, Message queue, workers and monitoring, is next: open it from the level menu at the top.',
-    failText: (pass) => `You need ${pass} to pass. Reread the lesson sections behind the questions you missed, then try again.`,
+    passText: passText(7, 'Message queue, workers and monitoring'),
+    failText,
     questions: [
       { q: 'What does GeoDNS do?', o: ['Caches pages in cities near users', 'Answers by where the user is', 'Copies data between data centers', 'Balances load across web servers'], a: 1, e: 'GeoDNS returns a different address depending on the user\'s location, usually the nearest data center. Copying data is replication; caching near users is a CDN.', r: 'GeoDNS' },
       { q: 'With GeoDNS, Virginia goes offline. Where does its traffic go?', o: ['Nowhere until Virginia is back online', 'To the CDN, which serves the pages itself', 'To Frankfurt, the healthy data center', 'To a standby DNS server'], a: 2, e: 'GeoDNS checks each data center\'s health and sends everyone to the healthy one. Users far from it get slower pages, but they keep working.', r: 'Failover' },

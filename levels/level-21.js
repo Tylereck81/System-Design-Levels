@@ -3,8 +3,10 @@
 import { fmt } from '../js/format.js';
 import { servedGoal, costGoal, servedAtLeast, fmtPct, fmtMoney } from './shared/goals.js';
 import { NEW_MB, EDIT_SHARE, BIG_MB, CHANGED_MB, COMPRESS, BLOCK_MBPS, ONLINE, POLL_CONNS, RECONNECT_RATE, STORED_GB, REGIONS, ALL_VERSIONS, TEN_VERSIONS, DEDUPE, COLD_SHARE, HOT_GB, COLD_GB } from '../js/engine/sync.js';
-import level2 from './level-02.js';
-import level10 from './level-10.js';
+import { lb } from './shared/components.js';
+import { usersToLb } from './shared/connections.js';
+import { lbText } from './shared/text.js';
+import { failText } from './shared/quiz.js';
 
 const targets = { latencyMs: 1000, servedPct: 99 };
 const MONEY = { millions: true }; // bills reach millions of dollars: "$1.25M"
@@ -48,7 +50,7 @@ export default {
       name: 'Users', sub: 'Laptops, phones, browsers',
       desc: `40 million people, 8 million a day, each with 15 GB free. They save files on one device and expect them on every other one. About ${RATE} uploads a second at the peak; ${fmt(ONLINE / 1e6)} million devices are online.`,
     },
-    lb: level2.components.lb,
+    lb: lb(),
     blocksrv: {
       name: 'Block servers', short: 'Split, compress, encrypt',
       desc: `Split each file into blocks of up to 4 MB, each named by its hash, compress and encrypt them, and send them to cloud storage. ${fmt(BLOCK_MBPS)} MB a second each (1 Gbps), $300 a month.`,
@@ -107,7 +109,7 @@ export default {
 
   connections: {
     ok: {
-      'lb|users': level2.connections.ok['lb|users'],
+      'lb|users': usersToLb(),
       'blocksrv|lb': { from: 'lb', to: 'blocksrv', label: 'blocks', desc: 'Uploads and downloads go to the block servers.' },
       'lb|pollsrv': { from: 'lb', to: 'pollsrv', label: 'long polls', desc: 'Each device keeps a long-poll connection to a notification server.' },
       'blobstore|blocksrv': { from: 'blocksrv', to: 'blobstore', label: 'blocks', desc: 'Block servers store and fetch blocks in cloud storage.' },
@@ -209,7 +211,7 @@ export default {
 
   // Messages the engine shows for this level's design.
   text: {
-    ...level2.text,
+    ...lbText(),
     noWeb: 'Connect the users to a load balancer.',
     levelComplete: 'Level 21 complete: every level is done. Take the quiz.',
   },
@@ -217,7 +219,7 @@ export default {
   quiz: {
     passScore: 8,
     passText: 'Level 21 is done, and with it every level. Next: a mock interview, from the level menu at the top.',
-    failText: level10.quiz.failText,
+    failText,
     questions: [
       { q: 'What is delta sync?', o: ['Syncing only at night', 'Sending only the blocks that changed', 'Sending every file twice, to two regions at once', 'Syncing one device at a time'], a: 1, e: 'A file is split into blocks named by their hash. After an edit, only blocks whose hash changed are uploaded.', r: 'Block servers' },
       { q: 'Why keep file metadata in a relational database here?', o: ['ACID makes strong consistency easy', 'It is cheaper per GB', 'It stores the file blocks themselves as well', 'It needs no backups'], a: 0, e: 'Two devices must never see a file differently. A relational database gives ACID transactions; caches must be invalidated on every write.', r: 'High consistency requirement' },

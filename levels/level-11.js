@@ -3,9 +3,11 @@
 import { fmt } from '../js/format.js';
 import { servedGoal, latGoal, costGoal, servedAtLeast, fmtPct } from './shared/goals.js';
 import { serverNames, ringPoints, keyHome } from '../js/engine/hashring.js';
-import level2 from './level-02.js';
-import level6 from './level-06.js';
-import level10 from './level-10.js';
+import { dns, lb, NO_DB_NOTE, autoscaleSubOf, scalingChoices, db } from './shared/components.js';
+import { dnsLookup, usersToLb, lbToWeb, webToDb, lbBad } from './shared/connections.js';
+import { lbText, levelComplete } from './shared/text.js';
+import { failText, passText } from './shared/quiz.js';
+import { dayTraffic } from './shared/workload.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 const PCT = { scale: 100 }; // percentages are given as 0–1 shares
@@ -30,23 +32,23 @@ export default {
   saveVersion: 1,
   targets,
   // The day's traffic curve (for the autoscaled web servers), and the profiles the cache cluster holds.
-  workload: { day: level6.workload.day, catalogGB: 40, readGapSecs: 60, cacheTtlSecs: 3600 },
+  workload: { day: dayTraffic(), catalogGB: 40, readGapSecs: 60, cacheTtlSecs: 3600 },
 
   components: {
     users: {
       name: 'Users', sub: 'Open profiles',
       desc: 'People opening profiles in a social app. Every page reads one profile by its key, such as user:17. 5% of the requests are profile edits, which write the database.',
     },
-    dns: level2.components.dns,
-    lb: level2.components.lb,
+    dns: dns(),
+    lb: lb(),
     web: {
       name: 'Web server', short: 'Your back-end code',
       desc: 'Runs your back-end code. For each profile it asks the cache cluster first; on a miss it reads the database and stores the profile in the cache. These are autoscaled groups of L servers, as in Level 6.',
-      noDbNote: level2.components.web.noDbNote,
-      subOf: level6.components.web.subOf,
-      choices: level6.components.web.choices,
+      noDbNote: NO_DB_NOTE,
+      subOf: autoscaleSubOf,
+      choices: scalingChoices(),
     },
-    db: { ...level2.components.db, desc: 'The database with every profile. It is the slowest part, so it should only see what the cache misses, plus the edits.' },
+    db: { ...db(), desc: 'The database with every profile. It is the slowest part, so it should only see what the cache misses, plus the edits.' },
     ring: {
       name: 'Cache cluster', short: 'Profiles in memory',
       desc: 'Cache servers A, B, C… that keep the profiles in memory, read cache-aside as in Level 4. The hashing decides which server holds each key. When a server joins or leaves, every key that moves misses once. 10,000 lookups/s per server in this game.',
@@ -101,14 +103,14 @@ export default {
 
   connections: {
     ok: {
-      'dns|users': level2.connections.ok['dns|users'],
-      'lb|users': level2.connections.ok['lb|users'],
-      'lb|web': level2.connections.ok['lb|web'],
-      'db|web': level2.connections.ok['db|web'],
+      'dns|users': dnsLookup(),
+      'lb|users': usersToLb(),
+      'lb|web': lbToWeb(),
+      'db|web': webToDb(),
       'ring|web': { from: 'web', to: 'ring', label: 'lookups', desc: 'For each profile the web server hashes its key, finds the cache server that holds it, and asks that one. On a miss it reads the database and stores the profile there.' },
     },
     bad: {
-      ...level2.connections.bad,
+      ...lbBad(),
       'db|ring': 'In cache-aside the cache never talks to the database: the web server reads the database on a miss. Connect each web server to the cache cluster and to the database.',
       'ring|users': 'Users never reach the cache. Their requests go through the load balancer to a web server, which asks the cache cluster.',
       'lb|ring': 'The load balancer spreads requests over web servers. The web servers ask the cache cluster.',
@@ -199,14 +201,14 @@ export default {
 
   // Messages the engine shows for this level's design.
   text: {
-    ...level2.text,
-    levelComplete: 'Level 11 complete. Take the quiz.',
+    ...lbText(),
+    levelComplete: levelComplete(11),
   },
 
   quiz: {
     passScore: 8,
-    passText: 'Level 11 is done. Level 12, Distributed key-value store, is next: open it from the level menu at the top.',
-    failText: level10.quiz.failText,
+    passText: passText(11, 'Distributed key-value store'),
+    failText,
     questions: [
       { q: 'Six cache servers use hash(key) % 6. One fails and the cluster switches to % 5. Roughly what share of keys get a new server?', o: ['About 1/6', 'About 5/6', 'About 1/5', 'All of them'], a: 1, e: 'A key keeps its server only when % 6 and % 5 still pick the same one: 5 of every 30 hash values in a row, 1 in 6. So 5/6 of the keys move, not just the failed server\'s sixth. Their new servers don\'t hold them yet, so they all miss at once: a cache-miss storm.', r: 'The rehashing problem' },
       { q: 'On a hash ring, which server stores a key?', o: ['The next server clockwise', 'The server with the closest number', 'The server named by hash % N', 'A random server, chosen on every read'], a: 0, e: 'Servers and keys are hashed onto the same ring. From the key\'s position, go clockwise until you reach a server: that one stores it.', r: 'The hash ring' },

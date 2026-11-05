@@ -2,9 +2,11 @@
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { fmt } from '../js/format.js';
 import { servedGoal, latGoal, costGoal, servedAtLeast } from './shared/goals.js';
-import level2 from './level-02.js';
-import level6 from './level-06.js';
-import level9 from './level-09.js';
+import { dns, lb, NO_DB_NOTE, autoscaleSubOf, scalingChoices, shards } from './shared/components.js';
+import { dnsLookup, usersToLb, lbToWeb, webToShards, lbBad } from './shared/connections.js';
+import { lbText, levelComplete } from './shared/text.js';
+import { failText, passText } from './shared/quiz.js';
+import { dayTraffic } from './shared/workload.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 const BUDGET = 2100;
@@ -25,23 +27,23 @@ export default {
   saveVersion: 1,
   targets,
   // The day's traffic curve, for the cost of the autoscaled API servers.
-  workload: { day: level6.workload.day },
+  workload: { day: dayTraffic() },
 
   components: {
     users: {
       name: 'Users', sub: 'Apps with API keys',
       desc: 'Apps calling your public search API, each with its own API key: 2,000 requests a second from about 10,000 keys. A user typing a search sends up to 12 requests in 2 seconds, then pauses. Some keys belong to bots that never pause.',
     },
-    dns: level2.components.dns,
-    lb: level2.components.lb,
+    dns: dns(),
+    lb: lb(),
     web: {
       name: 'API server', short: 'Answers searches',
       desc: 'Runs the search API. These are autoscaled groups of M servers, as in Level 6: they grow with the traffic, bots included, and you pay for every server they run.',
-      noDbNote: level2.components.web.noDbNote,
-      subOf: level6.components.web.subOf,
-      choices: level6.components.web.choices,
+      noDbNote: NO_DB_NOTE,
+      subOf: autoscaleSubOf,
+      choices: scalingChoices(),
     },
-    shards: { ...level9.components.shards, name: 'Search index', short: 'Sharded, as in Level 9' },
+    shards: { ...shards(), name: 'Search index', short: 'Sharded, as in Level 9' },
     limiter: {
       name: 'Rate limiter', short: 'Blocks extra requests',
       desc: 'Middleware in front of the API. For each request it reads the API key\'s counter, and answers HTTP 429 Too Many Requests when the key is over its limit: 60 requests a minute. Requests within the limit go on to the API. In this game it checks 6,000 requests a second and costs $100/month.',
@@ -113,16 +115,16 @@ export default {
 
   connections: {
     ok: {
-      'dns|users': level2.connections.ok['dns|users'],
-      'lb|users': level2.connections.ok['lb|users'],
-      'lb|web': level2.connections.ok['lb|web'],
-      'shards|web': { ...level9.connections.ok['shards|web'], desc: 'The API server looks up the search index; the shard comes from the key, as in Level 9.' },
+      'dns|users': dnsLookup(),
+      'lb|users': usersToLb(),
+      'lb|web': lbToWeb(),
+      'shards|web': { ...webToShards(), desc: 'The API server looks up the search index; the shard comes from the key, as in Level 9.' },
       'limiter|users': { from: 'users', to: 'limiter', label: 'API calls', desc: 'Apps send every request to the rate limiter first, with their API key. DNS gives them its address.' },
       'lb|limiter': { from: 'limiter', to: 'lb', label: 'allowed', desc: 'Requests within their key\'s limit go on to the load balancer. The rest were answered with 429 Too Many Requests.' },
       'counter|limiter': { from: 'limiter', to: 'counter', label: 'counters', desc: 'For every request the limiter reads and updates its key\'s counter here (INCR, with EXPIRE for the window). About 0.1 ms in memory, plus the hop.' },
     },
     bad: {
-      ...level2.connections.bad,
+      ...lbBad(),
       'limiter|web': 'The limiter sends allowed requests to the load balancer, which spreads them over the API servers. Connect it to the load balancer.',
       'limiter|shards': 'The limiter guards the API, not the index. Connect it to the load balancer.',
       'limiter|limiter': 'Limiters don\'t talk to each other directly. To share counts, connect both to the counter store.',
@@ -199,19 +201,19 @@ export default {
 
   // Messages the engine shows for this level's design.
   text: {
-    ...level2.text,
+    ...lbText(),
     noWeb: 'Apps have no way in. Connect Users to the rate limiter or the load balancer.',
     noBackend: 'The rate limiter has nowhere to send allowed requests, so every request fails. Connect it to the load balancer.',
     realBlocked: (fb) => `The rate limiter rejects ${Math.round(fb * 100)}% of real users' requests: a user typing a search sends 12 in 2 seconds, more than the bucket and refill allow. Make the bucket bigger.`,
     queueWait: (ms) => `Real users wait ${(ms / 1000).toFixed(1)} s on average in the leaking bucket's queue: it sends requests on at a fixed rate, so a typed search waits its turn.`,
     overQuota: (q, shared) => `Each key gets ${fmt(60 * q)} requests a minute through, not 60.${shared ? '' : ' Each rate limiter keeps its own counts; connect them all to a counter store.'}`,
-    levelComplete: 'Level 10 complete. Take the quiz.',
+    levelComplete: levelComplete(10),
   },
 
   quiz: {
     passScore: 8,
-    passText: 'Level 10 is done. Level 11, Consistent hashing, is next: open it from the level menu at the top.',
-    failText: (pass) => `You need ${pass} to pass. Reread the lesson sections behind the questions you missed, then try again.`,
+    passText: passText(10, 'Consistent hashing'),
+    failText,
     questions: [
       { q: 'Which is NOT a reason to rate limit an API?', o: ['Stop a flood from starving everyone else', 'Cut costs, such as paid third-party calls', 'Keep bots from overloading the servers', 'Make each request faster for real users'], a: 3, e: 'Rate limiting prevents resource starvation from denial-of-service floods, cuts costs, and protects servers from overload. It doesn\'t speed up the requests it lets through; at best it keeps the servers from slowing down.', r: 'Why rate limit' },
       { q: 'Why not enforce the limit in the client app?', o: ['Clients cannot count requests', 'Anyone can change or fake a client', 'Clients would need Redis', 'HTTP has no status code for a blocked request'], a: 1, e: 'A client is easy to forge or modify, and you may not control it. Limits must be enforced where you control the code: on your servers or in a gateway.', r: 'Where to limit' },

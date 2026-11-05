@@ -3,9 +3,11 @@
 import { fmt } from '../js/format.js';
 import { servedGoal, latGoal, costGoal, fmtPct } from './shared/goals.js';
 import { FRIENDS, USERS, FEED_KEEP, ID_BYTES, POST_BYTES, WORKER_WRITES, INACTIVE, STAR, STARS_FOLLOWED, CACHE_MS, LOOKUP_MS, LOOKUPS_CAP } from '../js/engine/feed.js';
-import level2 from './level-02.js';
-import level6 from './level-06.js';
-import level10 from './level-10.js';
+import { dns, lb, NO_DB_NOTE, autoscaleSubOf, scalingChoices } from './shared/components.js';
+import { dnsLookup, usersToLb, lbToWeb, lbBad } from './shared/connections.js';
+import { lbText, levelComplete } from './shared/text.js';
+import { failText, passText } from './shared/quiz.js';
+import { dayTraffic } from './shared/workload.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 const BUDGET = 2600;
@@ -27,7 +29,7 @@ export default {
   saveVersion: 1,
   targets,
   // The day's traffic curve (for the autoscaled web servers). feed: this level's news feed; surge: posts on New Year's Eve.
-  workload: { day: level6.workload.day, feed: true, surge: SURGE },
+  workload: { day: dayTraffic(), feed: true, surge: SURGE },
 
   // The mock interview's brief and self-check list for this problem (see mock.js).
   mock: {
@@ -48,14 +50,14 @@ export default {
       name: 'Users', sub: 'Post, scroll feeds',
       desc: `People on a photo-sharing app. They open their feed (GET /v1/me/feed) about 9 times a day and post (POST /v1/me/feed) now and then. Each has ${FRIENDS} friends on average.`,
     },
-    dns: level2.components.dns,
-    lb: level2.components.lb,
+    dns: dns(),
+    lb: lb(),
     web: {
       name: 'Web server', short: 'Auth, rate limits',
       desc: 'Checks each request\'s auth token and rate limits, then calls the feed service. These are autoscaled groups of L servers, as in Level 6.',
-      noDbNote: level2.components.web.noDbNote,
-      subOf: level6.components.web.subOf,
-      choices: level6.components.web.choices,
+      noDbNote: NO_DB_NOTE,
+      subOf: autoscaleSubOf,
+      choices: scalingChoices(),
     },
     feedsvc: {
       name: 'Feed service', short: 'Publishes and builds feeds',
@@ -114,14 +116,14 @@ export default {
 
   connections: {
     ok: {
-      'dns|users': level2.connections.ok['dns|users'],
-      'lb|users': level2.connections.ok['lb|users'],
-      'lb|web': level2.connections.ok['lb|web'],
+      'dns|users': dnsLookup(),
+      'lb|users': usersToLb(),
+      'lb|web': lbToWeb(),
       'feedsvc|web': { from: 'web', to: 'feedsvc', label: 'posts, feeds', desc: 'The web server passes posts and feed loads to the feed service.' },
       'feedcache|feedsvc': { from: 'feedsvc', to: 'feedcache', label: 'feeds', desc: 'The feed service writes post IDs into feeds and reads them back.' },
     },
     bad: {
-      ...level2.connections.bad,
+      ...lbBad(),
       'feedsvc|users': 'Users go through the load balancer and web servers, which check their auth token.',
       'feedcache|web': 'The web servers call the feed service, which owns the feed cache.',
       'feedsvc|lb': 'The load balancer spreads requests over web servers, which call the feed service.',
@@ -215,14 +217,14 @@ export default {
 
   // Messages the engine shows for this level's design.
   text: {
-    ...level2.text,
-    levelComplete: 'Level 17 complete. Take the quiz.',
+    ...lbText(),
+    levelComplete: levelComplete(17),
   },
 
   quiz: {
     passScore: 8,
-    passText: 'Level 17 is done. Level 18, Chat system, is next: open it from the level menu at the top.',
-    failText: level10.quiz.failText,
+    passText: passText(17, 'Chat system'),
+    failText,
     questions: [
       { q: 'What does fanout on write do when someone posts?', o: ['Puts the post ID in each friend\'s feed', 'Waits until each friend asks for the feed again', 'Emails every friend', 'Deletes old posts'], a: 0, e: 'Fanout on write (push) precomputes feeds: each friend\'s cached feed gets the new post ID right away, so loading a feed is one read.', r: 'Fanout on write' },
       { q: 'What is the hotkey problem in fanout on write?', o: ['A post with too many likes', 'One account\'s post means millions of writes', 'A friend list that never changes after sign-up day', 'A feed that is never loaded'], a: 1, e: 'An account with millions of followers turns one post into millions of feed writes, holding up everyone else\'s posts.', r: 'Fanout on write' },

@@ -3,8 +3,8 @@
 import { fmt } from '../js/format.js';
 import { servedGoal, latGoal, costGoal, servedAtLeast, fmtPct } from './shared/goals.js';
 import { BROWSER_HIT, API_CAP, SHARD_CAP, LOOKUP_MS, LETTER_TOP } from '../js/engine/typeahead.js';
-import level2 from './level-02.js';
-import level10 from './level-10.js';
+import { lbText, levelComplete } from './shared/text.js';
+import { failText, passText } from './shared/quiz.js';
 
 const targets = { latencyMs: 100, servedPct: 99 };
 const QPS = 55600; // keystroke requests a second at the peak
@@ -190,15 +190,15 @@ export default {
 
   // Messages the engine shows for this level's design.
   text: {
-    ...level2.text,
+    ...lbText(),
     noWeb: 'Connect the users to the API servers.',
-    levelComplete: 'Level 19 complete. Take the quiz.',
+    levelComplete: levelComplete(19),
   },
 
   quiz: {
     passScore: 8,
-    passText: 'Level 19 is done. Level 20, Video platform, is next: open it from the level menu at the top.',
-    failText: level10.quiz.failText,
+    passText: passText(19, 'Video platform'),
+    failText,
     questions: [
       { q: 'What does each trie node store to make suggestions fast?', o: ['The whole search log', 'The user\'s history', 'A full copy of its parent node', 'Its own top 5 queries'], a: 3, e: 'Keeping the top k at every node means a lookup only finds the prefix node and reads its list: O(1) with a capped prefix length.', r: 'Trie data structure' },
       { q: 'Why not update the trie on every search?', o: ['Tries can\'t be updated', 'Billions of updates would slow the query service', 'Every update needs a brand new shard to be added first', 'It breaks browser caching'], a: 1, e: 'Updating a node also updates its ancestors\' top 5. Doing that for billions of searches a day would slow everything; rebuild from aggregated logs instead.', r: 'Data gathering service' },

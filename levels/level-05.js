@@ -2,9 +2,12 @@
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { fmt } from '../js/format.js';
 import { servedGoal, latGoal, costGoal, spofGoal, servedAtLeast } from './shared/goals.js';
-import level2 from './level-02.js';
-import level3 from './level-03.js';
-import level4 from './level-04.js';
+import { regionUsers, dns, lb, NO_DB_NOTE, replicaDb, cache, cdn } from './shared/components.js';
+import { dnsLookup, usersToLb, lbToWeb, webToReplicas, webToCache, usersToCdn, cdnToLb, lbBad, replicaBad, cacheBad, cdnBad } from './shared/connections.js';
+import { lbText, replicaText, NO_ORIGIN, levelComplete } from './shared/text.js';
+import { ONE_DNS, TWO_LBS, THREE_DBS, THREE_CACHES, ONE_CDN } from './shared/limits.js';
+import { failText, passText } from './shared/quiz.js';
+import { filesWorkload } from './shared/workload.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 const FAR_MS = 60;
@@ -19,70 +22,36 @@ const served99 = servedAtLeast(targets.servedPct);
 const duration = (s) => ({ 60: '1 minute', 600: '10 minutes', 3600: '1 hour', 86400: '1 day' }[s] || `${s} seconds`);
 const cdnOf = (m) => m.g.onPath('cdn')[0] || null;
 
-const ttlOptions = [
-  { id: '60', short: '1 min', name: '1 minute', sub: 'about 1 request in 3 misses', note: 'Edges and browsers keep a file for 1 minute. With a request for each file about every 30 seconds, about 1 request in 3 finds it expired and goes to the origin.', log: 'CDN TTL set to 1 minute.' },
-  { id: '600', short: '10 min', name: '10 minutes', sub: 'about 1 in 21 misses', note: 'Edges and browsers keep a file for 10 minutes. About 1 request in 21 goes to the origin. A changed file can show for up to 10 minutes.', log: 'CDN TTL set to 10 minutes.' },
-  { id: '3600', short: '1 h', name: '1 hour', sub: 'about 1 in 121 misses', note: 'Edges and browsers keep a file for an hour. About 1 request in 121 goes to the origin. A changed file can show for up to an hour.', log: 'CDN TTL set to 1 hour.' },
-  { id: '86400', short: '1 day', name: '1 day', sub: 'almost every request hits', note: 'Edges and browsers keep a file for a day, so almost every request is a hit. A changed file can show for up to a day, unless it gets a new name.', log: 'CDN TTL set to 1 day.' },
-];
-
 export default {
   id: 5,
   saveKey: 'sdl-level5-v1',
   saveVersion: 1,
   targets,
   // Level 4's catalog for the cache, plus the shop's static files (see the lesson's assumptions).
-  workload: { ...level4.workload, fileKB: 20, fileGapSecs: 30 },
+  workload: filesWorkload(),
 
   components: {
-    users: {
-      name: 'Users', sub: 'Europe + America',
-      desc: 'Your shoppers: 70% in Europe, near the data center in Frankfurt, and 30% in America. Every page they open also loads files: product photos, CSS and JavaScript. Half of all requests are for files.',
-      regions: { near: 'Europe', far: 'America' },
-    },
-    dns: level2.components.dns,
-    lb: level2.components.lb,
+    users: regionUsers(),
+    dns: dns(),
+    lb: lb(),
     web: {
       name: 'Web server', short: 'Your back-end code',
       desc: 'Runs your back-end code for pages: it checks the cache, then reads or writes the databases. It also sends the shop\'s static files from its own disk. A file takes 2 ms, a tenth of a page\'s work.',
-      noDbNote: level2.components.web.noDbNote,
+      noDbNote: NO_DB_NOTE,
     },
-    db: level3.components.db,
-    cache: level4.components.cache,
-    cdn: {
-      name: 'CDN', short: 'Files near users',
-      desc: 'A content delivery network: a provider\'s servers (edges) in cities around the world, each keeping copies of your static files. Pages link to cdn.example.com, so each shopper gets files from the nearest edge, about 40 ms away. It costs $0.02 per GB sent in this game.',
-      subOf: (n) => `TTL ${(ttlOptions.find((o) => o.id === n.ttl) || ttlOptions[0]).short}`,
-      live: { arriving: 'files arriving, per second', misses: 'misses/s pulled from the origin', per: 'per file at the edge' },
-      choices: [
-        { key: 'ttl', label: 'Time to live (TTL)', options: ttlOptions },
-        {
-          key: 'onChange', label: 'When a file changes',
-          options: [
-            { id: 'ttl', name: 'Wait for the TTL', sub: 'old file until it expires', note: 'Edges and browsers keep the old file until its TTL runs out.', log: 'Changed files now stay cached until their TTL ends.' },
-            { id: 'purge', name: 'Invalidate it', sub: 'clears edges, not browsers', note: 'You call the CDN\'s API to remove the file from every edge, so the next request fetches the new one. Browsers that already have the old file keep it until their own copy expires, up to one TTL.', log: 'Changed files are now invalidated on the CDN.' },
-            { id: 'version', name: 'Give it a new name', sub: 'logo.svg?v=3', note: 'Pages link to logo.svg?v=3, a URL no edge or browser has seen, so everyone fetches the new file at once. The old one just expires. A long TTL is safe, because a file never changes under the same name.', log: 'Changed files now get a new name, such as logo.svg?v=3.' },
-          ],
-        },
-        {
-          key: 'fallback', label: 'If the CDN is down',
-          options: [
-            { id: 'none', name: 'Files fail', sub: 'pages lose photos and styles', note: 'Pages link straight to the CDN. If it is down, every file fails: no photos, no styles, no scripts.', log: 'If the CDN is down, files now fail.' },
-            { id: 'origin', name: 'Load from the origin', sub: 'slower, but it works', note: 'When a file fails to load from the CDN, the page fetches it from example.com instead. The load balancers and web servers then carry every file again.', log: 'If the CDN is down, pages now load files from the origin.' },
-          ],
-        },
-      ],
-    },
+    db: replicaDb(),
+    cache: cache(),
+    cdn: cdn(),
   },
   palette: ['dns', 'lb', 'web', 'db', 'cache', 'cdn'],
   limits: { dns: 1, lb: 2, web: 2, db: 3, cache: 3, cdn: 1 },
   limitMsg: {
-    dns: 'You only need one DNS service for example.com.',
-    lb: 'Two load balancers is the limit: one active, one standby.',
+    dns: ONE_DNS,
+    lb: TWO_LBS,
     web: 'Two XL web servers are enough here. More servers in Frankfurt would not bring it any closer to America.',
-    db: 'Three databases is the limit here: a primary and two replicas.',
-    cache: 'Three cache servers is the limit in this level.',
-    cdn: 'One CDN is enough: a single provider runs edges all over the world.',
+    db: THREE_DBS,
+    cache: THREE_CACHES,
+    cdn: ONE_CDN,
   },
   // Level 4's design: two 8 GB caches with a 10-minute TTL that delete changed products, a primary and one replica.
   startNodes: [
@@ -111,18 +80,15 @@ export default {
 
   connections: {
     ok: {
-      ...level4.connections.ok,
-      'cdn|users': { from: 'users', to: 'cdn', label: 'files', desc: 'Pages link their photos, CSS and JavaScript to cdn.example.com, so browsers fetch them from the nearest edge, about 40 ms away. Pages themselves still go to the load balancer.' },
-      'cdn|lb': { from: 'cdn', to: 'lb', label: 'misses', desc: 'The CDN\'s origin. When an edge does not have a file, it fetches it through the load balancer, keeps it for the TTL, then sends it on. The trip to Frankfurt is as long as the shopper\'s own would be.' },
+      'dns|users': dnsLookup(),
+      'lb|users': usersToLb(),
+      'lb|web': lbToWeb(),
+      'db|web': webToReplicas(),
+      'cache|web': webToCache(),
+      'cdn|users': usersToCdn(),
+      'cdn|lb': cdnToLb(),
     },
-    bad: {
-      ...level4.connections.bad,
-      'cdn|web': 'The web servers have private IPs, so the CDN cannot reach them. Connect the CDN to the load balancers: together they are its origin.',
-      'cdn|db': 'The CDN only holds static files, which come from the web servers. Connect it to the load balancers.',
-      'cache|cdn': 'The cache holds product data for the web servers. The CDN holds files and fetches them through the load balancers.',
-      'cdn|dns': 'The CDN needs no connection to DNS here. Shoppers\' devices look up cdn.example.com the same way they look up example.com.',
-      'cdn|cdn': 'One CDN is enough: a single provider runs edges all over the world.',
-    },
+    bad: { ...lbBad(), ...replicaBad(), ...cacheBad(), ...cdnBad() },
   },
 
   missions: [
@@ -205,16 +171,12 @@ export default {
   ],
 
   // Messages the engine shows for this level's design.
-  text: {
-    ...level4.text,
-    noOrigin: 'The CDN has no origin: on a miss it has nowhere to fetch a file from, so it never holds any. Connect the CDN to the load balancers.',
-    levelComplete: 'Level 5 complete. Take the quiz.',
-  },
+  text: { ...lbText(), ...replicaText(), noOrigin: NO_ORIGIN, levelComplete: levelComplete(5) },
 
   quiz: {
     passScore: 8,
-    passText: 'Level 5 is done. Level 6, Stateless web tier and autoscaling, is next: open it from the level menu at the top.',
-    failText: (pass) => `You need ${pass} to pass. Reread the lesson sections behind the questions you missed, then try again.`,
+    passText: passText(5, 'Stateless web tier and autoscaling'),
+    failText,
     questions: [
       { q: 'In a design like this one, what does the CDN serve?', o: ['Pages built for each shopper', 'Order and payment requests', 'Photos, CSS and JavaScript', 'Database queries'], a: 2, e: 'A CDN keeps copies of static files, the same for every shopper, on edges near them. Pages built per shopper, orders and queries go to your own servers. Some CDNs can cache whole pages too, but that is a separate feature.', r: 'What a CDN does' },
       { q: 'A shopper asks for photo.jpg, and the nearest edge does not have it. What happens?', o: ['The request fails, and the browser retries in a minute', 'The edge pulls it from the origin, then keeps it', 'The browser asks another shopper\'s device', 'The origin pushes every file to every edge'], a: 1, e: 'On a miss the edge fetches the file from the origin, keeps it for the TTL the origin sends, and returns it. The next shopper near that edge gets a hit.', r: 'How a CDN works' },
