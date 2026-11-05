@@ -2,10 +2,7 @@
 // read (component types, sizes, time constants) is in catalog.js.
 import { S, byId, WORKLOAD, MISSIONS } from '../state.js';
 import { T, COMPONENTS, choiceOf, sizesOf, countOf } from './catalog.js';
-import { serverNames, keyShares, movedShare } from './hashring.js';
-import { idOutcome } from './ids.js';
 import { CREATE_QUERIES } from './links.js';
-import { downloaderRate } from './crawl.js';
 import { kindOf } from './kinds/index.js';
 
 export const roleOf = (n) => (COMPONENTS[n.type] || {}).role;
@@ -17,45 +14,7 @@ export const isStore = (n) => !!(COMPONENTS[n.type] || {}).store;
 export const isLocated = (n) => !!(COMPONENTS[n.type] || {}).located;
 export const isQueue = (n) => !!(COMPONENTS[n.type] || {}).queue;
 export const isOffload = (n) => !!(COMPONENTS[n.type] || {}).offload;
-export const isQuorum = (n) => !!(COMPONENTS[n.type] || {}).quorum;
-/** A key-value store's replicas (N), write and read quorums (W, R, at most N) and whether its quorum is sloppy. */
-export function quorumOf(n) {
-  const ch = COMPONENTS[n.type].choices, N = ch.n.options[choiceOf(n, 'n')].n;
-  return { N, W: Math.min(N, ch.w.options[choiceOf(n, 'w')].q), R: Math.min(N, ch.r.options[choiceOf(n, 'r')].q), sloppy: !!ch.mode.options[choiceOf(n, 'mode')].sloppy };
-}
-export const isIdGen = (n) => !!(COMPONENTS[n.type] || {}).ids;
-/** An ID generator's method, its servers and whether a timestamp-based one waits when its clock goes back. */
-export function idSettingOf(n) {
-  const ch = COMPONENTS[n.type].choices;
-  return { method: choiceOf(n, 'method'), servers: ch.servers.options[choiceOf(n, 'servers')].count, wait: !!ch.clock.options[choiceOf(n, 'clock')].wait };
-}
-/** True when the ID generator stops if one machine fails: one server, for every method but UUIDs. */
-export const idSpof = (n) => idOutcome(idSettingOf(n)).spof;
-/** A crawler downloader's machines and pages a second each, given whether the DNS provider is slow. */
-export function downloaderOf(n, slowDns = false) {
-  const ch = COMPONENTS[n.type].choices, count = ch.count.options[choiceOf(n, 'count')].count, dnsCache = !!ch.dns.options[choiceOf(n, 'dns')].cache;
-  return { count, dnsCache, per: downloaderRate({ dnsCache }, { slowDns }) };
-}
-/** A crawler's settings: per-host queues on its frontier (`users`), and its parser's duplicate check and URL filter. */
-export function crawlSettingsOf(users, parser) {
-  const on = (key) => !!parser && !!COMPONENTS[parser.type].choices[key].options[choiceOf(parser, key)].on;
-  return { perHost: !!users && choiceOf(users, 'queues') === 'host', dedup: on('dedup'), filter: on('filter') };
-}
 export const isClustered = (n) => !!(COMPONENTS[n.type] || {}).clustered;
-/** Servers in a cache cluster. */
-export const clusterSize = (n) => COMPONENTS[n.type].choices.count.options[choiceOf(n, 'count')].count;
-/** The cluster's servers by name (A, B, C…). Resized by −1, server C has gone; by +1, the next letter has joined. */
-export function clusterNames(n, resize = 0) {
-  const names = serverNames(clusterSize(n) + Math.max(0, resize));
-  return resize < 0 ? names.filter((s) => s !== 'C') : names;
-}
-/** The cluster's hashing: { mod: true } for hash % N, or { vnodes } points per server on a hash ring. */
-export const hashMethod = (n) => COMPONENTS[n.type].choices.hashing.options[choiceOf(n, 'hashing')];
-/** Share of the keys each server holds, and the share whose server changed when the cluster was resized. */
-export function clusterLayout(n, resize = 0) {
-  const names = clusterNames(n, resize), method = hashMethod(n);
-  return { names, shares: keyShares(names, method), moved: resize ? movedShare(clusterNames(n), names, method) : 0 };
-}
 /**
  * Share of reads a cache cluster answers. Each server holds its share of the keys and keeps as many of them as its
  * memory fits, the most read first (the 80/20 rule, as in hitRate), so a server holding more than its share keeps
@@ -64,43 +23,6 @@ export function clusterLayout(n, resize = 0) {
 export function clusterHit(n, shares) {
   const mem = sizesOf(n.type)[n.size].mem, ttl = WORKLOAD.cacheTtlSecs, a = Math.log(0.8) / Math.log(0.2);
   return Object.values(shares).reduce((sum, x) => sum + (x > 0 ? x * Math.pow(Math.min(1, mem / (WORKLOAD.catalogGB * x)), a) : 0), 0) * ttl / (ttl + WORKLOAD.readGapSecs);
-}
-/**
- * What a rate limiter's algorithm does, per API key:
- * q: the requests a key gets through in any rolling minute, as a multiple of the limit (60). Token and leaking buckets
- *   pass `refill` a second; at a window edge a token bucket also passes its whole bucket, and a fixed window passes
- *   its quota on both sides of the edge (2×). Sliding windows and the leaking bucket's fixed outflow stay at 1.
- * fb: the share of a real user's requests blocked. A user types a search: `burst` requests in `burstSecs` seconds.
- *   A bucket holds `size` and refills `rate` a second, so a burst bigger than size + rate × burstSecs is cut.
- * wait: ms a real request waits in a leaking bucket's queue, which sends requests on at its fixed rate.
- */
-export function limiterRule(n, edge) {
-  const ch = COMPONENTS[n.type].choices, algo = choiceOf(n, 'algo');
-  const size = ch.bucket.options[choiceOf(n, 'bucket')].size, rate = ch.refill.options[choiceOf(n, 'refill')].rate;
-  const fb = Math.max(0, T.burst - size - rate * T.burstSecs) / T.burst;
-  if (algo === 'token') return { q: edge ? (size + 60 * rate * T.keyLimit) / 60 : rate, fb, wait: 0 };
-  if (algo === 'leaky') return { q: rate, fb, wait: Math.max(0, 1000 * (T.burst / rate - T.burstSecs) / 2) };
-  if (algo === 'fixed') return { q: edge ? 2 : 1, fb: 0, wait: 0 };
-  return { q: 1, fb: 0, wait: 0 }; // sliding window log or counter
-}
-/** Shards the shard key spreads data over (N in key % N), and all shards, including one per hot account given its own. */
-export const keyedShards = (n) => COMPONENTS[n.type].choices.count.options[choiceOf(n, 'count')].count;
-export const shardCount = (n) => keyedShards(n) + (COMPONENTS[n.type].choices.hot.options[choiceOf(n, 'hot')].own || 0);
-/**
- * Share of a sharded box's queries each shard gets. A share H of the queries are about a few hot accounts.
- * By account_id % N the other queries spread evenly; by country the largest country (bigCountry) can't be split; by
- * sign-up date the newest accounts' range gets `newest`. The hot accounts all land on the first shard (with the largest
- * country, or the oldest dates), unless each gets a shard of its own.
- */
-export function shardShares(n, H) {
-  const ch = COMPONENTS[n.type].choices, N = ch.count.options[choiceOf(n, 'count')].count, own = ch.hot.options[choiceOf(n, 'hot')].own || 0;
-  const key = choiceOf(n, 'key'), rest = 1 - H;
-  let shares = Array.from({ length: N }, () => rest / N);
-  if (key === 'country') shares = shares.map((_, i) => rest * (i === 0 ? Math.max(T.bigCountry, 1 / N) : (1 - Math.max(T.bigCountry, 1 / N)) / (N - 1)));
-  if (key === 'date') shares = shares.map((_, i) => rest * (i === N - 1 ? Math.max(T.newest, 1 / N) : (1 - Math.max(T.newest, 1 / N)) / (N - 1)));
-  if (own) return shares.concat(Array.from({ length: own }, () => H / own));
-  shares[0] += H;
-  return shares;
 }
 /** True for the far region ('far'), false for the near one, for a located server. */
 export const isFar = (n) => choiceOf(n, 'region') === 'far';
@@ -169,11 +91,6 @@ export function costOf(n, work = 0) {
   const kind = kindOf(n);
   if (kind?.cost) return kind.cost(n, work, S.nodes);
   const c = COMPONENTS[n.type] || {};
-  if (c.sharded) return n.size ? sizesOf(n.type)[n.size].cost * shardCount(n) : 0;
-  if (c.clustered) return n.size ? sizesOf(n.type)[n.size].cost * clusterSize(n) : 0;
-  if (c.quorum) return c.cost * quorumOf(n).N;
-  if (c.crawl === 'download') return c.cost * downloaderOf(n).count;
-  if (c.ids) { const id = idSettingOf(n); return id.method === 'uuid' ? 0 : c.cost * id.servers; }
   if (c.sized && scales(n)) { const k = dayCopies(work, serverSpec(n).cap); return Math.round(sizesOf(n.type)[n.size].cost * k.reduce((a, b) => a + b, 0) / k.length); }
   if (c.sized) return n.size ? sizesOf(n.type)[n.size].cost * countOf(n) : 0;
   if (c.perGB) return Math.round(monthlyFileGB() * c.perGB);

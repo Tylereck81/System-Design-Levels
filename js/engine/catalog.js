@@ -41,6 +41,8 @@ export const T = {
   burst: 12, // requests a real user sends in burstSecs seconds while typing a search
   burstSecs: 2, // seconds of that burst
 };
+/** How many times its base time a request takes on a server that is `u` busy: 1 / (1 − u), and 25 from 96% busy. */
+export const qmul = (u) => (u >= 0.96 ? 25 : 1 / (1 - u));
 
 // role: 'client' sends traffic, 'resolver' answers name lookups off the request path,
 //       'server' sits on the request path and has a capacity.
