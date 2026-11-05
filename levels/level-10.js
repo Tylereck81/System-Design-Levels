@@ -1,6 +1,7 @@
 // Level 10: Rate limiter.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { fmt } from '../js/format.js';
+import { servedGoal, latGoal, costGoal, servedAtLeast } from './shared/goals.js';
 import level2 from './level-02.js';
 import level6 from './level-06.js';
 import level9 from './level-09.js';
@@ -9,15 +10,13 @@ const targets = { latencyMs: 150, servedPct: 99 };
 const BUDGET = 2100;
 const BIG_BUDGET = 2300;
 
-const servedGoal = { id: 'served', type: 'metric', text: `Real users: at least ${targets.servedPct}% of requests succeed`, test: (m) => m.servedPct >= targets.servedPct, val: (m) => m.servedPct.toFixed(1) + '%' };
-const latGoal = { id: 'lat', type: 'metric', text: `Response time under ${targets.latencyMs} ms`, test: (m) => m.latency != null && m.latency < targets.latencyMs, val: (m) => m.latency == null ? '—' : fmt(m.latency) + ' ms' };
-const costGoal = (max) => ({ id: 'cost', type: 'struct', text: `Spend at most $${fmt(max)} per month`, test: (g) => g.cost <= max, val: (m, g) => '$' + fmt(g.cost) });
+const realUsersGoal = servedGoal(targets, { text: `Real users: at least ${targets.servedPct}% of requests succeed` });
 const withinQuota = (m) => m.keyQuota != null && m.keyQuota <= 1.0001;
 const quotaGoal = {
   id: 'quota', type: 'metric', text: 'No API key gets more than 60 requests a minute', test: withinQuota,
   val: (m) => (m.keyQuota == null ? '—' : `${fmt(60 * m.keyQuota)}/min`),
 };
-const served99 = (m) => m.servedPct >= targets.servedPct;
+const served99 = servedAtLeast(targets.servedPct);
 const algoShort = { token: 'token bucket', leaky: 'leaking bucket', fixed: 'fixed window', slog: 'sliding log', scount: 'sliding counter' };
 
 export default {
@@ -140,7 +139,7 @@ export default {
     {
       title: 'A bot floods the API', ref: 'Rate limiting', qps: 2000, writes: 0, bot: { keys: 160, rate: 15 }, budget: BUDGET,
       story: 'Besides 2,000 requests a second from real apps, 160 bot keys send 15 requests a second each, without pause: 2,400 more. The search index slows to a crawl, and the autoscaled API servers grow to carry the bots, at your expense. Limit each key to 60 requests a minute, without blocking real users typing a search.',
-      goals: [servedGoal, latGoal, quotaGoal, costGoal(BUDGET)],
+      goals: [realUsersGoal, latGoal(targets), quotaGoal, costGoal(BUDGET)],
       hint: 'Add a rate limiter: connect Users to it and it to the load balancer, and remove Users → load balancer. Its token bucket starts with 4 tokens, too few for a user who types 12 requests in 2 seconds. Make the bucket 12, and keep the refill at 1 a second.',
       takeaway: 'Bots now get 60 requests a minute per key; real users\' bursts fit the bucket. Tuning is the hard part of a token bucket: too small blocks real users, too fast a refill lets bots through.',
     },
@@ -148,7 +147,7 @@ export default {
       title: 'Bots at the window edge', ref: 'Algorithms', qps: 2000, writes: 0, bot: { keys: 160, rate: 15 }, budget: BUDGET,
       story: 'The bots got smarter: each key now sends its whole quota right before and right after the start of a minute. Some algorithms count that as two separate minutes. Make sure no key ever gets more than 60 requests in any 60 seconds.',
       goals: [
-        servedGoal, latGoal, quotaGoal, costGoal(BUDGET),
+        realUsersGoal, latGoal(targets), quotaGoal, costGoal(BUDGET),
         { id: 'edge-burst', type: 'exp', text: 'Break it: bots burst at the window edge; still 60 a minute at most' },
       ],
       hint: 'A fixed window lets 120 through around the minute boundary, and a token bucket lets its whole bucket through on top of its refill. Pick a sliding window: the log or the counter.',
@@ -174,7 +173,7 @@ export default {
       story: 'A botnet now sends 8,800 requests a second from 400 keys. One rate limiter can\'t check that many. With two, each app\'s requests may reach either one, so their counts must be shared: otherwise each limiter allows a key its 60 requests a minute, and every key gets 120.',
       goals: [
         { id: 'est', type: 'gate', text: 'Estimate the rate limiters you need' },
-        servedGoal, latGoal, quotaGoal, costGoal(BIG_BUDGET),
+        realUsersGoal, latGoal(targets), quotaGoal, costGoal(BIG_BUDGET),
         { id: 'edge-burst', type: 'exp', text: 'Break it: bots burst at the window edge; still 60 a minute at most' },
       ],
       hint: 'Add a second rate limiter, connect Users to it and it to the load balancer. Then add Redis counters and connect both limiters to them, so they count each key once.',

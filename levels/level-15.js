@@ -1,6 +1,7 @@
 // Level 15: Web crawler.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { fmt } from '../js/format.js';
+import { costGoal, fmtPct } from './shared/goals.js';
 import { DNS_MS, SLOW_DNS_MS, DNS_MISS, DUP_SHARE, PAGE_KB, POLITE, TOP_HOST, FLOOD_SHARE, TRAP_SHARE, TRAP_LINKS, THREADS, PAGE_MS } from '../js/engine/crawl.js';
 import level2 from './level-02.js';
 import level10 from './level-10.js';
@@ -9,11 +10,9 @@ const targets = { latencyMs: 1000, servedPct: 99 };
 const BUDGET = 1500;
 const RATE = 800; // pages a second the frontier hands out
 
-const pct = (x) => x.toFixed(1) + '%';
-const costGoal = (max) => ({ id: 'cost', type: 'struct', text: `Spend at most $${fmt(max)} per month`, test: (g) => g.cost <= max, val: (m, g) => '$' + fmt(g.cost) });
 /** Share of downloads that are useful pages: fetched, not refused, not a trap's. */
 const useful = (m) => (m.crawl ? m.servedPct * (1 - m.crawl.wasted) : m.servedPct);
-const crawlGoal = { id: 'crawl', type: 'metric', text: `Download ${fmt(RATE)} useful pages a second (${targets.servedPct}%)`, test: (m) => useful(m) >= targets.servedPct, val: (m) => pct(useful(m)) };
+const crawlGoal = { id: 'crawl', type: 'metric', text: `Download ${fmt(RATE)} useful pages a second (${targets.servedPct}%)`, test: (m) => useful(m) >= targets.servedPct, val: (m) => fmtPct(useful(m)) };
 const politeGoal = { id: 'polite', type: 'metric', text: `At most ${POLITE} request a second to any website`, test: (m) => !!m.crawl && m.crawl.hostRate <= POLITE, val: (m) => (m.crawl ? `${fmt(m.crawl.hostRate)}/s` : '—') };
 const storeGoal = { id: 'storage', type: 'metric', text: 'Store at most 450 TB a month', test: (m) => !!m.crawl && m.crawl.storageTB <= 450, val: (m) => (m.crawl ? `${fmt(m.crawl.storageTB)} TB` : '—') };
 const crawlOk = (m) => useful(m) >= targets.servedPct;
@@ -185,8 +184,8 @@ export default {
       on: `The DNS provider slows down: ${SLOW_DNS_MS} ms a lookup.`, onTone: 'bad',
       off: 'DNS is fast again.',
       expect: crawlOk,
-      notMet: (m) => `Only ${pct(useful(m))} of pages downloaded: one lookup at a time at ${SLOW_DNS_MS} ms is ${fmt(1000 / SLOW_DNS_MS)} pages a second per machine. Keep a DNS cache.`,
-      observed: (m) => `Observed: DNS slowed down, and ${pct(useful(m))} of pages were still downloaded.`,
+      notMet: (m) => `Only ${fmtPct(useful(m))} of pages downloaded: one lookup at a time at ${SLOW_DNS_MS} ms is ${fmt(1000 / SLOW_DNS_MS)} pages a second per machine. Keep a DNS cache.`,
+      observed: (m) => `Observed: DNS slowed down, and ${fmtPct(useful(m))} of pages were still downloaded.`,
     },
     {
       id: 'flood', kind: 'event', flood: true,
@@ -195,7 +194,7 @@ export default {
       on: `A huge site's pages link to each other: ${Math.round(100 * FLOOD_SHARE)}% of the frontier's URLs are now from one host.`, onTone: 'bad',
       off: 'The flood is over.',
       expect: (m) => crawlOk(m) && m.crawl.hostRate <= POLITE,
-      notMet: (m) => `The site gets ${fmt(m.crawl.hostRate)} requests a second and refuses them: ${pct(100 * m.crawl.refused)} of downloads fail. Give each host its own queue.`,
+      notMet: (m) => `The site gets ${fmt(m.crawl.hostRate)} requests a second and refuses them: ${fmtPct(100 * m.crawl.refused)} of downloads fail. Give each host its own queue.`,
       observed: () => `Observed: the site got ${POLITE} request a second, and the crawl went on.`,
     },
     {
@@ -205,7 +204,7 @@ export default {
       on: 'The crawler finds calendar.example: every page links to a next page that never ends.', onTone: 'bad',
       off: 'The trap\'s URLs are cleared from the frontier.',
       expect: (m) => crawlOk(m) && m.crawl.trapAdds === 0,
-      notMet: (m) => `The trap adds ${fmt(m.crawl.trapAdds)} new URLs a second to the frontier, forever${m.crawl.wasted >= 0.01 ? `, and takes ${pct(100 * m.crawl.wasted)} of downloads` : ''}. Filter URLs by depth and length.`,
+      notMet: (m) => `The trap adds ${fmt(m.crawl.trapAdds)} new URLs a second to the frontier, forever${m.crawl.wasted >= 0.01 ? `, and takes ${fmtPct(100 * m.crawl.wasted)} of downloads` : ''}. Filter URLs by depth and length.`,
       observed: () => 'Observed: the URL filter dropped every trap link, and the crawl went on.',
     },
   ],

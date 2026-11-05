@@ -1,6 +1,7 @@
 // Level 5: CDN for static content.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { fmt } from '../js/format.js';
+import { servedGoal, latGoal, costGoal, spofGoal, servedAtLeast } from './shared/goals.js';
 import level2 from './level-02.js';
 import level3 from './level-03.js';
 import level4 from './level-04.js';
@@ -9,16 +10,12 @@ const targets = { latencyMs: 150, servedPct: 99 };
 const FAR_MS = 60;
 const BUDGET = 3100;
 
-const servedGoal = { id: 'served', type: 'metric', text: `Serve at least ${targets.servedPct}% of requests`, test: (m) => m.servedPct >= targets.servedPct, val: (m) => m.servedPct.toFixed(1) + '%' };
-const latGoal = { id: 'lat', type: 'metric', text: `Response time under ${targets.latencyMs} ms`, test: (m) => m.latency != null && m.latency < targets.latencyMs, val: (m) => m.latency == null ? '—' : fmt(m.latency) + ' ms' };
-const costGoal = (max) => ({ id: 'cost', type: 'struct', text: `Spend at most $${fmt(max)} per month`, test: (g) => g.cost <= max, val: (m, g) => '$' + fmt(g.cost) });
-const spofGoal = { id: 'spof', type: 'metric', text: 'No single point of failure', test: (m) => m.spof === 0, val: (m) => String(m.spof) };
 const farGoal = {
   id: 'far', type: 'metric', text: `Shoppers in America get files in under ${FAR_MS} ms`,
   test: (m) => m.farFileMs != null && m.farFileMs < FAR_MS,
   val: (m) => (m.farFileMs == null ? '—' : fmt(m.farFileMs) + ' ms'),
 };
-const served99 = (m) => m.servedPct >= targets.servedPct;
+const served99 = servedAtLeast(targets.servedPct);
 const duration = (s) => ({ 60: '1 minute', 600: '10 minutes', 3600: '1 hour', 86400: '1 day' }[s] || `${s} seconds`);
 const cdnOf = (m) => m.g.onPath('cdn')[0] || null;
 
@@ -150,7 +147,7 @@ export default {
       story: 'The shop now sells in America too: 30% of shoppers are there, 120 ms from the data center in Frankfurt. Half of all requests are files, such as product photos, CSS and JavaScript, and each one makes that long trip. Serve the files from a CDN, so shoppers in America get them in under 60 ms.',
       goals: [
         { id: 'est', type: 'gate', text: 'Estimate the CDN\'s data per month' },
-        farGoal, servedGoal, latGoal, costGoal(BUDGET),
+        farGoal, servedGoal(targets), latGoal(targets), costGoal(BUDGET),
       ],
       hint: 'Add a CDN. Connect Users to it, and connect it to both load balancers: they are its origin. Then select it and pick a TTL long enough that most files are still at the edge when the next request comes. Select Users to see both round trips.',
       takeaway: 'Files now come from an edge near each shopper: about 45 ms for America instead of about 130. The load balancers lost most of their traffic too. Pages still travel to Frankfurt; putting servers in America is Level 7.',
@@ -159,7 +156,7 @@ export default {
       title: 'The CDN goes down', ref: 'CDN fallback', qps: 4000, writes: 0.2, files: 0.5, far: 0.3, budget: BUDGET,
       story: 'CDNs have outages too, and the CDN now carries half your traffic. If pages link only to the CDN, an outage breaks every photo, stylesheet and script on the site. Make the pages fall back to your own servers.',
       goals: [
-        farGoal, spofGoal, servedGoal, latGoal, costGoal(BUDGET),
+        farGoal, spofGoal(), servedGoal(targets), latGoal(targets), costGoal(BUDGET),
         { id: 'crash-cdn', type: 'exp', text: 'Break it: take the CDN down and still serve at least 99%' },
       ],
       hint: 'Select the CDN and set "If the CDN is down" to load files from the origin. Your two XL web servers sent every file before the CDN, so they can again.',
@@ -169,7 +166,7 @@ export default {
       title: 'A new logo', ref: 'Invalidation', qps: 4000, writes: 0.2, files: 0.5, far: 0.3, budget: BUDGET,
       story: 'Marketing ships a new logo at 9:00 and wants every shopper to see it within a minute. Edges and shoppers\' browsers both keep files until their TTL runs out. Keep files fast for America, and get the new logo out in time.',
       goals: [
-        farGoal, spofGoal, servedGoal, latGoal, costGoal(BUDGET),
+        farGoal, spofGoal(), servedGoal(targets), latGoal(targets), costGoal(BUDGET),
         { id: 'new-logo', type: 'exp', text: 'Break it: ship the new logo; every shopper sees it within a minute' },
       ],
       hint: 'A 1-minute TTL is fresh enough, but then 1 request in 3 misses and America waits too long. Invalidating clears the edges, not the browsers. Keep a long TTL, and set "When a file changes" to give the file a new name.',

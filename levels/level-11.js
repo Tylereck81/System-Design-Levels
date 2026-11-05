@@ -1,27 +1,25 @@
 // Level 11: Consistent hashing.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { fmt } from '../js/format.js';
+import { servedGoal, latGoal, costGoal, servedAtLeast, fmtPct } from './shared/goals.js';
 import { serverNames, ringPoints, keyHome } from '../js/engine/hashring.js';
 import level2 from './level-02.js';
 import level6 from './level-06.js';
 import level10 from './level-10.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
+const PCT = { scale: 100 }; // percentages are given as 0–1 shares
 const BUDGET = 1400;
 const SALE_BUDGET = 1700;
 const MOVE_MAX = 0.25;
 const SPREAD_MAX = 0.1;
 
-const pct = (x) => (100 * x).toFixed(1) + '%';
-const servedGoal = { id: 'served', type: 'metric', text: `Serve at least ${targets.servedPct}% of requests`, test: (m) => m.servedPct >= targets.servedPct, val: (m) => m.servedPct.toFixed(1) + '%' };
-const latGoal = { id: 'lat', type: 'metric', text: `Response time under ${targets.latencyMs} ms`, test: (m) => m.latency != null && m.latency < targets.latencyMs, val: (m) => m.latency == null ? '—' : fmt(m.latency) + ' ms' };
-const costGoal = (max) => ({ id: 'cost', type: 'struct', text: `Spend at most $${fmt(max)} per month`, test: (g) => g.cost <= max, val: (m, g) => '$' + fmt(g.cost) });
 const even = (m) => m.ringSpread != null && m.ringSpread <= SPREAD_MAX + 1e-9;
 const spreadGoal = {
   id: 'spread', type: 'metric', text: `Busiest cache server at most ${Math.round(SPREAD_MAX * 100)}% above the average`, test: even,
-  val: (m) => (m.ringSpread == null ? '—' : '+' + pct(m.ringSpread)),
+  val: (m) => (m.ringSpread == null ? '—' : '+' + fmtPct(m.ringSpread, PCT)),
 };
-const served99 = (m) => m.servedPct >= targets.servedPct;
+const served99 = servedAtLeast(targets.servedPct);
 const fewMoved = (m) => m.ringMoved != null && m.ringMoved <= MOVE_MAX + 1e-9;
 const hashShort = { mod: 'hash % N', ring: 'ring', v10: 'ring · 10 vnodes', v100: 'ring · 100 vnodes', v500: 'ring · 500 vnodes' };
 const dbOver = (m) => { const st = Object.values(m.node).find((s) => s.unit === 'queries/s'); return st ? st.load : 0; };
@@ -141,7 +139,7 @@ export default {
       story: 'Profiles are cached on five servers, picked by hash(key) % 5. Server C is about to fail. With % 4, most keys (4 in 5) get a new server, which doesn\'t hold them yet: the database gets most reads at once. Place keys so that losing C moves only C\'s keys.',
       goals: [
         { id: 'est', type: 'gate', text: 'Estimate the keys that move when C fails' },
-        servedGoal, latGoal, costGoal(BUDGET),
+        servedGoal(targets), latGoal(targets), costGoal(BUDGET),
         { id: 'lose-c', type: 'exp', text: `Break it: server C fails; at most ${Math.round(MOVE_MAX * 100)}% of keys move` },
       ],
       hint: 'Select the cache cluster and set Hashing to a hash ring. On a ring a key goes to the first server clockwise, so when C leaves, only C\'s keys move: to the next server.',
@@ -151,7 +149,7 @@ export default {
       title: 'One more server for the sale', ref: 'Virtual nodes', qps: 2000, writes: 0.05, budget: BUDGET,
       story: 'A sale is coming, and you add a cache server. On a ring with one point per server, the servers own arcs of very different sizes: one holds far more profiles than its memory fits, while another sits half empty. Keep every server within 10% of the average, before and after the new one joins.',
       goals: [
-        servedGoal, latGoal, spreadGoal, costGoal(BUDGET),
+        servedGoal(targets), latGoal(targets), spreadGoal, costGoal(BUDGET),
         { id: 'add-server', type: 'exp', text: `Break it: add a server; at most ${Math.round(MOVE_MAX * 100)}% of keys move, and the spread stays within ${Math.round(SPREAD_MAX * 100)}%` },
       ],
       hint: 'Give each server many points on the ring: virtual nodes. Ten even out the shares a little; with 100, five servers still differ by about 16% here. Try 500.',
@@ -161,7 +159,7 @@ export default {
       title: 'The sale doubles the reads', ref: 'k/n keys move', qps: 4000, writes: 0.05, budget: SALE_BUDGET,
       story: 'The sale doubles the traffic: 4,000 requests a second, of which 3,800 read a profile. If server C fails now, its fifth of the keys misses all at once: 3,800 × 98% hits × 1/5 ≈ 745 more reads a second, on top of the 270 the database already gets, and the four servers left hold only 32 GB of the 40, so they miss more too: over 1,000 reads a second. It takes 800. The budget allows no more cache memory than 5 L servers have: 40 GB.',
       goals: [
-        servedGoal, latGoal, spreadGoal, costGoal(SALE_BUDGET),
+        servedGoal(targets), latGoal(targets), spreadGoal, costGoal(SALE_BUDGET),
         { id: 'lose-c', type: 'exp', text: 'Break it: server C fails during the sale; at least 99% served' },
       ],
       hint: 'A server that fails moves 1/N of the keys. Same memory, same price: 10 M servers (4 GB each) instead of 5 L (8 GB each). Keep 500 virtual nodes so the spread stays within 10%.',
@@ -179,9 +177,9 @@ export default {
       off: 'Server C is back, and the keys return to it.',
       expect: (m) => served99(m) && fewMoved(m),
       notMet: (m) => (m.ringMoved != null && !fewMoved(m)
-        ? `${pct(m.ringMoved)} of the keys moved to another server, not just C's fifth. Each of those reads misses and goes to the database: ${fmt(dbOver(m))} queries a second. Set the hashing to a hash ring.`
+        ? `${fmtPct(m.ringMoved, PCT)} of the keys moved to another server, not just C's fifth. Each of those reads misses and goes to the database: ${fmt(dbOver(m))} queries a second. Set the hashing to a hash ring.`
         : `Only ${m.servedPct.toFixed(1)}% served: the database gets ${fmt(dbOver(m))} queries a second, the misses of the moved keys on top of its normal load. Losing a server moves 1/N of the keys: use more, smaller cache servers.`),
-      observed: (m) => `Observed: server C failed, and only ${pct(m.ringMoved)} of the keys moved. The database carried their misses.`,
+      observed: (m) => `Observed: server C failed, and only ${fmtPct(m.ringMoved, PCT)} of the keys moved. The database carried their misses.`,
     },
     {
       id: 'add-server', kind: 'event', resize: 1,
@@ -191,11 +189,11 @@ export default {
       off: 'The new server is removed again.',
       expect: (m) => served99(m) && fewMoved(m) && even(m),
       notMet: (m) => (!fewMoved(m)
-        ? `${pct(m.ringMoved)} of the keys moved to another server. With hash % N most keys move; on a ring, only those the new server takes.`
+        ? `${fmtPct(m.ringMoved, PCT)} of the keys moved to another server. With hash % N most keys move; on a ring, only those the new server takes.`
         : !even(m)
-          ? `The busiest cache server holds ${pct(m.ringSpread)} more keys than the average. Give each server more virtual nodes.`
+          ? `The busiest cache server holds ${fmtPct(m.ringSpread, PCT)} more keys than the average. Give each server more virtual nodes.`
           : `Only ${m.servedPct.toFixed(1)}% served: the database can't carry the misses.`),
-      observed: (m) => `Observed: the new server took ${pct(m.ringMoved)} of the keys, a little from every other server, and the busiest is ${pct(m.ringSpread)} above the average.`,
+      observed: (m) => `Observed: the new server took ${fmtPct(m.ringMoved, PCT)} of the keys, a little from every other server, and the busiest is ${fmtPct(m.ringSpread, PCT)} above the average.`,
     },
   ],
 

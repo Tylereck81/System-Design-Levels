@@ -1,6 +1,6 @@
 // Level 9: Scale the data tier with sharding.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
-import { fmt } from '../js/format.js';
+import { servedGoal, latGoal, costGoal } from './shared/goals.js';
 import level2 from './level-02.js';
 import level3 from './level-03.js';
 import level6 from './level-06.js';
@@ -11,9 +11,6 @@ const HOT_BUDGET = 3500;
 const GROW_BUDGET = 3900;
 const SHARD_MAX = 0.7;
 
-const servedGoal = { id: 'served', type: 'metric', text: `Serve at least ${targets.servedPct}% of requests`, test: (m) => m.servedPct >= targets.servedPct, val: (m) => m.servedPct.toFixed(1) + '%' };
-const latGoal = { id: 'lat', type: 'metric', text: `Response time under ${targets.latencyMs} ms`, test: (m) => m.latency != null && m.latency < targets.latencyMs, val: (m) => m.latency == null ? '—' : fmt(m.latency) + ' ms' };
-const costGoal = (max) => ({ id: 'cost', type: 'struct', text: `Spend at most $${fmt(max)} per month`, test: (g) => g.cost <= max, val: (m, g) => '$' + fmt(g.cost) });
 const shardGoal = {
   id: 'shards', type: 'metric', text: `No database shard above ${Math.round(SHARD_MAX * 100)}% busy`,
   test: (m) => m.maxShardUtil != null && m.maxShardUtil < SHARD_MAX,
@@ -156,14 +153,14 @@ export default {
         fallback: 'Not quite. Divide 3,000 queries a second by 1,120, the most one shard should take, and round up.',
       },
       story: '60% of the database\'s 3,000 queries a second are writes: plays, follows and likes. Every write goes to the one primary, which can take 1,600 a second, and a read replica can\'t take writes. Split the data over several database servers, and choose a shard key that keeps every shard under 70% busy.',
-      goals: [{ id: 'est', type: 'gate', text: 'Estimate the shards you need' }, shardGoal, servedGoal, latGoal, costGoal(BUDGET)],
+      goals: [{ id: 'est', type: 'gate', text: 'Estimate the shards you need' }, shardGoal, servedGoal(targets), latGoal(targets), costGoal(BUDGET)],
       hint: 'Add a sharded database, connect both web servers to it, and remove the primary and the replica. Pick account_id as the shard key: the other keys pile queries onto one shard. Three XL shards are enough.',
       takeaway: 'Each shard now takes a third of the writes. The shard key mattered as much as the number of shards: by country or by sign-up date, one shard got far more than its share.',
     },
     {
       title: 'Three famous creators', ref: 'Hotspots', qps: 3000, writes: 0.6, hot: 0.2, budget: HOT_BUDGET,
       story: 'Three creators with more than 50 million followers each joined, and their accounts all landed on the same shard. Their profiles and episode lists now take 20% of all queries, all on that one shard. Keep every shard under 70% busy.',
-      goals: [shardGoal, servedGoal, latGoal, costGoal(HOT_BUDGET)],
+      goals: [shardGoal, servedGoal(targets), latGoal(targets), costGoal(HOT_BUDGET)],
       hint: 'More shards don\'t help: the three accounts still share one. Select the sharded database and give each very popular account a shard of its own.',
       takeaway: 'The hot accounts now have a shard each, and no shard is near its limit. Real systems sometimes split a single huge account further still.',
     },
@@ -171,7 +168,7 @@ export default {
       title: 'Running out of room', ref: 'Resharding', qps: 4500, writes: 0.6, hot: 0.2, nonRel: 0.4, budget: GROW_BUDGET,
       story: 'Traffic grew to 4,500 queries a second. Plays and likes are 40% of them, and they need no joins: they are just counters read and written by key. Move them to a NoSQL store so the shards have room again, then see what adding a shard would have cost.',
       goals: [
-        noSqlGoal, shardGoal, servedGoal, latGoal, costGoal(GROW_BUDGET),
+        noSqlGoal, shardGoal, servedGoal(targets), latGoal(targets), costGoal(GROW_BUDGET),
         { id: 'reshard', type: 'exp', text: 'Break it: add one more shard and see how much data moves' },
       ],
       hint: 'Add a NoSQL store and connect both web servers to it. Then press "Add a shard" to see what resharding with % N would move.',
