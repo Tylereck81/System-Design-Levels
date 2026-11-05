@@ -1,6 +1,6 @@
 // The inspector's view of a cache cluster: its hash ring (or hash % N) and each server's share of the keys.
 import { el } from '../dom.js';
-import { hashMethod, clusterLayout } from '../engine/components.js';
+import { hashMethod, clusterLayout } from '../engine/kinds/cluster.js';
 import { ringPoints } from '../engine/hashring.js';
 import { resizeBy } from '../engine/experiments.js';
 

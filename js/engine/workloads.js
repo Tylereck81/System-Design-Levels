@@ -9,7 +9,8 @@
 // A level turns on at most one entry (tests/unit/levels.test.mjs checks it). A field must not be the name of another
 // model result field: model() spreads the outcomes into its result.
 import { byFlag } from './catalog.js';
-import { roleOf, linkSettingsOf, crawlSettingsOf } from './components.js';
+import { roleOf, linkSettingsOf } from './components.js';
+import { crawlSettingsOf } from './kinds/crawl.js';
 import { notifySettingsOf } from './kinds/notify.js';
 import { feedSettingsOf } from './kinds/feed.js';
 import { chatSettingsOf } from './kinds/chat.js';

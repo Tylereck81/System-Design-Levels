@@ -29,11 +29,27 @@ test('every kind has its own id and describes at least one component type', asyn
   const ids = KINDS.map((k) => k.id);
   assert.equal(new Set(ids).size, ids.length);
   for (const k of KINDS) assert.ok(Object.values(COMPONENTS).some((c) => k.matches(c)), `${k.id} matches no component type`);
-  // costOf asks the kind before its sharded, clustered and quorum branches, so no kind may take one of those types.
+  // loadPhase, costOf and countSpofs have no per-type branch, so every type with its own load rule has a kind with a step.
+  const ownRule = (c) => c.consumes || c.sharded || c.clustered || c.quorum || c.ids || c.crawl || c.limits;
   for (const [type, c] of Object.entries(COMPONENTS)) {
     assert.ok(KINDS.filter((k) => k.matches(c)).length <= 1, `${type} matches two kinds: the second would never run`);
-    if (c.sharded || c.clustered || c.quorum) assert.ok(!KINDS.some((k) => k.matches(c)), `${type} has its own costOf branch`);
+    if (ownRule(c)) assert.ok(KINDS.find((k) => k.matches(c))?.step, `${type} has its own load rule but no kind step`);
   }
+});
+
+test('each result field the kinds report has one owner and a value before any component reports it', async () => {
+  const { KINDS, RESULT_DEFAULTS, COMBINE } = await kinds();
+  const fields = KINDS.flatMap((k) => Object.keys(k.resultDefaults || {}));
+  assert.equal(new Set(fields).size, fields.length, 'two kinds report the same field with their own default');
+  assert.deepEqual(Object.keys(RESULT_DEFAULTS).sort(), [...fields].sort());
+  assert.equal(RESULT_DEFAULTS.shardCount, 0);
+  assert.equal(RESULT_DEFAULTS.keyQuota, null);
+  // Combining: from the default (null or 0, or none for limitShared), then a second component's value.
+  assert.equal(COMBINE.max(COMBINE.max(null, 0.4), 0.2), 0.4);
+  assert.equal(COMBINE.sum(COMBINE.sum(0, 2), 3), 5);
+  assert.equal(COMBINE.and(COMBINE.and(undefined, true), false), false);
+  assert.equal(COMBINE.and(COMBINE.and(undefined, false), true), false);
+  assert.equal(COMBINE.set(7, 3), 3);
 });
 
 test('kindOf finds a type\'s kind by its catalog flag, and null for generic or unknown types', async () => {
@@ -41,6 +57,10 @@ test('kindOf finds a type\'s kind by its catalog flag, and null for generic or u
   assert.equal(kindOf({ type: 'nworker' }).id, 'notify-worker');
   assert.equal(kindOf({ type: 'trie' }).id, 'typeahead-trie');
   assert.equal(kindOf({ type: 'vserve' }).id, 'video-serve');
+  assert.equal(kindOf({ type: 'worker' }).id, 'worker');
+  assert.equal(kindOf({ type: 'downloader' }).id, 'crawl-download');
+  assert.equal(kindOf({ type: 'parser' }).id, 'crawl-parse');
+  assert.equal(kindOf({ type: 'limiter' }).id, 'rate-limiter');
   assert.equal(kindOf({ type: 'notifier' }), null); // a notification server follows the generic rules
   assert.equal(kindOf({ type: 'web' }), null);
   assert.equal(kindOf({ type: 'no-such-type' }), null);
@@ -68,6 +88,15 @@ test('a kind prices its type from its settings', async () => {
   assert.equal(cost(cache, [cache, { type: 'feedsvc', fanout: 'write' }]), 240);
   assert.equal(cost(cache, [cache, { type: 'feedsvc' }]), 0);
   assert.equal(cost(cache), 0);
+  assert.equal(cost({ type: 'shards', size: 'M' }), 180);             // $90 × 2 shards
+  assert.equal(cost({ type: 'shards', size: 'M', hot: 'own' }), 450); // $90 × (2 + 3 shards for the hot accounts)
+  assert.equal(cost({ type: 'shards' }), 0);                          // no size picked yet
+  assert.equal(cost({ type: 'ring', size: 'S' }), 100);               // $20 × 5 servers
+  assert.equal(cost({ type: 'kv' }), 450);                            // $150 × 3 replicas
+  assert.equal(cost({ type: 'kv', n: '5' }), 750);                    // $150 × 5 replicas
+  assert.equal(cost({ type: 'idgen' }), 0);                           // UUIDs are made in the web servers
+  assert.equal(cost({ type: 'idgen', method: 'snow', servers: '3' }), 300); // $100 × 3 servers
+  assert.equal(cost({ type: 'downloader' }), 800);                    // $200 × 4 machines
 });
 
 test('a kind is redundant when one of its machines can fail', async () => {
@@ -78,4 +107,14 @@ test('a kind is redundant when one of its machines can fail', async () => {
   assert.equal(redundant({ type: 'chatsrv', count: '2' }), true);
   assert.equal(redundant({ type: 'vupload' }), true);           // it runs on the API servers
   assert.equal(redundant({ type: 'feedsvc' }), false);          // one feed service
+  assert.equal(redundant({ type: 'ring', count: '3' }), true);  // a lost server's keys move to the others
+  assert.equal(redundant({ type: 'kv' }), true);                // 3 replicas
+  assert.equal(redundant({ type: 'kv', n: '1' }), false);
+  assert.equal(redundant({ type: 'idgen' }), true);             // UUIDs: no generator server to fail
+  assert.equal(redundant({ type: 'idgen', method: 'ticket' }), false); // one ticket server
+  assert.equal(redundant({ type: 'idgen', method: 'ticket', servers: '2' }), true);
+  assert.equal(redundant({ type: 'downloader', count: '1' }), false);
+  assert.equal(redundant({ type: 'downloader' }), true);        // 4 machines
+  assert.equal(redundant({ type: 'shards', size: 'M' }), false); // one box: its shards do not stand in for each other
+  assert.equal(redundant({ type: 'limiter' }), false);
 });
