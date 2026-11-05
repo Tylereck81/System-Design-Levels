@@ -1,4 +1,4 @@
-// Messages that several levels show: the engine's design messages (`text`) and limit messages (`limitMsg`).
+// The engine's design messages (`text`) that several levels show.
 // Strings are shared as they are; objects are made by functions, so every level gets its own copy.
 // Pure: it imports only the formatting helper.
 import { fmt } from '../../js/format.js';
@@ -29,8 +29,3 @@ export const replicaText = () => ({
 
 /** The engine's message when the CDN has no origin behind it. */
 export const NO_ORIGIN = 'The CDN has no origin: on a miss it has nowhere to fetch a file from, so it never holds any. Connect the CDN to the load balancers.';
-
-// Limit messages.
-export const ONE_DNS = 'You only need one DNS service for example.com.';
-export const TWO_LBS = 'Two load balancers is the limit: one active, one standby.';
-export const ONE_CDN = 'One CDN is enough: a single provider runs edges all over the world.';

@@ -4,7 +4,8 @@ import { fmt } from '../js/format.js';
 import { servedGoal, latGoal, costGoal, spofGoal, servedAtLeast } from './shared/goals.js';
 import { regionUsers, dns, lb, NO_DB_NOTE, replicaDb, cache, cdn } from './shared/components.js';
 import { dnsLookup, usersToLb, lbToWeb, webToReplicas, webToCache, usersToCdn, cdnToLb, lbBad, replicaBad, cacheBad, cdnBad } from './shared/connections.js';
-import { lbText, replicaText, NO_ORIGIN, levelComplete, ONE_DNS, TWO_LBS, ONE_CDN } from './shared/text.js';
+import { lbText, replicaText, NO_ORIGIN, levelComplete } from './shared/text.js';
+import { ONE_DNS, TWO_LBS, THREE_DBS, THREE_CACHES, ONE_CDN } from './shared/limits.js';
 import { failText, passText } from './shared/quiz.js';
 import { filesWorkload } from './shared/workload.js';
 
@@ -48,8 +49,8 @@ export default {
     dns: ONE_DNS,
     lb: TWO_LBS,
     web: 'Two XL web servers are enough here. More servers in Frankfurt would not bring it any closer to America.',
-    db: 'Three databases is the limit here: a primary and two replicas.',
-    cache: 'Three cache servers is the limit in this level.',
+    db: THREE_DBS,
+    cache: THREE_CACHES,
     cdn: ONE_CDN,
   },
   // Level 4's design: two 8 GB caches with a 10-minute TTL that delete changed products, a primary and one replica.

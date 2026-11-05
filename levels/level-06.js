@@ -3,7 +3,8 @@
 import { servedGoal, latGoal, costGoal, spofGoal, servedAtLeast, fmtPct } from './shared/goals.js';
 import { regionUsers, dns, lb, NO_DB_NOTE, autoscaleSubOf, scalingChoices, replicaDb, cache, cdn } from './shared/components.js';
 import { dnsLookup, usersToLb, lbToWeb, webToReplicas, webToCache, usersToCdn, cdnToLb, lbBad, replicaBad, cacheBad, cdnBad } from './shared/connections.js';
-import { lbText, replicaText, NO_ORIGIN, levelComplete, ONE_DNS, TWO_LBS, ONE_CDN } from './shared/text.js';
+import { lbText, replicaText, NO_ORIGIN, levelComplete } from './shared/text.js';
+import { ONE_DNS, TWO_LBS, THREE_DBS, THREE_CACHES, ONE_CDN } from './shared/limits.js';
 import { failText, passText } from './shared/quiz.js';
 import { filesWorkload, dayTraffic } from './shared/workload.js';
 
@@ -18,6 +19,7 @@ const kept = (m) => m.lostPct < LOST_MAX;
 const clock = (h) => String(h).padStart(2, '0') + ':00';
 
 const day = dayTraffic(); // share of the 20:00 peak, hour by hour
+const shopLb = lb();
 
 export default {
   id: 6,
@@ -33,9 +35,9 @@ export default {
     },
     dns: dns(),
     lb: {
-      ...lb(),
+      ...shopLb,
       algos: [
-        ...lb().algos,
+        ...shopLb.algos,
         { id: 'sticky', short: 'sticky', name: 'Sticky sessions', sub: 'each shopper stays on one server', note: 'The load balancer sets a cookie that names a shopper\'s server and sends all their requests there. Sessions kept in a server\'s memory are always found, but that server is now the only place they live.', log: 'Load balancer set to sticky sessions: each shopper stays on the server they started on.' },
       ],
     },
@@ -61,8 +63,8 @@ export default {
     dns: ONE_DNS,
     lb: TWO_LBS,
     web: 'Two web servers is the limit here. To carry more, set them to autoscale: each one becomes a group that runs more servers of its size as traffic grows.',
-    db: 'Three databases is the limit here: a primary and two replicas.',
-    cache: 'Three cache servers is the limit in this level.',
+    db: THREE_DBS,
+    cache: THREE_CACHES,
     cdn: ONE_CDN,
     session: 'One session store is enough: the provider runs it on several machines for you.',
   },

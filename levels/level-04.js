@@ -3,7 +3,8 @@
 import { servedGoal, latGoal, costGoal, spofGoal, servedAtLeast } from './shared/goals.js';
 import { shopUsers, dns, lb, NO_DB_NOTE, replicaDb, cache } from './shared/components.js';
 import { dnsLookup, usersToLb, lbToWeb, webToReplicas, webToCache, lbBad, replicaBad, cacheBad } from './shared/connections.js';
-import { lbText, replicaText, levelComplete, ONE_DNS, TWO_LBS } from './shared/text.js';
+import { lbText, replicaText, levelComplete } from './shared/text.js';
+import { ONE_DNS, TWO_LBS, THREE_CACHES } from './shared/limits.js';
 import { failText, passText } from './shared/quiz.js';
 import { catalogWorkload } from './shared/workload.js';
 
@@ -51,7 +52,7 @@ export default {
     lb: TWO_LBS,
     web: 'The web tier is big enough in this level: two XL web servers handle 3,200 req/s.',
     db: 'Three databases is the limit here: a primary and two replicas. Let the cache take the rest of the reads.',
-    cache: 'Three cache servers is the limit in this level.',
+    cache: THREE_CACHES,
   },
   // Level 3's design with a primary and two XL replicas.
   startNodes: [

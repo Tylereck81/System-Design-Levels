@@ -4,8 +4,9 @@
 import { fmt } from '../js/format.js';
 import { servedGoal, latGoal, costGoal, spofGoal, servedAtLeast, fmtPct } from './shared/goals.js';
 import { regionUsers, cdn } from './shared/components.js';
-import { dnsLookup, usersToCdn, cdnBad } from './shared/connections.js';
-import { lbText, replicaText, levelComplete, ONE_DNS, ONE_CDN } from './shared/text.js';
+import { dnsLookup, usersToCdn, CDN_DNS_BAD } from './shared/connections.js';
+import { lbText, replicaText, levelComplete } from './shared/text.js';
+import { ONE_DNS, ONE_CDN } from './shared/limits.js';
 import { failText, passText } from './shared/quiz.js';
 import { filesWorkload } from './shared/workload.js';
 
@@ -98,7 +99,7 @@ export default {
     },
     bad: {
       'dc|dns': 'DNS answers name lookups off the request path. Connect Users to DNS, and Users to each data center.',
-      'cdn|dns': cdnBad()['cdn|dns'],
+      'cdn|dns': CDN_DNS_BAD,
       'cdn|cdn': ONE_CDN,
     },
   },

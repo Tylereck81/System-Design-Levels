@@ -21,7 +21,7 @@ const privateGoal = { id: 'private', type: 'metric', text: 'Codes can\'t be gues
 const served99 = servedAtLeast(targets.servedPct);
 // The web server's settings as the canvas shows them (saved settings are checked on load, so these are valid options).
 const codeName = { base62: 'base 62', hash: 'hash', bloom: 'hash + bloom' };
-const ttlChoice = cache().choices[0];
+const linkCache = cache();
 
 export default {
   id: 14,
@@ -85,7 +85,7 @@ export default {
       ],
     },
     db: { ...db(), desc: 'The table of links: id, code, long link. Every new link is a write; every click the cache misses is a read.' },
-    cache: { ...cache(), desc: 'Keeps code → long link in memory. A link never changes, so a cached copy never goes stale. In this game it handles 10,000 lookups/s.', subOf: (n, size) => `${size.mem} GB · TTL ${(ttlChoice.options.find((o) => o.id === n.ttl) || ttlChoice.options[1]).short}`, choices: [ttlChoice] },
+    cache: { ...linkCache, desc: 'Keeps code → long link in memory. A link never changes, so a cached copy never goes stale. In this game it handles 10,000 lookups/s.', choices: [linkCache.choices[0]] }, // TTL only: a link never changes
   },
   palette: ['dns', 'lb', 'web', 'db', 'cache'],
   limits: { dns: 1, lb: 1, web: 1, db: 1, cache: 1 },

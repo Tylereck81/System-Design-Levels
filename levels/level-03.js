@@ -3,7 +3,8 @@
 import { servedGoal, latGoal, costGoal, spofGoal, servedAtLeast } from './shared/goals.js';
 import { shopUsers, dns, lb, NO_DB_NOTE, replicaDb } from './shared/components.js';
 import { dnsLookup, usersToLb, lbToWeb, webToReplicas, lbBad, replicaBad } from './shared/connections.js';
-import { lbText, replicaText, levelComplete, ONE_DNS, TWO_LBS } from './shared/text.js';
+import { lbText, replicaText, levelComplete } from './shared/text.js';
+import { ONE_DNS, TWO_LBS } from './shared/limits.js';
 import { failText, passText } from './shared/quiz.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };

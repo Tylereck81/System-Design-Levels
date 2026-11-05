@@ -3,7 +3,7 @@
 // The bad tables build on each other the way the shop does: load balancer, then replicas, cache and CDN. A level
 // spreads the ones it needs, in that order: `{ ...lbBad(), ...replicaBad(), ...cacheBad() }`.
 // Pure: nothing here reads game state.
-import { ONE_CDN } from './text.js';
+import { ONE_CDN } from './limits.js';
 
 export const dnsLookup = () => ({ from: 'users', to: 'dns', label: 'DNS lookup', desc: 'The device asks DNS for the IP of example.com and gets the load balancer\'s public IP, 203.0.113.10. It happens once, then the answer is cached.' });
 export const usersToLb = () => ({ from: 'users', to: 'lb', label: 'HTTP requests', desc: 'Users send every request to the load balancer\'s public IP. They never see the web servers.' });
@@ -51,11 +51,14 @@ export const cacheBad = () => ({
   'cache|cache': 'Cache servers are not connected to each other. Connect each web server to every cache; it splits the keys over them.',
 });
 
+/** Why the CDN is not connected to DNS. */
+export const CDN_DNS_BAD = 'The CDN needs no connection to DNS here. Shoppers\' devices look up cdn.example.com the same way they look up example.com.';
+
 /** Added once there is a CDN. */
 export const cdnBad = () => ({
   'cdn|web': 'The web servers have private IPs, so the CDN cannot reach them. Connect the CDN to the load balancers: together they are its origin.',
   'cdn|db': 'The CDN only holds static files, which come from the web servers. Connect it to the load balancers.',
   'cache|cdn': 'The cache holds product data for the web servers. The CDN holds files and fetches them through the load balancers.',
-  'cdn|dns': 'The CDN needs no connection to DNS here. Shoppers\' devices look up cdn.example.com the same way they look up example.com.',
+  'cdn|dns': CDN_DNS_BAD,
   'cdn|cdn': ONE_CDN,
 });
