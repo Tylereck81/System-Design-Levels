@@ -1,6 +1,7 @@
 // Level 16: Notification system.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { fmt } from '../js/format.js';
+import { servedGoal, costGoal, servedAtLeast, fmtPct } from './shared/goals.js';
 import { SHARES, SEND_MS, TIMEOUT_MS, OPT_OUT, BLAST, IN_FLIGHT } from '../js/engine/notify.js';
 import level2 from './level-02.js';
 import level10 from './level-10.js';
@@ -9,11 +10,9 @@ const targets = { latencyMs: 1000, servedPct: 99 };
 const BUDGET = 700;
 const RATE = 460; // notification requests a second at the peak
 
-const pct = (x) => x.toFixed(1) + '%';
-const costGoal = (max) => ({ id: 'cost', type: 'struct', text: `Spend at most $${fmt(max)} per month`, test: (g) => g.cost <= max, val: (m, g) => '$' + fmt(g.cost) });
-const served99 = (m) => m.servedPct >= targets.servedPct;
-const servedGoal = { id: 'served', type: 'metric', text: `Send ${targets.servedPct}% of notifications on time`, test: served99, val: (m) => pct(m.servedPct) };
-const optGoal = { id: 'optout', type: 'metric', text: 'Nothing sent to users who opted out', test: (m) => !!m.notify && m.notify.optSent === 0, val: (m) => (m.notify ? pct(100 * m.notify.optSent) : '—') };
+const served99 = servedAtLeast(targets.servedPct);
+const sentGoal = servedGoal(targets, { text: `Send ${targets.servedPct}% of notifications on time` });
+const optGoal = { id: 'optout', type: 'metric', text: 'Nothing sent to users who opted out', test: (m) => !!m.notify && m.notify.optSent === 0, val: (m) => (m.notify ? fmtPct(100 * m.notify.optSent) : '—') };
 const ON_OFF = (what, offName, offSub, offNote, onName, onSub, onNote) => [
   { id: 'off', name: offName, sub: offSub, note: offNote, log: `${what}: ${offName.toLowerCase()}.` },
   { id: 'on', name: onName, sub: onSub, note: onNote, log: `${what}: ${onName.toLowerCase()}.` },
@@ -142,7 +141,7 @@ export default {
       story: `A food delivery app tells users about their orders: ${fmt(RATE)} notifications a second at dinner time. All channels share one queue. Send them on time, and keep push and email going when the SMS provider goes down.`,
       goals: [
         { id: 'est', type: 'gate', text: 'Estimate notifications a second' },
-        servedGoal, costGoal(BUDGET),
+        sentGoal, costGoal(BUDGET),
         { id: 'sms', type: 'exp', text: 'Break it: the SMS provider goes down; push and email still on time' },
       ],
       hint: `Four workers send ${fmt(4 * 1000 / SEND_MS)} a second: add one. Then give each channel its own queue, so SMS sends stuck waiting ${fmt(TIMEOUT_MS)} ms don't hold up push and email.`,
@@ -152,7 +151,7 @@ export default {
       title: 'Respect your users', ref: 'Settings and rate limits', qps: RATE, budget: BUDGET,
       story: `${Math.round(100 * OPT_OUT)}% of requests are for users who turned that channel off. And marketing likes to send one more promotion. Never notify a user who opted out, and survive a marketing blast without flooding anyone.`,
       goals: [
-        optGoal, servedGoal, costGoal(BUDGET),
+        optGoal, sentGoal, costGoal(BUDGET),
         { id: 'blast', type: 'exp', text: 'Break it: marketing sends a blast; nobody flooded, still on time' },
       ],
       hint: 'On the notification server, check each user\'s settings before queuing, and limit how many promotions a user gets a day.',
@@ -162,7 +161,7 @@ export default {
       title: 'Never lose one', ref: 'Reliability', qps: RATE, budget: BUDGET,
       story: 'A notification can be late, or arrive out of order, but must never be lost. Workers crash now and then, and what they had taken from the queue disappears with them. Lose nothing, and don\'t send anything twice.',
       goals: [
-        optGoal, servedGoal, costGoal(BUDGET),
+        optGoal, sentGoal, costGoal(BUDGET),
         { id: 'crash', type: 'exp', text: 'Break it: workers crash; nothing lost, nothing sent twice' },
       ],
       hint: 'Write every notification to a log and resend what wasn\'t confirmed. Some of those had gone out just before the crash: drop event IDs already sent.',
@@ -179,8 +178,8 @@ export default {
       on: `The SMS provider stops answering: each SMS send waits ${fmt(TIMEOUT_MS)} ms, then fails.`, onTone: 'bad',
       off: 'The SMS provider is back.',
       expect: (m) => !!m.notify && m.notify.others >= 0.99,
-      notMet: (m) => `Only ${pct(100 * m.notify.others)} of push and email went out on time: on one shared queue, every worker gets stuck on SMS sends. Give each channel its own queue.`,
-      observed: (m) => `Observed: SMS stopped, and ${pct(100 * m.notify.others)} of push and email still went out on time.`,
+      notMet: (m) => `Only ${fmtPct(100 * m.notify.others)} of push and email went out on time: on one shared queue, every worker gets stuck on SMS sends. Give each channel its own queue.`,
+      observed: (m) => `Observed: SMS stopped, and ${fmtPct(100 * m.notify.others)} of push and email still went out on time.`,
     },
     {
       id: 'blast', kind: 'event', blast: true,
@@ -189,7 +188,7 @@ export default {
       on: `Marketing sends another promotion to everyone: ${BLAST}× the normal traffic, to users who already got today's.`, onTone: 'bad',
       off: 'The blast is over.',
       expect: (m) => !!m.notify && !m.notify.spam && served99(m),
-      notMet: (m) => `Users are flooded, and only ${pct(m.servedPct)} of real notifications go out on time: the blast fills the queue. Limit each user's promotions.`,
+      notMet: (m) => `Users are flooded, and only ${fmtPct(m.servedPct)} of real notifications go out on time: the blast fills the queue. Limit each user's promotions.`,
       observed: () => 'Observed: the per-user limit dropped the blast, and real notifications went out on time.',
     },
     {
@@ -200,8 +199,8 @@ export default {
       off: 'The workers are stable again.',
       expect: (m) => !!m.notify && m.notify.lost === 0 && m.notify.dup === 0,
       notMet: (m) => (m.notify.lost > 0
-        ? `${pct(100 * m.notify.lost)} of notifications are lost with the crashed workers. Log every notification and retry what wasn't confirmed.`
-        : `${pct(100 * m.notify.dup)} of notifications arrive twice: some resent ones had gone out before the crash. Drop event IDs already sent.`),
+        ? `${fmtPct(100 * m.notify.lost)} of notifications are lost with the crashed workers. Log every notification and retry what wasn't confirmed.`
+        : `${fmtPct(100 * m.notify.dup)} of notifications arrive twice: some resent ones had gone out before the crash. Drop event IDs already sent.`),
       observed: () => 'Observed: workers crashed, nothing was lost, and nothing arrived twice.',
     },
   ],

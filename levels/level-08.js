@@ -2,6 +2,7 @@
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 // The level zooms into one data center and shows only the parts it needs.
 import { fmt } from '../js/format.js';
+import { servedGoal, latGoal, costGoal, servedAtLeast } from './shared/goals.js';
 import level2 from './level-02.js';
 import level6 from './level-06.js';
 
@@ -9,16 +10,13 @@ const targets = { latencyMs: 150, servedPct: 99 };
 const BUDGET = 2300;
 const UPLOAD_MS = 1000;
 
-const servedGoal = { id: 'served', type: 'metric', text: `Serve at least ${targets.servedPct}% of requests`, test: (m) => m.servedPct >= targets.servedPct, val: (m) => m.servedPct.toFixed(1) + '%' };
-const latGoal = { id: 'lat', type: 'metric', text: `Response time under ${targets.latencyMs} ms`, test: (m) => m.latency != null && m.latency < targets.latencyMs, val: (m) => m.latency == null ? '—' : fmt(m.latency) + ' ms' };
-const costGoal = (max) => ({ id: 'cost', type: 'struct', text: `Spend at most $${fmt(max)} per month`, test: (g) => g.cost <= max, val: (m, g) => '$' + fmt(g.cost) });
 const seconds = (ms) => (ms < 1000 ? fmt(ms) + ' ms' : ms < 60000 ? (ms / 1000).toFixed(1) + ' s' : (ms / 60000).toFixed(1) + ' min');
 const quick = (m) => m.uploadMs != null && m.uploadMs < UPLOAD_MS;
 const keepsUp = (m) => m.jobsIn > 0 && m.jobsOut >= m.jobsIn * 0.999;
 const uploadGoal = { id: 'upload', type: 'metric', text: 'Creators hear back in under 1 second', test: quick, val: (m) => (m.uploadMs == null ? '—' : seconds(m.uploadMs)) };
 const keepUpGoal = { id: 'keep-up', type: 'metric', text: 'Workers keep up with uploads', test: keepsUp, val: (m) => (m.jobsIn > 0 ? `${m.jobsOut.toFixed(2)} of ${m.jobsIn.toFixed(2)}/s` : '—') };
 const watchGoal = { id: 'watch', type: 'struct', text: 'Monitoring watches the queue', test: (g) => g.onPath('queue').some((q) => g.monitored.has(q.id)), val: () => '' };
-const served99 = (m) => m.servedPct >= targets.servedPct;
+const served99 = servedAtLeast(targets.servedPct);
 const rate = (v) => v.toFixed(2);
 const jobs = (v) => (Math.round(v) === 1 ? '1 job' : `${fmt(v)} jobs`);
 
@@ -153,7 +151,7 @@ export default {
       story: 'Creators now upload episodes. Each web server processes an upload itself before it answers: it trims the silence, evens out the volume and cuts a 30-second preview. That takes 20 seconds of work, so creators wait for minutes, and listeners\' pages slow down too. Put the work on a queue and let workers do it.',
       goals: [
         { id: 'est', type: 'gate', text: 'Estimate the workers\' vCPUs' },
-        uploadGoal, keepUpGoal, servedGoal, latGoal, costGoal(BUDGET),
+        uploadGoal, keepUpGoal, servedGoal(targets), latGoal(targets), costGoal(BUDGET),
       ],
       hint: 'Add a message queue and connect both web servers to it. Add workers and connect the queue to them. Then select the workers and pick at least 20 vCPUs in total, such as 8 M workers.',
       takeaway: 'Creators hear back in milliseconds, and listeners\' pages are fast again: the web servers only publish a message. The slow work runs on workers you size on their own.',
@@ -162,7 +160,7 @@ export default {
       title: 'A bad deploy', ref: 'Decoupling', qps: 1000, writes: 0.1, uploads: 0.001, budget: BUDGET,
       story: 'A bad deploy crashes every worker for half an hour. Creators must still be able to upload, and their jobs must wait safely until the workers are back. Someone must also find out: add monitoring that alerts when the queue grows.',
       goals: [
-        uploadGoal, keepUpGoal, servedGoal, latGoal, costGoal(BUDGET), watchGoal,
+        uploadGoal, keepUpGoal, servedGoal(targets), latGoal(targets), costGoal(BUDGET), watchGoal,
         { id: 'crash-workers', type: 'exp', text: 'Break it: crash the workers; uploads still work, and an alert fires' },
       ],
       hint: 'Add monitoring and connect it to the queue. Then crash the workers and watch the queue grow.',
@@ -172,7 +170,7 @@ export default {
       title: 'Monday rush', ref: 'Scaling workers', qps: 1000, writes: 0.1, uploads: 0.001, budget: BUDGET,
       story: 'Every Monday morning creators upload three times as many episodes. Fixed workers sized for a normal day fall behind, and the queue grows for hours. Enough fixed workers for Monday would blow the budget. Let the workers grow with the queue.',
       goals: [
-        uploadGoal, keepUpGoal, servedGoal, latGoal, costGoal(BUDGET), watchGoal,
+        uploadGoal, keepUpGoal, servedGoal(targets), latGoal(targets), costGoal(BUDGET), watchGoal,
         { id: 'upload-rush', type: 'exp', text: 'Break it: triple the uploads; the workers keep up' },
       ],
       hint: 'Select the workers and set them to autoscale. A group stops at 10 servers, so pick a size whose 10 servers can take 3 jobs a second: L or XL.',

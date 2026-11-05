@@ -1,21 +1,20 @@
 // Level 21: Cloud file sync.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { fmt } from '../js/format.js';
+import { servedGoal, costGoal, servedAtLeast, fmtPct, fmtMoney } from './shared/goals.js';
 import { NEW_MB, EDIT_SHARE, BIG_MB, CHANGED_MB, COMPRESS, BLOCK_MBPS, ONLINE, POLL_CONNS, RECONNECT_RATE, STORED_GB, REGIONS, ALL_VERSIONS, TEN_VERSIONS, DEDUPE, COLD_SHARE, HOT_GB, COLD_GB } from '../js/engine/sync.js';
 import level2 from './level-02.js';
 import level10 from './level-10.js';
 
 const targets = { latencyMs: 1000, servedPct: 99 };
+const MONEY = { millions: true }; // bills reach millions of dollars: "$1.25M"
 const RATE = 556; // uploads a second at the peak
 const GROWTH = 1.3;
 const BUDGET = 6100000;
 const TIGHT = 2000000;
 
-const pct = (x) => x.toFixed(1) + '%';
-const money = (x) => '$' + (x >= 1e6 ? (x / 1e6).toFixed(2) + 'M' : fmt(x));
-const costGoal = (max) => ({ id: 'cost', type: 'struct', text: `Spend at most ${money(max)} per month`, test: (g) => g.cost <= max, val: (m, g) => money(g.cost) });
-const served99 = (m) => m.servedPct >= targets.servedPct;
-const servedGoal = { id: 'served', type: 'metric', text: `Sync ${targets.servedPct}% of uploads`, test: served99, val: (m) => pct(m.servedPct) };
+const served99 = servedAtLeast(targets.servedPct);
+const syncedGoal = servedGoal(targets, { text: `Sync ${targets.servedPct}% of uploads` });
 const connGoal = { id: 'conns', type: 'metric', text: 'Every online device holds a notification connection', test: (m) => !!m.sync && m.sync.fits, val: (m) => (m.sync ? `${fmt(m.sync.connsPerServer / 1000)}k per server` : '—') };
 const ON = (key, label, options) => ({ key, label, options });
 const OFFON = (what, off, offSub, offNote, on, onSub, onNote) => [
@@ -143,7 +142,7 @@ export default {
       story: `${Math.round(100 * EDIT_SHARE)}% of uploads are edits to big files (${BIG_MB} MB on average), and each edit sends the whole file again: the block servers can't keep up. Sync 99% of uploads, and keep going when the load balancer fails.`,
       goals: [
         { id: 'est', type: 'gate', text: 'Estimate the allocated storage' },
-        servedGoal, costGoal(BUDGET),
+        syncedGoal, costGoal(BUDGET, MONEY),
         { id: 'lbdown', type: 'exp', text: 'Break it: the load balancer fails; still 99% synced' },
       ],
       hint: 'Send only changed blocks (delta sync) and compress them. Add a second load balancer as a standby, connected to the block and notification servers.',
@@ -153,7 +152,7 @@ export default {
       title: 'Tell every device', ref: 'Notification service', qps: RATE, budget: BUDGET,
       story: `${fmt(ONLINE / 1e6)} million online devices each hold a long-poll connection, so a change on one shows up on the others. If a notification server dies, its devices must reconnect elsewhere, and a server can only take back ${fmt(RECONNECT_RATE)} a second. Get everyone back within a minute.`,
       goals: [
-        connGoal, servedGoal, costGoal(BUDGET),
+        connGoal, syncedGoal, costGoal(BUDGET, MONEY),
         { id: 'polldown', type: 'exp', text: 'Break it: a notification server dies; every device back within 60 s' },
       ],
       hint: 'More servers mean fewer connections lost when one dies, and more servers to take them back: try 7.',
@@ -161,9 +160,9 @@ export default {
     },
     {
       title: 'The storage bill', ref: 'Save storage space', qps: RATE, budget: TIGHT,
-      story: `Every block is kept in ${REGIONS} regions, every version forever, all in hot storage: about ${money(STORED_GB * ALL_VERSIONS * REGIONS * HOT_GB)} a month. Bring the bill under ${money(TIGHT)}, with room for ${Math.round(100 * (GROWTH - 1))}% more data.`,
+      story: `Every block is kept in ${REGIONS} regions, every version forever, all in hot storage: about ${fmtMoney(STORED_GB * ALL_VERSIONS * REGIONS * HOT_GB, MONEY)} a month. Bring the bill under ${fmtMoney(TIGHT, MONEY)}, with room for ${Math.round(100 * (GROWTH - 1))}% more data.`,
       goals: [
-        servedGoal, costGoal(TIGHT),
+        syncedGoal, costGoal(TIGHT, MONEY),
         { id: 'growth', type: 'exp', text: `Break it: data grows ${Math.round(100 * (GROWTH - 1))}%; the bill stays within budget` },
       ],
       hint: 'Keep a limited number of versions, and move idle data to cold storage. Dropping duplicate blocks saves a little more.',
@@ -180,9 +179,9 @@ export default {
       on: 'The active load balancer fails.', onTone: 'bad',
       off: 'The load balancer is back.',
       expect: served99,
-      notMet: (m) => `Only ${pct(m.servedPct)} synced: every request enters through one load balancer. Add a standby connected to the block and notification servers.`,
+      notMet: (m) => `Only ${fmtPct(m.servedPct)} synced: every request enters through one load balancer. Add a standby connected to the block and notification servers.`,
       issue: 'The only load balancer is down, so no device can sync.',
-      observed: (m) => `Observed: the load balancer failed, and ${pct(m.servedPct)} of uploads still synced through the standby.`,
+      observed: (m) => `Observed: the load balancer failed, and ${fmtPct(m.servedPct)} of uploads still synced through the standby.`,
     },
     {
       id: 'polldown', kind: 'event', pollDies: true,
@@ -203,8 +202,8 @@ export default {
       on: `Next year: ${Math.round(100 * (GROWTH - 1))}% more data stored.`, onTone: 'bad',
       off: 'Back to today\'s data.',
       expect: (m) => !!m.sync && m.cost - Math.round(m.sync.bill / GROWTH) + Math.round(m.sync.bill) <= TIGHT,
-      notMet: (m) => `The storage bill would be ${money(m.sync.bill)} a month. Limit versions and use cold storage.`,
-      observed: (m) => `Observed: data grew, and the storage bill would be ${money(m.sync.bill)}, within budget.`,
+      notMet: (m) => `The storage bill would be ${fmtMoney(m.sync.bill, MONEY)} a month. Limit versions and use cold storage.`,
+      observed: (m) => `Observed: data grew, and the storage bill would be ${fmtMoney(m.sync.bill, MONEY)}, within budget.`,
     },
   ],
 

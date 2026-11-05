@@ -3,6 +3,8 @@
 import js from '@eslint/js';
 import globals from 'globals';
 
+// The helpers in levels/shared/goals.js, under their names there and the names their old copies had.
+const GOAL_HELPERS = '/^(servedGoal|latGoal|costGoal|spofGoal|servedAtLeast|served99|fmtPct|pct|fmtMoney|money)$/';
 const SLEEP = 'Wait for a state instead of a fixed time: playFor, fastForward or a web-first assertion (tests/helpers.js).';
 
 export default [
@@ -33,6 +35,17 @@ export default [
       complexity: ['warn', 15],
       'max-lines-per-function': ['warn', { max: 60, skipBlankLines: true, skipComments: true }],
       'max-len': ['warn', { code: 160, ignoreStrings: true, ignoreTemplateLiterals: true, ignoreUrls: true }],
+    },
+  },
+  {
+    // Level files import the goal helpers from levels/shared/goals.js; a level defining its own copy is an error.
+    // Binding one to the level's numbers is fine: `const served99 = servedAtLeast(targets.servedPct)`.
+    files: ['levels/level-*.js'],
+    rules: {
+      'no-restricted-syntax': ['error', {
+        selector: `:matches(VariableDeclarator[init.type=/^(ArrowFunctionExpression|FunctionExpression|ObjectExpression)$/], FunctionDeclaration)[id.name=${GOAL_HELPERS}]`,
+        message: 'Goal helpers live in levels/shared/goals.js: import them instead of defining them in a level.',
+      }],
     },
   },
   {

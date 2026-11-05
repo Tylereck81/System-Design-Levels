@@ -1,21 +1,17 @@
 // Level 6: Stateless web tier and autoscaling.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
-import { fmt } from '../js/format.js';
+import { servedGoal, latGoal, costGoal, spofGoal, servedAtLeast, fmtPct } from './shared/goals.js';
 import level2 from './level-02.js';
 import level5 from './level-05.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
+const PCT = { wholeFrom: 10 }; // percentages: whole numbers from 10% up
 const BUDGET = 3300;
 const NIGHT_BUDGET = 2900;
 const LOST_MAX = 0.05; // % of shoppers: below this, nobody was logged out
 
-const servedGoal = { id: 'served', type: 'metric', text: `Serve at least ${targets.servedPct}% of requests`, test: (m) => m.servedPct >= targets.servedPct, val: (m) => m.servedPct.toFixed(1) + '%' };
-const latGoal = { id: 'lat', type: 'metric', text: `Response time under ${targets.latencyMs} ms`, test: (m) => m.latency != null && m.latency < targets.latencyMs, val: (m) => m.latency == null ? '—' : fmt(m.latency) + ' ms' };
-const costGoal = (max) => ({ id: 'cost', type: 'struct', text: `Spend at most $${fmt(max)} per month`, test: (g) => g.cost <= max, val: (m, g) => '$' + fmt(g.cost) });
-const spofGoal = { id: 'spof', type: 'metric', text: 'No single point of failure', test: (m) => m.spof === 0, val: (m) => String(m.spof) };
-const served99 = (m) => m.servedPct >= targets.servedPct;
+const served99 = servedAtLeast(targets.servedPct);
 const kept = (m) => m.lostPct < LOST_MAX;
-const pct = (v) => (v >= 10 ? Math.round(v) : v.toFixed(1)) + '%';
 const clock = (h) => String(h).padStart(2, '0') + ':00';
 
 // Traffic over a day as a share of the 20:00 peak, hour by hour. It averages half the peak.
@@ -123,7 +119,7 @@ export default {
     {
       title: 'Empty carts', ref: 'Sessions', qps: 4000, writes: 0.2, files: 0.5, far: 0.3, sessions: true, budget: BUDGET,
       story: 'Shoppers can now log in and fill a cart. Each web server keeps the carts of the shoppers it served in its own memory. The load balancer sends each request to the next server in turn, so half the time a shopper lands on the other server and finds an empty cart. Make every page find its cart.',
-      goals: [servedGoal, latGoal, costGoal(BUDGET)],
+      goals: [servedGoal(targets), latGoal(targets), costGoal(BUDGET)],
       hint: 'Two fixes work. Select a load balancer and pick sticky sessions, so each shopper stays on one server. Or add a session store and connect both web servers to it, so any server can find any cart.',
       takeaway: 'Every page finds its cart now. With sticky sessions, each cart still lives on one server, and Mission 2 takes one away. With a session store, the web servers keep nothing between requests: they are stateless.',
     },
@@ -131,7 +127,7 @@ export default {
       title: 'An update at 10:00', ref: 'Stateless web tier', qps: 4000, writes: 0.2, files: 0.5, far: 0.3, sessions: true, budget: BUDGET,
       story: 'You deploy a new version at 10:00, when traffic is 2,160 req/s: one web server leaves the pool while it restarts. Every shopper on it must keep their cart and stay logged in.',
       goals: [
-        servedGoal, latGoal, spofGoal, costGoal(BUDGET),
+        servedGoal(targets), latGoal(targets), spofGoal(), costGoal(BUDGET),
         { id: 'update-web', type: 'exp', text: 'Break it: take a web server out; no shopper loses their cart' },
       ],
       hint: 'Carts kept in a server\'s memory leave with that server, sticky or not. Add a session store, connect both web servers to it, and round robin is fine again.',
@@ -158,7 +154,7 @@ export default {
       story: 'Traffic follows the day: 4,000 req/s at the 20:00 peak, but only 600 at 04:00. Two XL web servers sized for the peak run all night for nothing. Finance wants the bill at $2,900 a month. Let the web tier grow and shrink with traffic, then run a whole day.',
       goals: [
         { id: 'est', type: 'gate', text: 'Estimate the servers at the peak' },
-        servedGoal, latGoal, spofGoal, costGoal(NIGHT_BUDGET),
+        servedGoal(targets), latGoal(targets), spofGoal(), costGoal(NIGHT_BUDGET),
         { id: 'run-day', type: 'exp', text: 'Break it: run a day; nobody is logged out, at least 99% served' },
       ],
       hint: 'Select each web server and set it to autoscale. A group can\'t shrink below one server of its size, so pick a smaller size, such as M. Keep the session store: the autoscaler removes servers every night.',
@@ -178,7 +174,7 @@ export default {
       off: 'The web server is back in the pool.',
       expect: (m) => served99(m) && kept(m),
       notMet: (m) => (!kept(m)
-        ? `${pct(m.lostPct)} of shoppers had their session on the web server that left. They are logged out and their carts are empty. Keep sessions in a session store that both web servers use.`
+        ? `${fmtPct(m.lostPct, PCT)} of shoppers had their session on the web server that left. They are logged out and their carts are empty. Keep sessions in a session store that both web servers use.`
         : `Only ${m.servedPct.toFixed(1)}% served while a web server is out. The other web server must carry every page alone.`),
       observed: () => 'Observed: a web server is out, and no shopper noticed. The other web server took every page and read each shopper\'s cart from the session store.',
     },
@@ -190,7 +186,7 @@ export default {
       off: 'Day stopped.',
       expect: (m) => served99(m) && kept(m),
       notMet: (m) => (!kept(m)
-        ? `The autoscaler removed servers that held carts in memory: ${pct(m.lostPct)} of shoppers were logged out. Keep sessions in the session store, so servers can be removed safely.`
+        ? `The autoscaler removed servers that held carts in memory: ${fmtPct(m.lostPct, PCT)} of shoppers were logged out. Keep sessions in the session store, so servers can be removed safely.`
         : `Only ${m.servedPct.toFixed(1)}% served. A web server ran out of capacity: a fixed server can't grow, and a group stops at 10 servers.`),
       observed: () => 'Observed: a whole day, and nobody was logged out. The groups shrank at night and grew for the 20:00 peak.',
     },
@@ -199,7 +195,7 @@ export default {
   // Messages the engine shows for this level's design.
   text: {
     ...level5.text,
-    sessionMiss: (name, miss) => `${pct(100 * miss)} of pages reaching the ${name.toLowerCase()} fail: the shopper's session is on another server, so the cart looks empty. Pick sticky sessions on the load balancer, or share sessions in a session store.`,
+    sessionMiss: (name, miss) => `${fmtPct(100 * miss, PCT)} of pages reaching the ${name.toLowerCase()} fail: the shopper's session is on another server, so the cart looks empty. Pick sticky sessions on the load balancer, or share sessions in a session store.`,
     levelComplete: 'Level 6 complete. Take the quiz.',
   },
 

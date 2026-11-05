@@ -1,6 +1,7 @@
 // Level 18: Chat system.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { fmt } from '../js/format.js';
+import { servedGoal, costGoal, servedAtLeast, fmtPct } from './shared/goals.js';
 import { ONLINE, CONN_KB, SERVER_CONNS, MSG_CAP, REQ_CAP, POLL_S, LONG_S, OFFLINE, NIGHT_OFFLINE, FRIENDS, PRESENCE_CAP, HEARTBEAT_S, TRAIN, DROPS_MIN } from '../js/engine/chat.js';
 import level10 from './level-10.js';
 import level2 from './level-02.js';
@@ -9,10 +10,8 @@ const targets = { latencyMs: 150, servedPct: 99 };
 const BUDGET = 1800;
 const MSGS = 36000; // messages a second at the evening peak
 
-const pct = (x) => x.toFixed(1) + '%';
-const costGoal = (max) => ({ id: 'cost', type: 'struct', text: `Spend at most $${fmt(max)} per month`, test: (g) => g.cost <= max, val: (m, g) => '$' + fmt(g.cost) });
-const served99 = (m) => m.servedPct >= targets.servedPct;
-const servedGoal = { id: 'served', type: 'metric', text: `Deliver ${targets.servedPct}% of messages`, test: served99, val: (m) => pct(m.servedPct) };
+const served99 = servedAtLeast(targets.servedPct);
+const deliveredGoal = servedGoal(targets, { text: `Deliver ${targets.servedPct}% of messages` });
 const fast = (m) => !!m.chat && m.chat.delay <= 0.5;
 const delayGoal = { id: 'delay', type: 'metric', text: 'Messages arrive within 0.5 s', test: fast, val: (m) => (m.chat ? (m.chat.delay < 1 ? `${fmt(m.chat.delay * 1000)} ms` : `${m.chat.delay.toFixed(1)} s`) : '—') };
 const pushGoal = { id: 'push', type: 'metric', text: 'Offline friends are told at once', test: (m) => !!m.chat && m.chat.notified === 1, val: (m) => (m.chat ? (m.chat.notified ? 'push' : 'next open') : '—') };
@@ -134,7 +133,7 @@ export default {
       story: `Clients poll every ${POLL_S} seconds, so messages wait and the servers answer "nothing new" all day. Deliver messages within half a second, and keep every user connected when a chat server dies.`,
       goals: [
         { id: 'est', type: 'gate', text: 'Estimate the connection memory' },
-        servedGoal, delayGoal, costGoal(BUDGET),
+        deliveredGoal, delayGoal, costGoal(BUDGET),
         { id: 'dies', type: 'exp', text: 'Break it: a chat server dies; still 99% delivered' },
       ],
       hint: 'Switch to WebSocket. When a server dies, its users must find another one (service discovery), and the others must have memory for them: 20 GB on 3 survivors needs 4 servers.',
@@ -144,7 +143,7 @@ export default {
       title: 'Offline friends', ref: 'Message flows', qps: MSGS, budget: BUDGET,
       story: `About ${Math.round(100 * OFFLINE)}% of recipients are offline when a message arrives: their phone is asleep. Every message is kept, but they should know now, not tomorrow.`,
       goals: [
-        pushGoal, servedGoal, delayGoal, costGoal(BUDGET),
+        pushGoal, deliveredGoal, delayGoal, costGoal(BUDGET),
         { id: 'night', type: 'exp', text: 'Break it: night falls; offline friends still told at once' },
       ],
       hint: 'Have the message store ask the notification system to push to offline recipients.',
@@ -154,7 +153,7 @@ export default {
       title: 'Green dots', ref: 'Online presence', qps: MSGS, budget: BUDGET,
       story: `Each user's green dot shows to ${FRIENDS} friends. Users on trains lose signal in every tunnel, ${DROPS_MIN} times a minute. Keep the dots steady and the presence servers within ${fmt(PRESENCE_CAP / 1e6)} million events a second.`,
       goals: [
-        presenceGoal, pushGoal, servedGoal, delayGoal, costGoal(BUDGET),
+        presenceGoal, pushGoal, deliveredGoal, delayGoal, costGoal(BUDGET),
         { id: 'tunnel', type: 'exp', text: 'Break it: trains go through tunnels; dots steady, presence keeps up' },
       ],
       hint: 'Use heartbeats: a short drop shouldn\'t change anyone\'s status.',
@@ -172,9 +171,9 @@ export default {
       off: 'The server is back.',
       expect: served99,
       notMet: (m) => (m.chat && !m.chat.discovery
-        ? `Only ${pct(m.servedPct)} delivered: the dead server's users keep retrying its address. Let them ask service discovery for a healthy server.`
-        : `Only ${pct(m.servedPct)} delivered: the servers left don't have memory for every connection (${fmt(SERVER_CONNS)} each). Add a server.`),
-      observed: (m) => `Observed: a chat server died, and ${pct(m.servedPct)} of messages were still delivered.`,
+        ? `Only ${fmtPct(m.servedPct)} delivered: the dead server's users keep retrying its address. Let them ask service discovery for a healthy server.`
+        : `Only ${fmtPct(m.servedPct)} delivered: the servers left don't have memory for every connection (${fmt(SERVER_CONNS)} each). Add a server.`),
+      observed: (m) => `Observed: a chat server died, and ${fmtPct(m.servedPct)} of messages were still delivered.`,
     },
     {
       id: 'night', kind: 'event', night: true,

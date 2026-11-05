@@ -2,26 +2,23 @@
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 // From this level on, one box stands for a whole data center: the design built in Levels 2 to 6.
 import { fmt } from '../js/format.js';
+import { servedGoal, latGoal, costGoal, spofGoal, servedAtLeast, fmtPct } from './shared/goals.js';
 import level2 from './level-02.js';
 import level5 from './level-05.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
+const PCT = { wholeFrom: 10 }; // percentages: whole numbers from 10% up
 const FAR_PAGE_MS = 100;
 const BUDGET = 3100;
 const FAILOVER_BUDGET = 3500;
 const NO_DATA_MAX = 0.05; // % of requests: below this, nobody missed their data
 
-const servedGoal = { id: 'served', type: 'metric', text: `Serve at least ${targets.servedPct}% of requests`, test: (m) => m.servedPct >= targets.servedPct, val: (m) => m.servedPct.toFixed(1) + '%' };
-const latGoal = { id: 'lat', type: 'metric', text: `Response time under ${targets.latencyMs} ms`, test: (m) => m.latency != null && m.latency < targets.latencyMs, val: (m) => m.latency == null ? '—' : fmt(m.latency) + ' ms' };
-const costGoal = (max) => ({ id: 'cost', type: 'struct', text: `Spend at most $${fmt(max)} per month`, test: (g) => g.cost <= max, val: (m, g) => '$' + fmt(g.cost) });
-const spofGoal = { id: 'spof', type: 'metric', text: 'No single point of failure', test: (m) => m.spof === 0, val: (m) => String(m.spof) };
 const farPageGoal = {
   id: 'far-page', type: 'metric', text: `Pages reach shoppers in America in under ${FAR_PAGE_MS} ms`,
   test: (m) => m.farPageMs != null && m.farPageMs < FAR_PAGE_MS,
   val: (m) => (m.farPageMs == null ? '—' : fmt(m.farPageMs) + ' ms'),
 };
-const served99 = (m) => m.servedPct >= targets.servedPct;
-const pct = (v) => (v >= 10 ? Math.round(v) : v.toFixed(1)) + '%';
+const served99 = servedAtLeast(targets.servedPct);
 const place = (n) => (n.region === 'far' ? 'Virginia' : 'Frankfurt');
 
 export default {
@@ -107,7 +104,7 @@ export default {
     {
       title: 'Pages for America', ref: 'GeoDNS', qps: 4000, writes: 0.2, files: 0.5, far: 0.3, budget: BUDGET,
       story: 'Files reach America from the CDN in 42 ms, but every page still crosses the ocean: 120 ms there and back, plus 50 ms inside Frankfurt. Open a second data center in Virginia and send shoppers in America to it. Frankfurt then serves only Europe, so it can be smaller: keep the bill at $3,100.',
-      goals: [farPageGoal, servedGoal, latGoal, costGoal(BUDGET)],
+      goals: [farPageGoal, servedGoal(targets), latGoal(targets), costGoal(BUDGET)],
       hint: 'Add a data center, set its location to Virginia, and connect Users to it. Select DNS and switch it to GeoDNS. Frankfurt now carries only Europe\'s 1,400 pages a second, so size M is enough.',
       takeaway: 'Each shopper now reaches the nearest data center: 90 ms for a page in America instead of 170. Each data center is sized for its own region. Mission 2 asks what happens when one of them goes dark.',
     },
@@ -131,7 +128,7 @@ export default {
       },
       story: 'A power failure takes the Virginia data center offline at the evening peak. American shoppers must keep shopping from Frankfurt. That only works if DNS stops sending them to Virginia, Frankfurt is big enough for everyone, and it already has their accounts, carts and orders.',
       goals: [
-        servedGoal, latGoal, spofGoal, costGoal(FAILOVER_BUDGET),
+        servedGoal(targets), latGoal(targets), spofGoal(), costGoal(FAILOVER_BUDGET),
         { id: 'dc-offline', type: 'exp', text: 'Break it: take Virginia offline and still serve at least 99%' },
       ],
       hint: 'Use GeoDNS, so it stops handing out Virginia\'s address. Make Frankfurt big enough for both regions. Then connect Virginia to Frankfurt, so Virginia\'s data is copied there.',
@@ -151,7 +148,7 @@ export default {
       expect: (m) => served99(m) && m.noDataPct < NO_DATA_MAX,
       notMet: (m) => {
         if (m.g.dns && m.g.dns.routing !== 'geo') return `Only ${m.servedPct.toFixed(1)}% served: plain DNS still hands out Virginia's address, and requests sent there fail. Switch DNS to GeoDNS: it checks each data center's health.`;
-        if (m.noDataPct >= NO_DATA_MAX) return `${pct(m.noDataPct)} of requests reach Frankfurt for shoppers whose accounts, carts and orders are only in Virginia, so they fail. Connect Virginia to Frankfurt to copy its data there.`;
+        if (m.noDataPct >= NO_DATA_MAX) return `${fmtPct(m.noDataPct, PCT)} of requests reach Frankfurt for shoppers whose accounts, carts and orders are only in Virginia, so they fail. Connect Virginia to Frankfurt to copy its data there.`;
         return `Only ${m.servedPct.toFixed(1)}% served: Frankfurt now gets every page and is over capacity. Make it bigger.`;
       },
       observed: (m) => `Observed: Virginia offline, ${m.servedPct.toFixed(1)}% served. Shoppers in America got pages from Frankfurt in ${fmt(m.farPageMs || 0)} ms. Their data was there, except the last second of changes: about ${fmt(Math.round(m.lagWrites / 10) * 10)} writes had not arrived yet.`,

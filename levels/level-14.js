@@ -1,6 +1,7 @@
 // Level 14: URL shortener.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { fmt } from '../js/format.js';
+import { servedGoal, latGoal, costGoal, servedAtLeast, fmtPct } from './shared/goals.js';
 import level2 from './level-02.js';
 import level4 from './level-04.js';
 import level6 from './level-06.js';
@@ -13,14 +14,10 @@ const REPEAT = 0.5; // clicks from a browser that has followed the link before
 const VIRAL = 1500; // extra clicks a second on one link
 const BULK = 3000; // new links a second from one account
 
-const pct = (x) => x.toFixed(1) + '%';
-const servedGoal = { id: 'served', type: 'metric', text: `Serve at least ${targets.servedPct}% of requests`, test: (m) => m.servedPct >= targets.servedPct, val: (m) => m.servedPct.toFixed(1) + '%' };
-const latGoal = { id: 'lat', type: 'metric', text: `Response time under ${targets.latencyMs} ms`, test: (m) => m.latency != null && m.latency < targets.latencyMs, val: (m) => m.latency == null ? '—' : fmt(m.latency) + ' ms' };
-const costGoal = (max) => ({ id: 'cost', type: 'struct', text: `Spend at most $${fmt(max)} per month`, test: (g) => g.cost <= max, val: (m, g) => '$' + fmt(g.cost) });
 const counted = (m) => !!m.link && m.link.counted > 0.9999;
-const countGoal = { id: 'counted', type: 'metric', text: 'Every click is counted', test: counted, val: (m) => (m.link ? pct(100 * m.link.counted) : '—') };
+const countGoal = { id: 'counted', type: 'metric', text: 'Every click is counted', test: counted, val: (m) => (m.link ? fmtPct(100 * m.link.counted) : '—') };
 const privateGoal = { id: 'private', type: 'metric', text: 'Codes can\'t be guessed from each other', test: (m) => !!m.link && m.link.code !== 'base62', val: (m) => (m.link ? (m.link.code === 'base62' ? 'in sequence' : 'hashed') : '—') };
-const served99 = (m) => m.servedPct >= targets.servedPct;
+const served99 = servedAtLeast(targets.servedPct);
 // The web server's settings as the canvas shows them (saved settings are checked on load, so these are valid options).
 const codeName = { base62: 'base 62', hash: 'hash', bloom: 'hash + bloom' };
 const ttlChoice = level4.components.cache.choices[0];
@@ -145,7 +142,7 @@ export default {
       story: `A link service with 200 new links and 2,000 clicks a second. Redirects are 301, so a browser that has followed a link goes straight there next time: half the clicks never reach you. Keep it fast when a link goes viral: ${fmt(VIRAL)} more clicks a second, from people who have never clicked it.`,
       goals: [
         { id: 'est', type: 'gate', text: 'Estimate the code length' },
-        servedGoal, latGoal, costGoal(BUDGET),
+        servedGoal(targets), latGoal(targets), costGoal(BUDGET),
         { id: 'viral', type: 'exp', text: 'Break it: a link goes viral; still 99% served' },
       ],
       hint: 'Every click the browser can\'t answer becomes a database read. Add a cache: the viral link is one key, so after the first click every click on it is a hit.',
@@ -155,7 +152,7 @@ export default {
       title: 'Count every click', ref: '301 vs 302', qps: 2200, writes: WRITES, budget: BUDGET,
       story: 'Marketing teams want to see how many people click their links, and when. With 301, a browser\'s second click never reaches you. Count every click, and stay up when a script starts creating links in bulk.',
       goals: [
-        countGoal, servedGoal, latGoal, costGoal(BUDGET),
+        countGoal, servedGoal(targets), latGoal(targets), costGoal(BUDGET),
         { id: 'bulk', type: 'exp', text: 'Break it: one account creates links in bulk; still 99% served' },
       ],
       hint: 'Switch redirects to 302 so every click comes back. Then limit new links per account: one script shouldn\'t be able to fill the database.',
@@ -165,7 +162,7 @@ export default {
       title: 'Private links', ref: 'Hash + collision resolution', qps: 2800, writes: 800 / 2800, budget: BUDGET,
       story: 'Partners now shorten every link in their emails, many of them private (a shared document, an invoice): 800 new links and 2,000 clicks a second. Codes in sequence let anyone try the next one, so codes must not be guessable. Keep it up when one of them goes viral.',
       goals: [
-        privateGoal, countGoal, servedGoal, latGoal, costGoal(BUDGET),
+        privateGoal, countGoal, servedGoal(targets), latGoal(targets), costGoal(BUDGET),
         { id: 'viral', type: 'exp', text: 'Break it: a link goes viral; still 99% served' },
       ],
       hint: 'A hash doesn\'t follow a sequence, but checking each new code in the database doubles the queries for new links. Check a bloom filter in memory instead.',

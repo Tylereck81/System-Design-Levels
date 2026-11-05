@@ -1,6 +1,7 @@
 // Level 1: One server to two tiers.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { fmt } from '../js/format.js';
+import { servedGoal, latGoal } from './shared/goals.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 
@@ -8,8 +9,6 @@ const targets = { latencyMs: 150, servedPct: 99 };
 const webOf = (g) => g.entry.find((n) => n.type === 'web') || null;
 const dbOf = (g) => { const web = webOf(g); return web ? g.next(web).find((n) => n.type === 'db') || null : null; };
 
-const servedGoal = { id: 'served', type: 'metric', text: `Serve at least ${targets.servedPct}% of requests`, test: (m) => m.servedPct >= targets.servedPct, val: (m) => m.servedPct.toFixed(1) + '%' };
-const latGoal = { id: 'lat', type: 'metric', text: `Response time under ${targets.latencyMs} ms`, test: (m) => m.latency != null && m.latency < targets.latencyMs, val: (m) => m.latency == null ? '—' : fmt(m.latency) + ' ms' };
 
 export default {
   id: 1,
@@ -62,7 +61,7 @@ export default {
       goals: [
         { id: 'dns', type: 'struct', text: 'Users can look up example.com in DNS', test: (g) => g.hasDNS },
         { id: 'web', type: 'struct', text: 'Requests reach a web server', test: (g) => !!webOf(g) },
-        servedGoal, latGoal,
+        servedGoal(targets), latGoal(targets),
       ],
       hint: 'Drag DNS and a Web server onto the canvas. Then drag from the + under Users onto each of them (or select Users and use Connections in the inspector), and press Play.',
       takeaway: 'One server ran everything. DNS returned the IP once, then HTTP requests went straight to your server.',
@@ -73,7 +72,7 @@ export default {
       goals: [
         { id: 'tier', type: 'struct', text: 'Data lives on its own database server', test: (g) => !!dbOf(g) },
         { id: 'kind', type: 'struct', text: 'Pick the right database type for this data', test: (g) => dbOf(g)?.kind === 'sql' },
-        servedGoal, latGoal,
+        servedGoal(targets), latGoal(targets),
         { id: 'cost', type: 'struct', text: 'Spend at most $150 per month', test: (g) => g.cost <= 150, val: (m, g) => '$' + g.cost },
       ],
       hint: 'Add a Database, connect Web server → Database, and choose its type. If the response time is still too slow, read the log: a server at 75% busy makes each request take 4× longer. The web server\'s work (20 ms) is slower than a query (10 ms), so its waiting costs you more. Spend where it helps most.',
@@ -98,7 +97,7 @@ export default {
       story: 'Marketing expects 1,000,000 daily active users after the launch. Each user makes about 20 requests a day, and peak traffic is about twice the average. Scale your servers up to survive it.',
       goals: [
         { id: 'est', type: 'gate', text: 'Estimate the peak traffic' },
-        servedGoal, latGoal,
+        servedGoal(targets), latGoal(targets),
         { id: 'cost', type: 'struct', text: 'Spend at most $500 per month', test: (g) => g.cost <= 500, val: (m, g) => '$' + g.cost },
         { id: 'crash', type: 'exp', text: 'Break it: crash the web server' },
         { id: 'spike', type: 'exp', text: 'Break it: send 10× traffic' },
