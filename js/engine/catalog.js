@@ -333,6 +333,17 @@ export function choiceOf(n, key) {
   const ch = COMPONENTS[n.type].choices[key];
   return ch.options[n[key]] ? n[key] : ch.default;
 }
+/** The option object behind choiceOf: what the picked option sets (a count, `on`, a cost…). */
+export const optionOf = (n, key) => COMPONENTS[n.type].choices[key].options[choiceOf(n, key)];
+/** True when `n` exists and its picked option for `key` turns that choice on. */
+export const isOn = (n, key) => !!n && !!optionOf(n, key).on;
 export const sizesOf = (type) => (COMPONENTS[type] || {}).sizes || SIZES;
 /** How many servers a fixed choice runs (1 unless its scaling option gives a count). */
 export const countOf = (n) => { const c = COMPONENTS[n.type] || {}; return (c.choices && c.choices.scaling && c.choices.scaling.options[choiceOf(n, 'scaling')].count) || 1; };
+/** The first node whose type has catalog flag `key` (equal to `value`, when given); null when there is none. */
+export function byFlag(nodes, key, value) {
+  return nodes.find((n) => {
+    const flag = (COMPONENTS[n.type] || {})[key];
+    return value === undefined ? !!flag : flag === value;
+  }) || null;
+}
