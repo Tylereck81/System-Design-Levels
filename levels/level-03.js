@@ -1,8 +1,10 @@
 // Level 3: Database replication.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
-import { fmt } from '../js/format.js';
 import { servedGoal, latGoal, costGoal, spofGoal, servedAtLeast } from './shared/goals.js';
-import level2 from './level-02.js';
+import { shopUsers, dns, lb, NO_DB_NOTE, replicaDb } from './shared/components.js';
+import { dnsLookup, usersToLb, lbToWeb, webToReplicas, lbBad, replicaBad } from './shared/connections.js';
+import { lbText, replicaText, levelComplete, ONE_DNS, TWO_LBS } from './shared/text.js';
+import { failText, passText } from './shared/quiz.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 const DB_BUSY = 0.7;
@@ -33,30 +35,21 @@ export default {
   targets,
 
   components: {
-    users: { name: 'Users', sub: 'Web + mobile app', desc: 'Your shoppers. They look up example.com in DNS, then send requests to the load balancer. Most requests read data, such as product pages and search; the rest write it, such as orders and reviews.' },
-    dns: level2.components.dns,
-    lb: level2.components.lb,
+    users: shopUsers(),
+    dns: dns(),
+    lb: lb(),
     web: {
       name: 'Web server', short: 'Your back-end code',
       desc: 'Runs your back-end code on a private IP. It sends every write to the primary database and shares the reads over the replicas it is connected to.',
-      noDbNote: level2.components.web.noDbNote,
+      noDbNote: NO_DB_NOTE,
     },
-    db: {
-      name: 'Database', short: 'Primary or replica',
-      desc: 'A relational (SQL) database server.',
-      roles: {
-        primary: { name: 'Primary DB', lower: 'primary database', desc: 'Takes every write: each insert, update and delete. It sends each change on to the replicas. There is one primary; the first database you add is it, and every one after it is a replica.' },
-        replica: { name: 'Read replica', lower: 'read replica', desc: 'A copy of the primary that serves reads. It also applies every write the primary sends it, about 1 second behind in this game, and refuses writes of its own.' },
-      },
-      promoteNote: 'Promoting makes this replica the primary, and the current primary becomes a replica. Do it when the primary fails.',
-      downNote: 'This replica is down, so it cannot take over. Promote a healthy one.',
-    },
+    db: replicaDb(),
   },
   palette: ['dns', 'lb', 'web', 'db'],
   limits: { dns: 1, lb: 2, web: 2, db: 4 },
   limitMsg: {
-    dns: 'You only need one DNS service for example.com.',
-    lb: 'Two load balancers is the limit: one active, one standby.',
+    dns: ONE_DNS,
+    lb: TWO_LBS,
     web: 'Two XL web servers carry this level\'s traffic: 3,200 req/s together. This level is about the database.',
     db: 'Four databases is the limit here: one primary and up to three replicas.',
   },
@@ -83,22 +76,12 @@ export default {
 
   connections: {
     ok: {
-      'dns|users': level2.connections.ok['dns|users'],
-      'lb|users': level2.connections.ok['lb|users'],
-      'lb|web': level2.connections.ok['lb|web'],
-      'db|web': {
-        from: 'web', to: 'db', label: 'queries', desc: 'The web server queries the database inside the data center (about 0.5 ms round trip).',
-        byRole: {
-          primary: { label: 'writes', desc: 'The web server sends every write here: new orders, reviews, cart changes. Inside the data center, about 0.5 ms round trip.' },
-          replica: { label: 'reads', desc: 'The web server sends reads here, such as product pages and search, shared evenly over the healthy replicas it is connected to. With none healthy, reads go to the primary.' },
-        },
-      },
+      'dns|users': dnsLookup(),
+      'lb|users': usersToLb(),
+      'lb|web': lbToWeb(),
+      'db|web': webToReplicas(),
     },
-    bad: {
-      ...level2.connections.bad,
-      'db|db': 'Replicas copy from the primary by themselves; databases are not connected to each other here. Connect each web server to the primary and to every replica.',
-      'db|lb': 'The load balancer only spreads requests over web servers. The web servers decide which database gets each query.',
-    },
+    bad: { ...lbBad(), ...replicaBad() },
   },
 
   missions: [
@@ -190,27 +173,12 @@ export default {
   ],
 
   // Messages the engine shows for this level's design.
-  text: {
-    noWeb: level2.text.noWeb,
-    noDns: level2.text.noDns,
-    noBackend: level2.text.noBackend,
-    noPrimary: 'Writes have nowhere to go: a web server is connected only to replicas, and replicas refuse writes. Connect it to the primary, or promote a replica.',
-    combinedOver: level2.text.combinedOver,
-    nosqlOver: level2.text.nosqlOver,
-    oldPrimarySmall: ' It was the primary and is smaller than the other replicas. Keep every database big enough to take over, or promote it back.',
-    copiedWrites: (st) => ` ${fmt(st.copied)} of its ${fmt(st.load)} queries/s are writes copied from the primary.`,
-    promoted: ({ oldDown, missing, lagSecs }) => (oldDown
-      ? `Replica promoted: it is the primary now and takes the writes. The old primary failed before sending its newest writes, and replicas run about ${lagSecs} second behind, so roughly ${fmt(missing)} writes are missing. Teams recover them from the old primary's log with a recovery script.`
-      : 'Replica promoted: it is the primary now, and the old primary copies from it as a replica. In a planned switch like this you let the replica catch up first, so nothing is lost.'),
-    dnsAnswered: level2.text.dnsAnswered,
-    ipTag: level2.text.ipTag,
-    levelComplete: 'Level 3 complete. Take the quiz.',
-  },
+  text: { ...lbText(), ...replicaText(), levelComplete: levelComplete(3) },
 
   quiz: {
     passScore: 8,
-    passText: 'Level 3 is done. Level 4, Cache tier, is next: open it from the level menu at the top.',
-    failText: (pass) => `You need ${pass} to pass. Reread the lesson sections behind the questions you missed, then try again.`,
+    passText: passText(3, 'Cache tier'),
+    failText,
     questions: [
       { q: 'A shopper changes their delivery address. Where does the web server send that update?', o: ['To any replica, picked at random', 'To the primary database', 'To every replica at the same time', 'To the replica with the most capacity'], a: 1, e: 'Every change to the data (insert, update, delete) goes to the primary. The primary then sends it on to each replica. Replicas only serve reads.', r: 'Primary-replica replication' },
       { q: 'Why do most designs run more replicas than primaries?', o: ['Replicas are cheaper machines to run', 'Each replica can accept writes as well', 'Most apps read far more than they write', 'A primary can only feed one replica'], a: 2, e: 'Reads usually outnumber writes by a wide margin: people browse far more than they buy or post. One primary handles the writes, and you add replicas to share the reads.', r: 'Read/write ratio' },

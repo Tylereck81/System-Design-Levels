@@ -2,6 +2,8 @@
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { fmt } from '../js/format.js';
 import { servedGoal, latGoal } from './shared/goals.js';
+import { levelComplete } from './shared/text.js';
+import { failText, passText } from './shared/quiz.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 
@@ -138,13 +140,13 @@ export default {
     nosqlOver: ' NoSQL cannot join, so each request costs 3 lookups.',
     dnsAnswered: 'DNS answered: example.com is at 203.0.113.42. The device caches it.',
     ipTag: 'IP 203.0.113.42 cached',
-    levelComplete: 'Level 1 complete. Take the quiz.',
+    levelComplete: levelComplete(1),
   },
 
   quiz: {
     passScore: 8,
-    passText: 'Level 1 is done. Level 2, Load balancer and horizontal scaling, is next: open it from the level menu at the top.',
-    failText: (pass) => `You need ${pass} to pass. Reread the lesson sections behind the questions you missed, then try again.`,
+    passText: passText(1, 'Load balancer and horizontal scaling'),
+    failText,
     questions: [
       { q: 'A user types api.example.com. What does DNS send back?', o: ['The HTML page for the site', 'A JSON response from the API', 'The IP address of the server', 'A cached copy of the data'], a: 2, e: 'DNS turns a domain name into an IP address, for example 203.0.113.42. The device then sends HTTP requests straight to that IP. DNS never carries the page itself.', r: 'DNS · RFC 1034' },
       { q: 'The mobile app calls GET /products/42. What does the server usually return?', o: ['A JSON object', 'An HTML page', 'A SQL table', 'An image file'], a: 0, e: 'Mobile apps talk to the server over HTTP, and JSON is the common API response format because it is simple. Browsers usually receive HTML pages.', r: 'HTTP APIs and JSON' },

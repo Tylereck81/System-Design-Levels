@@ -3,8 +3,11 @@
 // The level zooms into one data center and shows only the parts it needs.
 import { fmt } from '../js/format.js';
 import { servedGoal, latGoal, costGoal, servedAtLeast } from './shared/goals.js';
-import level2 from './level-02.js';
-import level6 from './level-06.js';
+import { dns, lb, NO_DB_NOTE, db } from './shared/components.js';
+import { dnsLookup, usersToLb, lbToWeb, webToDb, lbBad } from './shared/connections.js';
+import { lbText, levelComplete } from './shared/text.js';
+import { failText, passText } from './shared/quiz.js';
+import { dayTraffic } from './shared/workload.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 const BUDGET = 2300;
@@ -26,21 +29,21 @@ export default {
   saveVersion: 1,
   targets,
   // The day's traffic curve, for the cost of autoscaled workers.
-  workload: { day: level6.workload.day },
+  workload: { day: dayTraffic() },
 
   components: {
     users: {
       name: 'Users', sub: 'Listen and upload',
       desc: 'Listeners open episode pages; creators upload new episodes. At peak, 1 request in 1,000 is an upload: 1 a second.',
     },
-    dns: level2.components.dns,
-    lb: level2.components.lb,
+    dns: dns(),
+    lb: lb(),
     web: {
       name: 'Web server', short: 'Your back-end code',
       desc: 'Runs your back-end code. For an upload it saves the audio, then either processes it itself (trim the silence, even out the volume, cut a 30-second preview: 20 seconds of one vCPU\'s work) or puts a message on the queue and answers the creator at once.',
-      noDbNote: level2.components.web.noDbNote,
+      noDbNote: NO_DB_NOTE,
     },
-    db: level2.components.db,
+    db: db(),
     queue: {
       name: 'Message queue', short: 'Jobs wait here', sub: 'Managed · $50',
       desc: 'A durable buffer for jobs. Web servers (producers) publish a message for each upload and answer the creator at once; workers (consumers) take messages when they have time. Either side can be slow or down without the other noticing. A managed service in this game: 10,000 messages/s, 2 ms to publish, $50/month.',
@@ -105,16 +108,16 @@ export default {
 
   connections: {
     ok: {
-      'dns|users': level2.connections.ok['dns|users'],
-      'lb|users': level2.connections.ok['lb|users'],
-      'lb|web': level2.connections.ok['lb|web'],
-      'db|web': level2.connections.ok['db|web'],
+      'dns|users': dnsLookup(),
+      'lb|users': usersToLb(),
+      'lb|web': lbToWeb(),
+      'db|web': webToDb(),
       'queue|web': { from: 'web', to: 'queue', label: 'publish', desc: 'For each upload, the web server saves the audio and publishes a message: "process episode 4812". It answers the creator straight away; listeners\' pages never touch the queue.' },
       'queue|worker': { from: 'queue', to: 'worker', label: 'jobs', desc: 'Workers take messages from the queue as fast as they can process them. Messages they can\'t take yet stay in the queue.' },
       'monitor|queue': { from: 'monitor', to: 'queue', label: 'watches', desc: 'Monitoring reads the queue\'s length and alerts when it keeps growing: jobs are arriving faster than the workers take them.' },
     },
     bad: {
-      ...level2.connections.bad,
+      ...lbBad(),
       'queue|users': 'Users upload to the web servers through the load balancer. Connect the web servers to the queue.',
       'lb|queue': 'The load balancer sends requests to web servers. Connect the web servers to the queue.',
       'db|queue': 'The database stores the site\'s data; the queue holds jobs. Connect the web servers to the queue.',
@@ -207,17 +210,17 @@ export default {
 
   // Messages the engine shows for this level's design.
   text: {
-    ...level2.text,
+    ...lbText(),
     queueGrowing: (q, alert, waiting) => (alert
       ? `Monitoring alert: the queue grows by ${rate(q.in - q.out)} jobs a second. ${jobs(waiting || 0)} waiting.`
       : `The queue grows by ${rate(q.in - q.out)} jobs a second, and nothing is watching it.`),
-    levelComplete: 'Level 8 complete. Take the quiz.',
+    levelComplete: levelComplete(8),
   },
 
   quiz: {
     passScore: 8,
-    passText: 'Level 8 is done. Level 9, Scale the data tier with sharding, is next: open it from the level menu at the top.',
-    failText: (pass) => `You need ${pass} to pass. Reread the lesson sections behind the questions you missed, then try again.`,
+    passText: passText(8, 'Scale the data tier with sharding'),
+    failText,
     questions: [
       { q: 'What does a message queue do between web servers and workers?', o: ['Answers database queries faster', 'Holds jobs until a worker takes them', 'Spreads incoming requests over the web servers', 'Caches finished files near users'], a: 1, e: 'Producers publish messages to the queue, and consumers take them when they are ready. The queue buffers the work in between.', r: 'Message queue' },
       { q: 'In this design, which are the producers?', o: ['The workers that process files', 'The web servers', 'The database behind the web servers', 'Monitoring'], a: 1, e: 'The web servers create the messages and publish them to the queue. The workers consume them.', r: 'Message queue' },
