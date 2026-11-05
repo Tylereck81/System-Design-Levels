@@ -3,10 +3,10 @@ import { MISSIONS, TXT, PALETTE, S, run, byId, WORKLOAD } from '../state.js';
 import { quorumOutcome } from './quorum.js';
 import { idOutcome } from './ids.js';
 import { DUP_SHARE } from './crawl.js';
-import { ONLINE } from './sync.js';
 import { COMPONENTS, T } from './catalog.js';
 import { workloadsAt, trafficShape } from './workloads.js';
-import { roleOf, isServer, isReplica, isCache, isEdge, isStore, isSticky, scales, sessionsOn, holdsSessions, copiesFor, isLocated, isFar, isGeo, replicates, isQueue, isOffload, isQuorum, quorumOf, isIdGen, idSettingOf, idSpof, createQueries, downloaderOf, crawlSettingsOf, notifySettingsOf, chatSettingsOf, typeaheadSettingsOf, videoSettingsOf, isClustered, clusterSize, clusterLayout, clusterHit, shardShares, keyedShards, limiterRule, hitRate, edgeHit, fallsBack, staleSecs, costOf, serverSpec, splitRule } from './components.js';
+import { kindOf } from './kinds/index.js';
+import { roleOf, isServer, isReplica, isCache, isEdge, isStore, isSticky, scales, sessionsOn, holdsSessions, copiesFor, isLocated, isFar, isGeo, replicates, isQueue, isOffload, isQuorum, quorumOf, isIdGen, idSettingOf, idSpof, createQueries, downloaderOf, crawlSettingsOf, isClustered, clusterSize, clusterLayout, clusterHit, shardShares, keyedShards, limiterRule, hitRate, edgeHit, fallsBack, staleSecs, costOf, serverSpec, splitRule } from './components.js';
 import { activeExps, downIds, trafficFactor, uploadFactor, dayShift, botEdge, resizeBy, partitioned, clockBack, expTotal, expFlag, textOf, PEAK } from './experiments.js';
 
 const outs = (id) => S.edges.filter(e => e.from === id).map(e => byId(e.to)).filter(Boolean);
@@ -219,6 +219,13 @@ function loadPhase(g, qps, sizing, down, r, day, backlog, U, traffic) {
   const load = new Map(), served = new Map(), writes = new Map(), copied = new Map(), hitOf = new Map(), files = new Map(), pool = new Map(), bots = new Map();
   let reads = 0, hits = 0, lost = 0; // reads that went to a cache group and how many it answered; pages whose session was lost
   const add = (m, c, f) => m.set(c.id, (m.get(c.id) || 0) + f);
+  // What a component kind's step gets (kinds/index.js): the workloads' outcomes and write share, settle to record what
+  // a server served and its stat, and forward to send a flow on to every group it hands work to.
+  const ctx = {
+    outcomes, writes: W,
+    settle(n, s, stat) { served.set(n.id, s); r.node[n.id] = stat; },
+    forward(n, flow) { for (const grp of depGroups(n)) for (const [c, f] of split(grp, flow, down, n)) add(load, c, f); },
+  };
   // Sessions: the share of a pool's pages each server receives, the share landing where sessions are shared, and
   // whether the sender keeps each user on one server. A down server that held sessions in memory loses its users' sessions.
   const notePool = (grp, sender, parts, flow, fileFrac) => {
@@ -266,12 +273,10 @@ function loadPhase(g, qps, sizing, down, r, day, backlog, U, traffic) {
     if (COMPONENTS[n.type].quorum) { kvStore(n, L); continue; }
     if (COMPONENTS[n.type].ids) { idGen(n, L); continue; }
     if (COMPONENTS[n.type].crawl === 'download') { download(n, L); continue; }
-    if (COMPONENTS[n.type].notify === 'worker') { sendOut(n, L); continue; }
-    if (COMPONENTS[n.type].feed) { feedService(n, L); continue; }
-    if (COMPONENTS[n.type].chat === 'server') { chatServers(n, L); continue; }
-    if (COMPONENTS[n.type].typeahead) { typeahead(n, L); continue; }
-    if (COMPONENTS[n.type].video === 'upload' || COMPONENTS[n.type].video === 'transcode') { videoStep(n, L); continue; }
-    if (COMPONENTS[n.type].sync === 'block' || COMPONENTS[n.type].sync === 'poll') { syncStep(n, L); continue; }
+    // A kind whose workload is off takes the plain server step below. No level does that today: every level whose
+    // palette has such a type turns its workload on, and a mock interview keeps its level's workload.
+    const nodeKind = kindOf(n);
+    if (nodeKind?.step && (!nodeKind.outcome || outcomes[nodeKind.outcome])) { nodeKind.step(n, L, ctx); continue; }
     if (COMPONENTS[n.type].crawl === 'parse') { parse(n, L); continue; }
     if (COMPONENTS[n.type].limits) { limit(n, L); continue; }
     const sp = serverSpec(n);
@@ -384,7 +389,7 @@ function loadPhase(g, qps, sizing, down, r, day, backlog, U, traffic) {
     r.limitShared = r.limitShared !== false && (!!sg || peers === 1); // one limiter needs no shared store
     r.botThrough += botPass * (1 - d);
     if (sg) for (const [c, f] of split(sg, L * (1 - d), down, n)) add(load, c, f);
-    for (const grp of depGroups(n)) for (const [c, f] of split(grp, s, down, n)) add(load, c, f);
+    ctx.forward(n, s);
   }
   /**
    * A sharded database: each shard is its own server with its share of the queries. The box reports its busiest shard,
@@ -439,76 +444,14 @@ function loadPhase(g, qps, sizing, down, r, day, backlog, U, traffic) {
     const refused = outcomes.crawl ? outcomes.crawl.refused : 0, s = Math.min(L, cap) * (1 - refused);
     served.set(n.id, s);
     r.node[n.id] = { load: L, cap, util: L / cap, ms: c.base, mult: 1, base: c.base, unit: c.unit, drop: 1 - s / L, crawl: { ...d, refused } };
-    for (const grp of depGroups(n)) for (const [x, f] of split(grp, s, down, n)) add(load, x, f);
-  }
-  /**
-   * A notification system's workers: they deliver the share of requests the outcome says goes out on time (or was
-   * rightly skipped); the rest wait, fail or are lost. What they send goes on to the providers.
-   */
-  function sendOut(n, L) {
-    const c = COMPONENTS[n.type], o = outcomes.notify || { served: 1, workers: 1 }, cap = c.cap * o.workers, s = L * o.served;
-    served.set(n.id, s);
-    r.node[n.id] = { load: L, cap, util: L / cap, ms: c.base, mult: 1, base: c.base, unit: c.unit, drop: 1 - o.served, notify: o };
-    for (const grp of depGroups(n)) for (const [x, f] of split(grp, s, down, n)) add(load, x, f);
-  }
-  /**
-   * A news feed's service: posts are always taken; feed loads are answered as far as the post store keeps up with
-   * what is pulled at read time. It reads and writes the feed cache.
-   */
-  function feedService(n, L) {
-    const c = COMPONENTS[n.type], o = outcomes.feed || { served: 1, readMs: c.base }, w = W, s = L * (w + (1 - w) * o.served);
-    served.set(n.id, s);
-    r.node[n.id] = { load: L, cap: c.cap, util: L / c.cap, ms: o.readMs, mult: 1, base: o.readMs, unit: c.unit, drop: 1 - s / L, feed: o };
-    for (const grp of depGroups(n)) for (const [x, f] of split(grp, s, down, n)) add(load, x, f);
-  }
-  /** A chat system's servers: they deliver the share of messages the outcome allows, and store every one. */
-  function chatServers(n, L) {
-    const c = COMPONENTS[n.type], o = outcomes.chat || { served: 1, servers: 1, protocol: 'ws' }, s = L * o.served;
-    const cap = c.cap * o.servers * (o.protocol === 'ws' ? 1 : 2.5); // HTTP servers count requests: 50,000 a second each
-    served.set(n.id, s);
-    r.node[n.id] = { load: L, cap, util: L / cap, ms: c.base, mult: 1, base: c.base, unit: c.unit, drop: 1 - o.served, chat: o };
-    for (const grp of depGroups(n)) for (const [x, f] of split(grp, s, down, n)) add(load, x, f);
-  }
-  /**
-   * Search autocomplete: the API servers answer what their capacity allows; the trie cache's busiest shard fails what
-   * it can't take. Time per request: the API server's, then the lookup.
-   */
-  function typeahead(n, L) {
-    const c = COMPONENTS[n.type], o = outcomes.typeahead, api = c.typeahead === 'api';
-    const cap = api ? o.apiCap : c.cap * o.shards, ms = api ? c.base : o.lookupMs;
-    const ok = api ? Math.min(1, cap / L) : (o.shardLoad > c.cap ? 1 - o.topShare * (1 - c.cap / o.shardLoad) : 1);
-    served.set(n.id, L * ok);
-    r.node[n.id] = { load: L, cap, util: api ? L / cap : o.shardLoad / c.cap, ms, mult: 1, base: ms, unit: c.unit, drop: 1 - ok, typeahead: o };
-    for (const grp of depGroups(n)) for (const [x, f] of split(grp, L * ok, down, n)) add(load, x, f);
-  }
-  /**
-   * A video platform's upload service and transcoding servers: each passes on the share of videos that get through it
-   * (uploads that arrive; videos transcoded and not lost).
-   */
-  function videoStep(n, L) {
-    const c = COMPONENTS[n.type], o = outcomes.video, up = c.video === 'upload';
-    const ok = up ? o.uploaded : o.transcoded, cap = up ? (o.apiLoad ? L / o.apiLoad : c.cap) : c.cap * o.workers; // uploads through the API servers are limited by their links
-    served.set(n.id, L * ok);
-    r.node[n.id] = { load: L, cap, util: L / cap, ms: c.base, mult: 1, base: c.base, unit: c.unit, drop: 1 - ok, video: o };
-    for (const grp of depGroups(n)) for (const [x, f] of split(grp, L * ok, down, n)) add(load, x, f);
-  }
-  /**
-   * Cloud file sync. Block servers move each upload's bytes, up to their links; notification servers hold every
-   * online client's long-poll connection (clients that can't connect can't sync).
-   */
-  function syncStep(n, L) {
-    const c = COMPONENTS[n.type], o = outcomes.sync, block = c.sync === 'block';
-    const work = block ? L * o.mbPerUpload : ONLINE, cap = c.cap * (block ? o.blocks : o.polls), ok = Math.min(1, cap / work);
-    served.set(n.id, L * ok);
-    r.node[n.id] = { load: work, cap, util: work / cap, ms: c.base, mult: 1, base: c.base, unit: c.unit, drop: 1 - ok, sync: o };
-    for (const grp of depGroups(n)) for (const [x, f] of split(grp, L * ok, down, n)) add(load, x, f);
+    ctx.forward(n, s);
   }
   /** A crawler's parser: checks each page; with a duplicate check, only new content goes on to storage. */
   function parse(n, L) {
     const c = COMPONENTS[n.type], set = crawlSettingsOf(null, n), s = Math.min(L, c.cap), u = L / c.cap, mult = qmul(u);
     served.set(n.id, s);
     r.node[n.id] = { load: L, cap: c.cap, util: u, ms: c.base * mult, mult, base: c.base, unit: c.unit, drop: 1 - s / L };
-    for (const grp of depGroups(n)) for (const [x, f] of split(grp, s * (set.dedup ? 1 - DUP_SHARE : 1), down, n)) add(load, x, f);
+    ctx.forward(n, s * (set.dedup ? 1 - DUP_SHARE : 1));
   }
   /**
    * A unique ID generator: each request needs idsPerRequest new IDs. Requests whose IDs it can't make in time fail.
@@ -684,7 +627,7 @@ function countSpofs(g) {
   const spof = new Set();
   const visit = (group, seen) => {
     for (const n of group) {
-      if (group.length === 1 && !COMPONENTS[n.type].managed && !(isClustered(n) && clusterSize(n) > 1) && !(isQuorum(n) && quorumOf(n).N > 1) && !(isIdGen(n) && !idSpof(n)) && !(COMPONENTS[n.type].crawl === 'download' && downloaderOf(n).count > 1) && !(COMPONENTS[n.type].notify === 'worker' && notifySettingsOf(null, null, n).workers > 1) && !(COMPONENTS[n.type].chat === 'server' && chatSettingsOf(n, null).servers > 1) && !(COMPONENTS[n.type].typeahead === 'api' && typeaheadSettingsOf(n, null).apis > 1) && !(COMPONENTS[n.type].typeahead === 'trie' && typeaheadSettingsOf(null, n).shards > 1) && !(COMPONENTS[n.type].video === 'upload') && !(COMPONENTS[n.type].video === 'transcode' && videoSettingsOf(null, n, null).workers > 1) && !(COMPONENTS[n.type].sync === 'block' || COMPONENTS[n.type].sync === 'poll')) spof.add(n.id);
+      if (group.length === 1 && !COMPONENTS[n.type].managed && !(isClustered(n) && clusterSize(n) > 1) && !(isQuorum(n) && quorumOf(n).N > 1) && !(isIdGen(n) && !idSpof(n)) && !(COMPONENTS[n.type].crawl === 'download' && downloaderOf(n).count > 1) && !kindOf(n)?.redundant?.(n)) spof.add(n.id);
       if (seen.has(n.id)) continue;
       seen.add(n.id);
       for (const grp of childGroups(n)) visit(grp, seen);

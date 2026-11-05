@@ -21,3 +21,24 @@ test('each workload has its own result field', () => {
   const fields = WORKLOADS.map((w) => w.field);
   assert.equal(new Set(fields).size, fields.length);
 });
+
+test('a component kind\'s step reads the outcome of a workload', async () => {
+  const { KINDS } = await import('../../js/engine/kinds/index.js');
+  const fields = WORKLOADS.map((w) => w.field);
+  for (const k of KINDS.filter((kind) => kind.step)) assert.ok(fields.includes(k.outcome), `${k.id} reads no workload's outcome`);
+});
+
+test('a level whose palette has a component kind with a step turns that kind\'s workload on', async () => {
+  // loadPhase gives such a type the plain server step while its workload is off; no level (nor its mock interview,
+  // which keeps the level's palette and workload) may rely on that.
+  const [{ kindOf }, { COMPONENTS }] = await Promise.all([import('../../js/engine/kinds/index.js'), import('../../js/engine/catalog.js')]);
+  for (const entry of LEVELS) {
+    const level = (await entry.load()).default, workload = level.workload || {};
+    for (const type of (level.palette || []).filter((t) => COMPONENTS[t])) {
+      const kind = kindOf({ type });
+      if (!kind?.step) continue;
+      const w = WORKLOADS.find((x) => x.field === kind.outcome);
+      assert.ok(w.active(workload), `Level ${entry.id} has ${type} but not the ${kind.outcome} workload`);
+    }
+  }
+});

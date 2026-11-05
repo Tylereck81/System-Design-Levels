@@ -8,11 +8,14 @@
 //   shape   how the outcome changes the traffic the servers see: { qps, writes?, cacheHot? }
 // A level turns on at most one entry (tests/unit/levels.test.mjs checks it). A field must not be the name of another
 // model result field: model() spreads the outcomes into its result.
-import { COMPONENTS } from './catalog.js';
-import {
-  roleOf, linkSettingsOf, crawlSettingsOf, notifySettingsOf, feedSettingsOf, chatSettingsOf, typeaheadSettingsOf,
-  videoSettingsOf, syncSettingsOf,
-} from './components.js';
+import { byFlag } from './catalog.js';
+import { roleOf, linkSettingsOf, crawlSettingsOf } from './components.js';
+import { notifySettingsOf } from './kinds/notify.js';
+import { feedSettingsOf } from './kinds/feed.js';
+import { chatSettingsOf } from './kinds/chat.js';
+import { typeaheadSettingsOf } from './kinds/typeahead.js';
+import { videoSettingsOf } from './kinds/video.js';
+import { syncSettingsOf } from './kinds/sync.js';
 import { linkTraffic } from './links.js';
 import { crawlOutcome } from './crawl.js';
 import { notifyOutcome } from './notify.js';
@@ -21,14 +24,6 @@ import { chatOutcome } from './chat.js';
 import { typeaheadOutcome } from './typeahead.js';
 import { videoOutcome } from './video.js';
 import { mbPerUpload, storageBill, reconnect } from './sync.js';
-
-/** The first node whose type has catalog flag `key` (equal to `value`, when given); null when there is none. */
-function byFlag(nodes, key, value) {
-  return nodes.find((n) => {
-    const flag = (COMPONENTS[n.type] || {})[key];
-    return value === undefined ? !!flag : flag === value;
-  }) || null;
-}
 
 export const WORKLOADS = [
   {

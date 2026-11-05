@@ -6,9 +6,7 @@ import { serverNames, keyShares, movedShare } from './hashring.js';
 import { idOutcome } from './ids.js';
 import { CREATE_QUERIES } from './links.js';
 import { downloaderRate } from './crawl.js';
-import { feedOutcome } from './feed.js';
-import { videoOutcome } from './video.js';
-import { storageBill } from './sync.js';
+import { kindOf } from './kinds/index.js';
 
 export const roleOf = (n) => (COMPONENTS[n.type] || {}).role;
 export const isServer = (n) => roleOf(n) === 'server';
@@ -42,60 +40,6 @@ export function downloaderOf(n, slowDns = false) {
 export function crawlSettingsOf(users, parser) {
   const on = (key) => !!parser && !!COMPONENTS[parser.type].choices[key].options[choiceOf(parser, key)].on;
   return { perHost: !!users && choiceOf(users, 'queues') === 'host', dedup: on('dedup'), filter: on('filter') };
-}
-/** A notification system's settings, from its notification server, message queues and workers (any may be missing). */
-export function notifySettingsOf(notifier, queue, worker) {
-  const on = (n, key) => !!n && !!COMPONENTS[n.type].choices[key].options[choiceOf(n, key)].on;
-  return {
-    check: on(notifier, 'check'), limit: on(notifier, 'limit'),
-    perChannel: !!queue && !!COMPONENTS[queue.type].choices.layout.options[choiceOf(queue, 'layout')].perChannel,
-    workers: worker ? COMPONENTS[worker.type].choices.count.options[choiceOf(worker, 'count')].count : 0,
-    retry: on(worker, 'log'), dedupe: on(worker, 'dedupe'),
-  };
-}
-/** A news feed's settings, from its feed service and feed cache (either may be missing). */
-export function feedSettingsOf(svc, cache) {
-  const ch = (n, key) => COMPONENTS[n.type].choices[key].options[choiceOf(n, key)];
-  return {
-    fanout: svc ? choiceOf(svc, 'fanout') : 'read', workers: svc ? ch(svc, 'workers').count : 0,
-    skipInactive: !!svc && !!ch(svc, 'inactive').skip, idsOnly: !!cache && !!ch(cache, 'store').ids,
-  };
-}
-/** GB the feed cache holds, given the feed service on the canvas (none when feeds are built at read time). */
-export const feedCacheGB = (cache) => feedOutcome(feedSettingsOf(S.nodes.find(n => COMPONENTS[n.type] && COMPONENTS[n.type].feed), cache), { reads: 0, posts: 0 }).cacheGB;
-/** A chat system's settings, from its chat servers and message store (either may be missing). */
-export function chatSettingsOf(srv, store) {
-  const on = (n, key) => !!n && !!COMPONENTS[n.type].choices[key].options[choiceOf(n, key)].on;
-  return {
-    servers: srv ? COMPONENTS[srv.type].choices.count.options[choiceOf(srv, 'count')].count : 0,
-    protocol: srv ? choiceOf(srv, 'protocol') : 'poll', discovery: on(srv, 'reconnect'), heartbeat: on(srv, 'presence'), push: on(store, 'offline'),
-  };
-}
-/** Search autocomplete's settings, from its API servers and trie cache (either may be missing). */
-export function typeaheadSettingsOf(api, trie) {
-  const ch = (n, key) => COMPONENTS[n.type].choices[key].options[choiceOf(n, key)];
-  return {
-    apis: api ? ch(api, 'count').count : 0, browser: !!api && !!ch(api, 'browser').on,
-    method: trie ? choiceOf(trie, 'method') : 'table', shards: trie ? ch(trie, 'shards').count : 1,
-    map: !!trie && !!ch(trie, 'split').on, rebuild: trie ? choiceOf(trie, 'rebuild') : 'weekly',
-  };
-}
-/** A video platform's settings, from its upload service, transcoding servers and delivery (any may be missing). */
-export function videoSettingsOf(up, tc, sv) {
-  const on = (n, key) => !!n && !!COMPONENTS[n.type].choices[key].options[choiceOf(n, key)].on;
-  return {
-    presigned: on(up, 'url'), chunks: on(up, 'chunks'), retry: on(tc, 'retry'), popularOnly: on(sv, 'deliver'),
-    workers: tc ? COMPONENTS[tc.type].choices.workers.options[choiceOf(tc, 'workers')].count : 0,
-  };
-}
-/** Cloud file sync's settings, from its block servers, notification servers and cloud storage (any may be missing). */
-export function syncSettingsOf(block, poll, store) {
-  const on = (n, key) => !!n && !!COMPONENTS[n.type].choices[key].options[choiceOf(n, key)].on;
-  const count = (n) => (n ? COMPONENTS[n.type].choices.count.options[choiceOf(n, 'count')].count : 0);
-  return {
-    blocks: count(block), delta: on(block, 'delta'), compress: on(block, 'compress'), polls: count(poll),
-    tenVersions: on(store, 'versions'), cold: on(store, 'cold'), dedupe: on(store, 'dedupe'),
-  };
 }
 export const isClustered = (n) => !!(COMPONENTS[n.type] || {}).clustered;
 /** Servers in a cache cluster. */
@@ -217,23 +161,17 @@ export const copiesFor = (work, cap) => Math.min(T.maxCopies, Math.max(1, Math.c
  */
 export const dayCopies = (work, cap) => (WORKLOAD.day || [1]).map(f => copiesFor(work * f, cap));
 
-/** Monthly cost of one component. An autoscaled group pays for the servers it runs each hour, given its `work` at the peak. */
+/**
+ * Monthly cost of one component: its kind's price (kinds/) when it has one, else by its catalog entry. An autoscaled group
+ * pays for the servers it runs each hour, given its `work` at the peak.
+ */
 export function costOf(n, work = 0) {
+  const kind = kindOf(n);
+  if (kind?.cost) return kind.cost(n, work, S.nodes);
   const c = COMPONENTS[n.type] || {};
   if (c.sharded) return n.size ? sizesOf(n.type)[n.size].cost * shardCount(n) : 0;
   if (c.clustered) return n.size ? sizesOf(n.type)[n.size].cost * clusterSize(n) : 0;
   if (c.quorum) return c.cost * quorumOf(n).N;
-  if (c.sync === 'block') return c.cost * syncSettingsOf(n, null, null).blocks;
-  if (c.sync === 'poll') return c.cost * syncSettingsOf(null, n, null).polls;
-  if (c.sync === 'store') return Math.round(storageBill(syncSettingsOf(null, null, n)));
-  if (c.video === 'transcode') return c.cost * videoSettingsOf(null, n, null).workers;
-  if (c.video === 'serve') return Math.round(videoOutcome(videoSettingsOf(null, null, n), { rate: 1 }).bill);
-  if (c.typeahead === 'api') return c.cost * typeaheadSettingsOf(n, null).apis;
-  if (c.typeahead === 'trie') return c.cost * typeaheadSettingsOf(null, n).shards + COMPONENTS[n.type].choices.rebuild.options[choiceOf(n, 'rebuild')].cost;
-  if (c.chat === 'server') return c.cost * chatSettingsOf(n, null).servers;
-  if (c.feed) return c.cost + 100 * feedSettingsOf(n, null).workers;
-  if (c.feedCache) return Math.round(2 * feedCacheGB(n));
-  if (c.notify === 'worker') return c.cost * notifySettingsOf(null, null, n).workers;
   if (c.crawl === 'download') return c.cost * downloaderOf(n).count;
   if (c.ids) { const id = idSettingOf(n); return id.method === 'uuid' ? 0 : c.cost * id.servers; }
   if (c.sized && scales(n)) { const k = dayCopies(work, serverSpec(n).cap); return Math.round(sizesOf(n.type)[n.size].cost * k.reduce((a, b) => a + b, 0) / k.length); }

@@ -2,12 +2,7 @@
 // without an import cycle: it may import only modules that import nothing themselves.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-
-const ENGINE = new URL('../../js/engine/', import.meta.url);
-/** The relative modules a file imports, from its import lines. */
-const importsOf = (url) => [...readFileSync(fileURLToPath(url), 'utf8').matchAll(/^import .* from '(\.{1,2}\/[^']+)';$/gm)].map((m) => m[1]);
+import { ENGINE, importsOf } from './imports.mjs';
 
 test('catalog.js imports only modules that import nothing', () => {
   const catalog = new URL('catalog.js', ENGINE);
