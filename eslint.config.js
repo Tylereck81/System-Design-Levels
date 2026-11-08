@@ -8,7 +8,7 @@ const GOAL_HELPERS = '/^(servedGoal|latGoal|costGoal|spofGoal|servedAtLeast|serv
 const SLEEP = 'Wait for a state instead of a fixed time: playFor, fastForward or a web-first assertion (tests/helpers.js).';
 
 export default [
-  { ignores: ['node_modules/', 'test-results/', 'playwright-report/'] },
+  { ignores: ['node_modules/', 'test-results/', 'playwright-report/', 'coverage/'] },
   js.configs.recommended,
   {
     // Everything: plain ES modules, no build step.
@@ -68,6 +68,16 @@ export default [
         { selector: "CallExpression[callee.property.name='waitForTimeout']", message: SLEEP },
         { selector: "CallExpression[callee.name='setTimeout']", message: SLEEP },
       ],
+    },
+  },
+  {
+    // Browser specs take `test` from tests/fixtures.js, which adds code coverage under npm run coverage.
+    files: ['tests/*.spec.js'],
+    rules: {
+      'no-restricted-imports': ['error', { paths: [{
+        name: '@playwright/test', importNames: ['test', 'expect'],
+        message: "Import test and expect from './fixtures.js', so the spec counts in npm run coverage.",
+      }] }],
     },
   },
 ];

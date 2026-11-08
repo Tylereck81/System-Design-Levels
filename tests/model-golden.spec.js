@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 import { freshPage } from './helpers.js';
 
 // Pins Level 1's simulation numbers so refactors cannot change the game's balance.

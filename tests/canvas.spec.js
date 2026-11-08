@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 import { freshPage, buildBasic, center } from './helpers.js';
 
 // The desktop canvas: a wider view, zoom from 100% out to 70%, and the layout around it.

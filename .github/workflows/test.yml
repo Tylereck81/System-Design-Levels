@@ -30,12 +30,31 @@ jobs:
       # and nothing runs after a failed install (its errors would bury the real one).
       - run: npm run lint
         if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
-      - run: npm run test:unit
+      # Both test steps record code coverage as they run (tests/coverage/); the coverage step below reports on it.
+      - id: unit
+        run: npm run test:unit
         if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
+        env:
+          NODE_V8_COVERAGE: ${{ github.workspace }}/coverage/node-v8
       # A test that only passed on its retry is flaky: it fails the job instead of hiding behind the retry.
       - id: e2e
         run: npm run test:e2e -- --fail-on-flaky-tests
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        env:
+          COVERAGE: '1'
+      # Fails if a folder's coverage falls below its minimum. Only after both test steps passed: a failed test
+      # leaves its lines unrun, and the coverage failure would bury the real one.
+      - id: coverage
+        run: npm run coverage:report
+        if: ${{ !cancelled() && steps.unit.outcome == 'success' && steps.e2e.outcome == 'success' }}
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() && (steps.coverage.outcome == 'success' || steps.coverage.outcome == 'failure') }}
+        with:
+          name: coverage-report
+          path: |
+            coverage/report/
+            !coverage/report/.cache/
+          retention-days: 7
       # The browser tests' traces and screenshots, when they are what failed.
       - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() && steps.e2e.outcome == 'failure' }}
