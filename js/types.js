@@ -5,7 +5,7 @@
 /**
  * A component on the canvas. Besides its place, it holds the player's setting for each of its type's choices,
  * by the choice's key (`ttl: '600'`, `role: 'replica'`, `count: '4'`).
- * @typedef {{ id: string, type: string, x: number, y: number } & { [setting: string]: string | number }} Node
+ * @typedef {{ id: string, type: string, x: number, y: number } & { [setting: string]: string | number }} CanvasNode
  */
 
 /** @typedef {{ id: string, from: string, to: string }} Edge */
@@ -16,19 +16,19 @@
  * What the graph looks like, built by graph() (js/engine/model.js). Struct goals and crash targets read it.
  * "On the path" means reachable from Users.
  * @typedef {object} GraphView
- * @property {Node | undefined} users  the client component
- * @property {Node | null} dns         the DNS Users connect to, if any
+ * @property {CanvasNode | undefined} users  the client component
+ * @property {CanvasNode | null} dns   the DNS Users connect to, if any
  * @property {boolean} hasDNS
- * @property {Node[]} entry            the servers Users send pages to
- * @property {Node[]} cdn              the CDNs Users fetch files from
+ * @property {CanvasNode[]} entry      the servers Users send pages to
+ * @property {CanvasNode[]} cdn        the CDNs Users fetch files from
  * @property {boolean} needsDns        the level's palette has a DNS
  * @property {boolean} ready           there is an entry, and DNS when the level needs it
  * @property {number} cost             the design's monthly cost in dollars
- * @property {(type: string) => Node[]} onPath                    the servers of a type on the path
+ * @property {(type: string) => CanvasNode[]} onPath              the servers of a type on the path
  * @property {(type: string) => number} count                     how many of them
  * @property {(from: string, to: string) => boolean} everyReaches  every `from` on the path reaches a `to`
- * @property {(n: Node, to: string) => number} reached            how many `to` on the path `n` connects to directly
- * @property {(n: Node) => Node[]} next                           what `n` connects to
+ * @property {(n: CanvasNode, to: string) => number} reached      how many `to` on the path `n` connects to directly
+ * @property {(n: CanvasNode) => CanvasNode[]} next               what `n` connects to
  * @property {Map<string, number>} peak                           peak load of autoscaled groups, by node id
  * @property {Set<string>} monitored                              ids of the servers a monitor watches
  */
@@ -158,8 +158,8 @@
  * @property {Text} [notMet] @property {Text} [observed] @property {Text} [issue]
  * @property {string | ((hour: number) => string)} [hud]
  * @property {(base: number) => string} [note]
- * @property {(g: GraphView) => Node | null | undefined} [target]
- * @property {(g: GraphView) => Node[]} [targets]
+ * @property {(g: GraphView) => CanvasNode | null | undefined} [target]
+ * @property {(g: GraphView) => CanvasNode[]} [targets]
  * @property {number} [factor] @property {number} [uploadFactor] @property {number} [secs]
  * @property {boolean} [botEdge] @property {number} [resize] @property {boolean} [partition] @property {boolean} [clockBack]
  * @property {number} [viral] @property {number} [bulk] @property {boolean} [slowDns] @property {boolean} [flood]
@@ -181,8 +181,8 @@
  * @property {string} name @property {string} [short] @property {string} [sub] @property {string} [desc]
  * @property {Choice[]} [choices]
  * @property {Record<string, { name: string, lower?: string, desc?: string }>} [roles]
- * @property {(n: Node, size: any, st?: NodeStat) => string} [subOf]  the line under its name on the canvas
- * @property {(n: Node) => string} [nameOf]
+ * @property {(n: CanvasNode, size: any, st?: NodeStat) => string} [subOf]  the line under its name on the canvas
+ * @property {(n: CanvasNode) => string} [nameOf]
  * @property {(size: any) => string} [sizeWhat]
  * @property {Record<string, string>} [live]
  * @property {Record<string, string> | null} [regions]
@@ -210,7 +210,7 @@
  * @property {string[]} palette     the types the player can add
  * @property {Record<string, number>} limits  how many of each type
  * @property {Record<string, string>} limitMsg  shown when a type is at its limit
- * @property {Node[]} startNodes @property {Edge[]} [startEdges]
+ * @property {CanvasNode[]} startNodes @property {Edge[]} [startEdges]
  * @property {Record<string, Point | Point[]>} slots  where a new component of a type is placed: the first free spot
  * @property {{ ok: Record<string, { from: string, to: string, label: string, desc: string }>, bad: Record<string, string> }} connections
  *   allowed and refused links, keyed by the two types in alphabetical order (`'db|web'`)
