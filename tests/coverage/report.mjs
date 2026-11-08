@@ -3,6 +3,7 @@
 // the files with the most untested lines, and fails if a folder falls below its minimum.
 // Run by tests/coverage/run.mjs (npm run coverage); CI runs it on its own after the test steps.
 // Writing the report uses up the browser data, so a second report needs the browser tests run again.
+// A run of some specs only (npm run coverage -- tests/level-03.spec.js) is for reading the report; it fails the minimums.
 import { existsSync } from 'node:fs';
 import { MCR } from 'monocart-coverage-reports';
 import { coverageOptions, NODE_RAW_DIR } from './options.mjs';
@@ -10,19 +11,20 @@ import { coverageOptions, NODE_RAW_DIR } from './options.mjs';
 /**
  * Percent of lines and branches the tests run, per folder: the values measured when coverage was added, rounded down.
  * Coverage can only go up: when tests raise a folder's numbers, raise its minimums here in the same change.
+ * A file counts under the longest folder its path starts with, so `js/` holds only the files no longer entry claims.
  */
 const MINIMUMS = {
   'js/engine/': { lines: 93, branches: 90 }, // 2026-11-08: 93.09%, 90.71%
   'js/ui/': { lines: 91, branches: 93 }, // 91.81%, 93.01%
-  'js/ (other files)': { lines: 90, branches: 90 }, // 90.73%, 90.59%
+  'js/': { lines: 90, branches: 90 }, // 90.73%, 90.59%
   'levels/': { lines: 97, branches: 80 }, // 97.83%, 80.64%
 };
 const METRICS = ['lines', 'branches'];
 const UNTESTED_SHOWN = 10;
+const FOLDERS = Object.keys(MINIMUMS).sort((a, b) => b.length - a.length); // longest first
 
-/** The MINIMUMS key a file is counted under. */
-const folderOf = (path) => Object.keys(MINIMUMS).find((dir) => path.startsWith(dir))
-  ?? (path.startsWith('js/') ? 'js/ (other files)' : null);
+/** The MINIMUMS key a file is counted under, or undefined. */
+const folderOf = (path) => FOLDERS.find((dir) => path.startsWith(dir));
 
 const pct = ({ covered, total }) => (total ? (100 * covered) / total : 100);
 
