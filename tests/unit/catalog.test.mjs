@@ -1,3 +1,5 @@
+// tests/unit/: Node tests (npm run test:unit) of single modules and the level data, no page.
+// A new file here is added to the test:unit script by name.
 // The component catalog stays free of dependencies, so js/state.js (and later every component kind) can import it
 // without an import cycle: it may import only modules that import nothing themselves.
 import { test } from 'node:test';

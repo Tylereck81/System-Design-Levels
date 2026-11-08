@@ -1,4 +1,4 @@
-// Shared by the simulation snapshot spec (tests/snapshot.spec.js) and its capture and collect scripts.
+// Shared by the simulation snapshot spec (tests/snapshot/snapshot.spec.js) and its capture and collect scripts.
 // Paths are found from this file, not from the folder a command runs in.
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';

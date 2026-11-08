@@ -72,11 +72,11 @@ export default [
   },
   {
     // Browser specs take `test` from tests/fixtures.js, which adds code coverage under npm run coverage.
-    files: ['tests/*.spec.js'],
+    files: ['tests/**/*.spec.js'],
     rules: {
       'no-restricted-imports': ['error', { paths: [{
         name: '@playwright/test', importNames: ['test', 'expect'],
-        message: "Import test and expect from './fixtures.js', so the spec counts in npm run coverage.",
+        message: "Import test and expect from '../fixtures.js', so the spec counts in npm run coverage.",
       }] }],
     },
   },

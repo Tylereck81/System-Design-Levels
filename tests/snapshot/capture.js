@@ -1,4 +1,6 @@
-// Records the designs the tests build, as input for the simulation snapshot (see tests/snapshot.spec.js).
+// tests/snapshot/: the simulation snapshot, a refactor guard run with the browser tests (npm run test:e2e); its rules
+// are in the header of snapshot.spec.js.
+// Records the designs the tests build, as input for the simulation snapshot (see tests/snapshot/snapshot.spec.js).
 // Off unless SDL_CAPTURE=1, so normal runs are unaffected.
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { join, basename } from 'node:path';

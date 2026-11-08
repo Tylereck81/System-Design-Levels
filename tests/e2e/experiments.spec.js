@@ -1,5 +1,5 @@
-import { test, expect } from './fixtures.js';
-import { freshPage, unlockMissions, buildBasic, fastForward, logText, state } from './helpers.js';
+import { test, expect } from '../fixtures.js';
+import { freshPage, unlockMissions, buildBasic, fastForward, logText, state } from '../helpers.js';
 
 // Engine features for Break-it experiments that later levels rely on. Level 1's own experiments
 // don't use them, so these tests add them to the loaded level the way a level file would.

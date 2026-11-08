@@ -1,6 +1,6 @@
-import { test, expect } from './fixtures.js';
-import { freshPage } from './helpers.js';
-import { LEVELS } from '../levels/index.js';
+import { test, expect } from '../fixtures.js';
+import { freshPage } from '../helpers.js';
+import { LEVELS } from '../../levels/index.js';
 
 // Every level's quiz tab names the level, the number of questions and the pass score. The quiz rules themselves
 // (10 questions, pass score 8, balance, length, answer keys) are checked without a browser in tests/unit/levels.test.mjs.

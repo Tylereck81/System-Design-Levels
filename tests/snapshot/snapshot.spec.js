@@ -1,9 +1,9 @@
-import { test, expect } from './fixtures.js';
+import { test, expect } from '../fixtures.js';
 import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { freshPage } from './helpers.js';
-import { LEVELS } from '../levels/index.js';
-import { DESIGNS_DIR, EXPECTED_DIR, fileOf, designId } from './snapshot/common.js';
+import { freshPage } from '../helpers.js';
+import { LEVELS } from '../../levels/index.js';
+import { DESIGNS_DIR, EXPECTED_DIR, fileOf, designId } from './common.js';
 
 /*
  * Simulation snapshot: a refactor guard.
@@ -156,7 +156,7 @@ test.describe('Simulation snapshot', () => {
   for (const { id } of LEVELS) {
     test(`Level ${id} gives the recorded numbers`, async ({ page }) => {
       const designsFile = join(DESIGNS_DIR, fileOf(id)), expectedFile = join(EXPECTED_DIR, fileOf(id));
-      expect(existsSync(designsFile), `${designsFile} is missing: see the header of tests/snapshot.spec.js`).toBe(true);
+      expect(existsSync(designsFile), `${designsFile} is missing: see the header of tests/snapshot/snapshot.spec.js`).toBe(true);
       const designs = JSON.parse(readFileSync(designsFile, 'utf8')).designs.map((d) => ({ ...d, id: designId(d) }));
       await freshPage(page, `#level-${id}/build`);
       const results = await page.evaluate(measureLevel, { designs, backlogJobs: BACKLOG_JOBS, dayHours: DAY_HOURS });
@@ -167,7 +167,7 @@ test.describe('Simulation snapshot', () => {
         test.info().annotations.push({ type: 'updated', description: `${expectedFile}: ${lines.length} cases` });
         return;
       }
-      expect(existsSync(expectedFile), `${expectedFile} is missing: see the header of tests/snapshot.spec.js`).toBe(true);
+      expect(existsSync(expectedFile), `${expectedFile} is missing: see the header of tests/snapshot/snapshot.spec.js`).toBe(true);
       const expected = JSON.parse(readFileSync(expectedFile, 'utf8'));
       const found = [];
       for (const name of new Set([...Object.keys(expected), ...Object.keys(results)])) {
