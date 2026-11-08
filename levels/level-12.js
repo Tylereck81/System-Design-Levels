@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { Level, Goal } from '../js/types.js' */
 // Level 12: Distributed key-value store.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { servedGoal, latGoal, costGoal, servedAtLeast, fmtPct } from './shared/goals.js';
@@ -12,14 +14,19 @@ const BUDGET = 1600;
 
 // The store's setting as the canvas shows it (saved settings are checked on load, so these are valid options).
 const quorumOf = (n) => { const N = Number(n.n) || 3; return { N, W: Math.min(N, Number(n.w) || 1), R: Math.min(N, Number(n.r) || 1), sloppy: n.mode === 'sloppy' }; };
+/** @type {Goal} */
 const replicasGoal = { id: 'replicas', type: 'metric', text: 'Every key kept on at least 3 replicas', test: (m) => !!m.kvQuorum && m.kvQuorum.N >= 3, val: (m) => (m.kvQuorum ? `N = ${m.kvQuorum.N}` : '—') };
 const fresh = (m) => m.kvStalePct != null && m.kvStalePct < 1e-9;
+/** @type {Goal} */
 const freshGoal = { id: 'fresh', type: 'metric', text: 'No read returns an old seat map', test: fresh, val: (m) => (m.kvStalePct == null ? '—' : fmtPct(m.kvStalePct)) };
+/** @type {Goal} */
 const writeGoal = { id: 'durable', type: 'metric', text: 'Each cart change confirmed by at least 2 replicas', test: (m) => !!m.kvQuorum && m.kvQuorum.W >= 2, val: (m) => (m.kvQuorum ? `W = ${m.kvQuorum.W}` : '—') };
+/** @type {Goal} */
 const fastGoal = { id: 'fastread', type: 'metric', text: 'Seat reads answered by the store in 2 ms', test: (m) => m.kvReadMs != null && m.kvReadMs <= 2, val: (m) => (m.kvReadMs == null ? '—' : m.kvReadMs + ' ms') };
 const served99 = servedAtLeast(targets.servedPct);
 const CART = 1; // the mission that keeps answering through the partition; the others must never be stale
 
+/** @type {Level} */
 export default {
   id: 12,
   saveKey: 'sdl-level12-v1',

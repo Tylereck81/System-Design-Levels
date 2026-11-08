@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { Level, Goal } from '../js/types.js' */
 // Level 21: Cloud file sync.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { fmt } from '../js/format.js';
@@ -17,6 +19,7 @@ const TIGHT = 2000000;
 
 const served99 = servedAtLeast(targets.servedPct);
 const syncedGoal = servedGoal(targets, { text: `Sync ${targets.servedPct}% of uploads` });
+/** @type {Goal} */
 const connGoal = { id: 'conns', type: 'metric', text: 'Every online device holds a notification connection', test: (m) => !!m.sync && m.sync.fits, val: (m) => (m.sync ? `${fmt(m.sync.connsPerServer / 1000)}k per server` : '—') };
 const ON = (key, label, options) => ({ key, label, options });
 const OFFON = (what, off, offSub, offNote, on, onSub, onNote) => [
@@ -24,6 +27,7 @@ const OFFON = (what, off, offSub, offNote, on, onSub, onNote) => [
   { id: 'on', name: on, sub: onSub, note: onNote, log: `${what}: ${on.toLowerCase()}.` },
 ];
 
+/** @type {Level} */
 export default {
   id: 21,
   saveKey: 'sdl-level21-v1',

@@ -1,3 +1,4 @@
+// @ts-check
 // Quiz messages that every level shares. Pure: nothing here reads game state.
 
 /** Shown when the player scores below `pass`. */

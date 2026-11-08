@@ -1,3 +1,4 @@
+// @ts-check
 // Component definitions that several levels use: the shop's DNS, load balancer, databases, cache and CDN, the
 // autoscaled web server and the sharded database. Each object is made by a function, so every level gets its own
 // copy and a change in one level can never leak into another. Strings and pure functions are shared as they are.

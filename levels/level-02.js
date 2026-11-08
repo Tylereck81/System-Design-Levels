@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { Level, Goal } from '../js/types.js' */
 // Level 2: Load balancer and horizontal scaling.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { servedGoal, latGoal, costGoal, servedAtLeast } from './shared/goals.js';
@@ -9,6 +11,7 @@ import { failText, passText } from './shared/quiz.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 
+/** @type {Goal} */
 const sharedDbGoal = { id: 'shared', type: 'struct', text: 'Every web server uses the shared database', test: (g) => g.everyReaches('web', 'db') };
 const served99 = servedAtLeast(targets.servedPct);
 const TIER = { db: 'database', lb: 'load balancer' }; // names for the bottleneck message
@@ -24,6 +27,7 @@ function fewestReached(g) {
 }
 const standbyReady = (g) => { const f = fewestReached(g); return g.count('lb') >= 2 && f.total > 0 && f.n === f.total; };
 
+/** @type {Level} */
 export default {
   id: 2,
   saveKey: 'sdl-level2-v1',

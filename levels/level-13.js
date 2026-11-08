@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { Level, Goal } from '../js/types.js' */
 // Level 13: Unique ID generator.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { fmt } from '../js/format.js';
@@ -19,15 +21,23 @@ const QPS = 3000; // requests a second, so 12,000 IDs a second
 const idOf = (n) => ({ method: n.method || 'uuid', servers: Number(n.servers) || 1, wait: n.clock === 'wait' });
 const unique = (m) => m.idDupPct != null && m.idDupPct < 1e-9;
 const served99 = servedAtLeast(targets.servedPct);
+/** @type {Goal} */
 const uniqueGoal = { id: 'unique', type: 'metric', text: 'Every ID is unique', test: unique, val: (m) => (m.idDupPct == null ? '—' : fmtPct(m.idDupPct, PCT) + ' repeat') };
+/** @type {Goal} */
 const numericGoal = { id: 'numeric', type: 'metric', text: 'IDs are numbers only', test: (m) => m.idNumeric === true, val: (m) => (m.idNumeric == null ? '—' : m.idNumeric ? 'digits' : 'hex text') };
+/** @type {Goal} */
 const bitsGoal = { id: 'bits', type: 'metric', text: 'IDs fit in 64 bits', test: (m) => m.idBits != null && m.idBits <= 64, val: (m) => (m.idBits == null ? '—' : m.idBits + ' bits') };
+/** @type {Goal} */
 const orderGoal = { id: 'ordered', type: 'metric', text: 'An ID made later is always larger', test: (m) => m.idOrdered === true, val: (m) => (m.idOrdered == null ? '—' : m.idOrdered ? 'yes' : 'no') };
+/** @type {Goal} */
 const rateGoal = { id: 'rate', type: 'metric', text: `Make ${fmt(QPS * IDS_PER_REQUEST)} IDs a second (${targets.servedPct}% of requests served)`, test: served99, val: (m) => (m.idMade == null ? m.servedPct.toFixed(1) + '%' : fmt(m.idMade) + '/s') };
+/** @type {Goal} */
 const survivesFailureGoal = { id: 'nospof', type: 'metric', text: 'The generator keeps working if one server fails', test: (m) => m.idSpof === false, val: (m) => (m.idSpof == null ? '—' : m.idSpof ? '1 server' : 'yes') };
+/** @type {Goal[]} */
 const requirements = [uniqueGoal, numericGoal, bitsGoal, rateGoal, survivesFailureGoal];
 const methodName = { step: 'Multi-primary', uuid: 'UUID', ticket: 'Ticket server', snow: 'Timestamp-based' };
 
+/** @type {Level} */
 export default {
   id: 13,
   saveKey: 'sdl-level13-v1',
@@ -341,6 +351,7 @@ export default {
 
     const f2 = $('figBits'); f2.textContent = ''; figDefs(f2);
     // Widths in proportion to the bits, 9.5 px a bit.
+    /** @type {[string, number, string][]} */
     const parts = [['0', 1, '1'], ['timestamp', 41, '41 bits'], ['DC', 5, '5'], ['M', 5, '5'], ['sequence', 12, '12 bits']];
     let x = 26;
     parts.forEach(([name, bits, sub], i) => {

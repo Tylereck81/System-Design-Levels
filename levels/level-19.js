@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { Level, Goal } from '../js/types.js' */
 // Level 19: Search autocomplete.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { fmt } from '../js/format.js';
@@ -16,9 +18,11 @@ const answeredGoal = servedGoal(targets, { text: `Answer ${targets.servedPct}% o
 const suggestGoal = latGoal(targets, { text: `Suggestions in under ${targets.latencyMs} ms` });
 const ok = (m) => served99(m) && m.latency != null && m.latency < targets.latencyMs;
 const fresh = (m) => !!m.typeahead && m.typeahead.staleH <= 1;
+/** @type {Goal} */
 const freshGoal = { id: 'fresh', type: 'metric', text: 'A new trending search shows up within an hour', test: fresh, val: (m) => (m.typeahead ? `${m.typeahead.staleH} h` : '—') };
 const ON = (key, label, options) => ({ key, label, options });
 
+/** @type {Level} */
 export default {
   id: 19,
   saveKey: 'sdl-level19-v1',

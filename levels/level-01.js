@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { Level } from '../js/types.js' */
 // Level 1: One server to two tiers.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { fmt } from '../js/format.js';
@@ -12,6 +14,7 @@ const webOf = (g) => g.entry.find((n) => n.type === 'web') || null;
 const dbOf = (g) => { const web = webOf(g); return web ? g.next(web).find((n) => n.type === 'db') || null : null; };
 
 
+/** @type {Level} */
 export default {
   id: 1,
   saveKey: 'sdl-level1-v1',

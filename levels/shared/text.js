@@ -1,3 +1,4 @@
+// @ts-check
 // The engine's design messages (`text`) that several levels show.
 // Strings are shared as they are; objects are made by functions, so every level gets its own copy.
 // Pure: it imports only the formatting helper.

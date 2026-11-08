@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { Level } from '../js/types.js' */
 // Level 20: Video platform.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { fmt } from '../js/format.js';
@@ -17,6 +19,7 @@ const served99 = servedAtLeast(targets.servedPct);
 const publishedGoal = servedGoal(targets, { text: `Publish ${targets.servedPct}% of uploaded videos` });
 const ON = (key, label, options) => ({ key, label, options });
 
+/** @type {Level} */
 export default {
   id: 20,
   saveKey: 'sdl-level20-v1',

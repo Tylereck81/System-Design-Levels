@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { Level, Goal } from '../js/types.js' */
 // Level 18: Chat system.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { fmt } from '../js/format.js';
@@ -13,11 +15,15 @@ const MSGS = 36000; // messages a second at the evening peak
 const served99 = servedAtLeast(targets.servedPct);
 const deliveredGoal = servedGoal(targets, { text: `Deliver ${targets.servedPct}% of messages` });
 const fast = (m) => !!m.chat && m.chat.delay <= 0.5;
+/** @type {Goal} */
 const delayGoal = { id: 'delay', type: 'metric', text: 'Messages arrive within 0.5 s', test: fast, val: (m) => (m.chat ? (m.chat.delay < 1 ? `${fmt(m.chat.delay * 1000)} ms` : `${m.chat.delay.toFixed(1)} s`) : '—') };
+/** @type {Goal} */
 const pushGoal = { id: 'push', type: 'metric', text: 'Offline friends are told at once', test: (m) => !!m.chat && m.chat.notified === 1, val: (m) => (m.chat ? (m.chat.notified ? 'push' : 'next open') : '—') };
 const presenceOk = (m) => !!m.chat && m.chat.presenceLoad <= PRESENCE_CAP && m.chat.flips === 0;
+/** @type {Goal} */
 const presenceGoal = { id: 'presence', type: 'metric', text: 'Green dots keep up and don\'t flicker', test: presenceOk, val: (m) => (m.chat ? `${fmt(m.chat.presenceLoad / 1000)}k/s` : '—') };
 
+/** @type {Level} */
 export default {
   id: 18,
   saveKey: 'sdl-level18-v1',

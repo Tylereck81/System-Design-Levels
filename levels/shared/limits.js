@@ -1,3 +1,4 @@
+// @ts-check
 // Limit messages (`limitMsg`) that several levels show when the player tries to add one component too many.
 // Pure: strings only.
 

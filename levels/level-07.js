@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { Level, Goal } from '../js/types.js' */
 // Level 7: Multiple data centers.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 // From this level on, one box stands for a whole data center: the design built in Levels 2 to 6.
@@ -17,6 +19,7 @@ const BUDGET = 3100;
 const FAILOVER_BUDGET = 3500;
 const NO_DATA_MAX = 0.05; // % of requests: below this, nobody missed their data
 
+/** @type {Goal} */
 const farPageGoal = {
   id: 'far-page', type: 'metric', text: `Pages reach shoppers in America in under ${FAR_PAGE_MS} ms`,
   test: (m) => m.farPageMs != null && m.farPageMs < FAR_PAGE_MS,
@@ -25,6 +28,7 @@ const farPageGoal = {
 const served99 = servedAtLeast(targets.servedPct);
 const place = (n) => (n.region === 'far' ? 'Virginia' : 'Frankfurt');
 
+/** @type {Level} */
 export default {
   id: 7,
   saveKey: 'sdl-level7-v1',

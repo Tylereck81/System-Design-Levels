@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { Level, Goal } from '../js/types.js' */
 // Level 11: Consistent hashing.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { fmt } from '../js/format.js';
@@ -17,6 +19,7 @@ const MOVE_MAX = 0.25;
 const SPREAD_MAX = 0.1;
 
 const even = (m) => m.ringSpread != null && m.ringSpread <= SPREAD_MAX + 1e-9;
+/** @type {Goal} */
 const spreadGoal = {
   id: 'spread', type: 'metric', text: `Busiest cache server at most ${Math.round(SPREAD_MAX * 100)}% above the average`, test: even,
   val: (m) => (m.ringSpread == null ? '—' : '+' + fmtPct(m.ringSpread, PCT)),
@@ -26,6 +29,7 @@ const fewMoved = (m) => m.ringMoved != null && m.ringMoved <= MOVE_MAX + 1e-9;
 const hashShort = { mod: 'hash % N', ring: 'ring', v10: 'ring · 10 vnodes', v100: 'ring · 100 vnodes', v500: 'ring · 500 vnodes' };
 const dbOver = (m) => { const st = Object.values(m.node).find((s) => s.unit === 'queries/s'); return st ? st.load : 0; };
 
+/** @type {Level} */
 export default {
   id: 11,
   saveKey: 'sdl-level11-v1',

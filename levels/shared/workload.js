@@ -1,3 +1,4 @@
+// @ts-check
 // Workload pieces that several levels share. Each is made by a function, so every level gets its own copy.
 // Pure: nothing here reads game state.
 
