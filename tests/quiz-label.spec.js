@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 import { freshPage } from './helpers.js';
 import { LEVELS } from '../levels/index.js';
 

@@ -12,6 +12,8 @@
     "test": "npm run lint && npm run test:unit && npm run test:e2e",
     "test:unit": "node --test tests/unit/levels.test.mjs tests/unit/catalog.test.mjs tests/unit/kinds.test.mjs tests/unit/workloads.test.mjs tests/unit/goals.test.mjs tests/unit/chat.test.mjs tests/unit/crawl.test.mjs tests/unit/feed.test.mjs tests/unit/hashring.test.mjs tests/unit/ids.test.mjs tests/unit/links.test.mjs tests/unit/notify.test.mjs tests/unit/quorum.test.mjs tests/unit/sync.test.mjs tests/unit/typeahead.test.mjs tests/unit/video.test.mjs tests/unit/route.test.mjs tests/unit/format.test.mjs tests/unit/experiments.test.mjs tests/unit/validate-level.test.mjs",
     "test:e2e": "playwright test --project=chromium",
+    "coverage": "node tests/coverage/run.mjs",
+    "coverage:report": "node tests/coverage/report.mjs",
     "lint": "eslint js levels tests \"*.js\" --max-warnings 43",
     "test:webkit": "playwright test --project=webkit",
     "test:ui": "playwright test --ui"
@@ -22,6 +24,7 @@
     "@playwright/test": "1.64.1",
     "eslint": "10.14.0",
     "globals": "17.14.0",
+    "monocart-coverage-reports": "3.1.0",
     "serve": "14.2.6"
   }
 }

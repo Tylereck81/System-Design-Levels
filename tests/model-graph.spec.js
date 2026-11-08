@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 import { freshPage } from './helpers.js';
 
 // The model works on any graph: peers of the same type share load, a crashed peer's share
