@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { Level, Goal } from '../js/types.js' */
 // Level 14: URL shortener.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { fmt } from '../js/format.js';
@@ -16,13 +18,16 @@ const VIRAL = 1500; // extra clicks a second on one link
 const BULK = 3000; // new links a second from one account
 
 const counted = (m) => !!m.link && m.link.counted > 0.9999;
+/** @type {Goal} */
 const countGoal = { id: 'counted', type: 'metric', text: 'Every click is counted', test: counted, val: (m) => (m.link ? fmtPct(100 * m.link.counted) : '—') };
+/** @type {Goal} */
 const privateGoal = { id: 'private', type: 'metric', text: 'Codes can\'t be guessed from each other', test: (m) => !!m.link && m.link.code !== 'base62', val: (m) => (m.link ? (m.link.code === 'base62' ? 'in sequence' : 'hashed') : '—') };
 const served99 = servedAtLeast(targets.servedPct);
 // The web server's settings as the canvas shows them (saved settings are checked on load, so these are valid options).
 const codeName = { base62: 'base 62', hash: 'hash', bloom: 'hash + bloom' };
 const linkCache = cache();
 
+/** @type {Level} */
 export default {
   id: 14,
   saveKey: 'sdl-level14-v1',

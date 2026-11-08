@@ -1,3 +1,4 @@
+// @ts-check
 // Connection rows that several levels use. `ok` rows (one function per wire) describe a wire the player may draw;
 // `bad` tables explain why a wire is refused. Each is made by a function, so every level gets its own copy.
 // The bad tables build on each other the way the shop does: load balancer, then replicas, cache and CDN. A level

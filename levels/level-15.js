@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { Level, Goal } from '../js/types.js' */
 // Level 15: Web crawler.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { fmt } from '../js/format.js';
@@ -12,12 +14,16 @@ const RATE = 800; // pages a second the frontier hands out
 
 /** Share of downloads that are useful pages: fetched, not refused, not a trap's. */
 const useful = (m) => (m.crawl ? m.servedPct * (1 - m.crawl.wasted) : m.servedPct);
+/** @type {Goal} */
 const crawlGoal = { id: 'crawl', type: 'metric', text: `Download ${fmt(RATE)} useful pages a second (${targets.servedPct}%)`, test: (m) => useful(m) >= targets.servedPct, val: (m) => fmtPct(useful(m)) };
+/** @type {Goal} */
 const politeGoal = { id: 'polite', type: 'metric', text: `At most ${POLITE} request a second to any website`, test: (m) => !!m.crawl && m.crawl.hostRate <= POLITE, val: (m) => (m.crawl ? `${fmt(m.crawl.hostRate)}/s` : '—') };
+/** @type {Goal} */
 const storeGoal = { id: 'storage', type: 'metric', text: 'Store at most 450 TB a month', test: (m) => !!m.crawl && m.crawl.storageTB <= 450, val: (m) => (m.crawl ? `${fmt(m.crawl.storageTB)} TB` : '—') };
 const crawlOk = (m) => useful(m) >= targets.servedPct;
 const PER = THREADS * 1000 / PAGE_MS; // pages a second a downloader's threads allow
 
+/** @type {Level} */
 export default {
   id: 15,
   saveKey: 'sdl-level15-v1',

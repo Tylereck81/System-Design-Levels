@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { Level, Goal } from '../js/types.js' */
 // Level 3: Database replication.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { servedGoal, latGoal, costGoal, spofGoal, servedAtLeast } from './shared/goals.js';
@@ -13,12 +15,14 @@ const DB_BUSY = 0.7;
 const served99 = servedAtLeast(targets.servedPct);
 
 const dbsOf = (g, n) => g.next(n).filter((c) => c.type === 'db');
+/** @type {Goal} */
 const splitGoal = {
   id: 'split', type: 'struct', text: 'Every web server sends writes to the primary and reads to a replica',
   test: (g) => { const webs = g.onPath('web'); return webs.length > 0 && webs.every((w) => dbsOf(g, w).some((d) => d.role === 'primary') && dbsOf(g, w).some((d) => d.role === 'replica')); },
 };
 // Busy-ness of the databases that are serving (a waiting or crashed one does not count).
 const dbLoads = (m) => m.g.onPath('db').map((n) => m.node[n.id]).filter((st) => st && !st.down);
+/** @type {Goal} */
 const dbBusyGoal = {
   id: 'dbbusy', type: 'metric', text: `Every database under ${DB_BUSY * 100}% busy`,
   test: (m) => dbLoads(m).length > 0 && dbLoads(m).every((st) => st.util < DB_BUSY),
@@ -28,6 +32,7 @@ const dbBusyGoal = {
 const replicasUp = (m) => m.g.onPath('db').filter((n) => n.role === 'replica' && !m.down.has(n.id)).length;
 const primaryUp = (m) => m.g.onPath('db').some((n) => n.role === 'primary' && !m.down.has(n.id));
 
+/** @type {Level} */
 export default {
   id: 3,
   saveKey: 'sdl-level3-v1',

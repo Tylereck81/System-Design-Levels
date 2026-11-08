@@ -1,6 +1,8 @@
+// @ts-check
 // The mock interview: one of the real-system levels as a timed problem on a blank canvas.
 // It borrows that level's components, simulation and Break-it experiments, but gives no missions, goals or hints:
 // the player scopes, sketches, goes deep and stresses the design against a clock, then checks their own work.
+/** @import { Level } from '../js/types.js' */
 import { MOCK_LEVELS } from './index.js';
 import { STEPS, PROBLEM_KEY } from './mock-steps.js';
 
@@ -13,7 +15,12 @@ function chosenProblem() {
   return id;
 }
 
-/** A mock interview level made from level `src` (its id `id`). */
+/**
+ * A mock interview level made from level `src` (its id `id`).
+ * @param {Level} src
+ * @param {number} id
+ * @returns {Level}
+ */
 export function mockOf(src, id) {
   const users = src.startNodes.find((n) => n.type === 'users');
   const first = src.missions[0];

@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { Level, Goal } from '../js/types.js' */
 // Level 10: Rate limiter.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { fmt } from '../js/format.js';
@@ -14,6 +16,7 @@ const BIG_BUDGET = 2300;
 
 const realUsersGoal = servedGoal(targets, { text: `Real users: at least ${targets.servedPct}% of requests succeed` });
 const withinQuota = (m) => m.keyQuota != null && m.keyQuota <= 1.0001;
+/** @type {Goal} */
 const quotaGoal = {
   id: 'quota', type: 'metric', text: 'No API key gets more than 60 requests a minute', test: withinQuota,
   val: (m) => (m.keyQuota == null ? '—' : `${fmt(60 * m.keyQuota)}/min`),
@@ -21,6 +24,7 @@ const quotaGoal = {
 const served99 = servedAtLeast(targets.servedPct);
 const algoShort = { token: 'token bucket', leaky: 'leaking bucket', fixed: 'fixed window', slog: 'sliding log', scount: 'sliding counter' };
 
+/** @type {Level} */
 export default {
   id: 10,
   saveKey: 'sdl-level10-v1',

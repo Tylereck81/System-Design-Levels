@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { Level, Goal } from '../js/types.js' */
 // Level 4: Cache tier.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { servedGoal, latGoal, costGoal, spofGoal, servedAtLeast } from './shared/goals.js';
@@ -12,12 +14,14 @@ const targets = { latencyMs: 150, servedPct: 99 };
 const DB_BUSY = 0.7;
 
 const served99 = servedAtLeast(targets.servedPct);
+/** @type {(min: number) => Goal} */
 const hitGoal = (min) => ({
   id: 'hit', type: 'metric', text: `Cache hit rate at least ${min}%`,
   test: (m) => m.hitRate != null && m.hitRate * 100 >= min,
   val: (m) => (m.hitRate == null ? '—' : (m.hitRate * 100).toFixed(1) + '%'),
 });
 const dbLoads = (m) => m.g.onPath('db').map((n) => m.node[n.id]).filter((st) => st && !st.down);
+/** @type {Goal} */
 const dbBusyGoal = {
   id: 'dbbusy', type: 'metric', text: `Every database under ${DB_BUSY * 100}% busy`,
   test: (m) => dbLoads(m).length > 0 && dbLoads(m).every((st) => st.util < DB_BUSY),
@@ -25,6 +29,7 @@ const dbBusyGoal = {
 };
 const duration = (s) => ({ 10: '10 seconds', 60: '1 minute', 600: '10 minutes', 3600: '1 hour' }[s] || `${s} seconds`);
 
+/** @type {Level} */
 export default {
   id: 4,
   saveKey: 'sdl-level4-v1',

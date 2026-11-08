@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { Level } from '../js/types.js' */
 // Level 6: Stateless web tier and autoscaling.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { servedGoal, latGoal, costGoal, spofGoal, servedAtLeast, fmtPct } from './shared/goals.js';
@@ -21,6 +23,7 @@ const clock = (h) => String(h).padStart(2, '0') + ':00';
 const day = dayTraffic(); // share of the 20:00 peak, hour by hour
 const shopLb = lb();
 
+/** @type {Level} */
 export default {
   id: 6,
   saveKey: 'sdl-level6-v1',

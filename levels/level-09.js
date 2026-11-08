@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { Level, Goal } from '../js/types.js' */
 // Level 9: Scale the data tier with sharding.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { servedGoal, latGoal, costGoal } from './shared/goals.js';
@@ -13,13 +15,16 @@ const HOT_BUDGET = 3500;
 const GROW_BUDGET = 3900;
 const SHARD_MAX = 0.7;
 
+/** @type {Goal} */
 const shardGoal = {
   id: 'shards', type: 'metric', text: `No database shard above ${Math.round(SHARD_MAX * 100)}% busy`,
   test: (m) => m.maxShardUtil != null && m.maxShardUtil < SHARD_MAX,
   val: (m) => (m.maxShardUtil == null ? '—' : Math.round(m.maxShardUtil * 100) + '%'),
 };
+/** @type {Goal} */
 const noSqlGoal = { id: 'nosql', type: 'struct', text: 'Plays and likes go to a NoSQL store', test: (g) => g.onPath('nosql').length > 0, val: () => '' };
 
+/** @type {Level} */
 export default {
   id: 9,
   saveKey: 'sdl-level9-v1',

@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { Level, Goal } from '../js/types.js' */
 // Level 8: Message queue, workers and monitoring.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 // The level zooms into one data center and shows only the parts it needs.
@@ -16,13 +18,17 @@ const UPLOAD_MS = 1000;
 const seconds = (ms) => (ms < 1000 ? fmt(ms) + ' ms' : ms < 60000 ? (ms / 1000).toFixed(1) + ' s' : (ms / 60000).toFixed(1) + ' min');
 const quick = (m) => m.uploadMs != null && m.uploadMs < UPLOAD_MS;
 const keepsUp = (m) => m.jobsIn > 0 && m.jobsOut >= m.jobsIn * 0.999;
+/** @type {Goal} */
 const uploadGoal = { id: 'upload', type: 'metric', text: 'Creators hear back in under 1 second', test: quick, val: (m) => (m.uploadMs == null ? '—' : seconds(m.uploadMs)) };
+/** @type {Goal} */
 const keepUpGoal = { id: 'keep-up', type: 'metric', text: 'Workers keep up with uploads', test: keepsUp, val: (m) => (m.jobsIn > 0 ? `${m.jobsOut.toFixed(2)} of ${m.jobsIn.toFixed(2)}/s` : '—') };
+/** @type {Goal} */
 const watchGoal = { id: 'watch', type: 'struct', text: 'Monitoring watches the queue', test: (g) => g.onPath('queue').some((q) => g.monitored.has(q.id)), val: () => '' };
 const served99 = servedAtLeast(targets.servedPct);
 const rate = (v) => v.toFixed(2);
 const jobs = (v) => (Math.round(v) === 1 ? '1 job' : `${fmt(v)} jobs`);
 
+/** @type {Level} */
 export default {
   id: 8,
   saveKey: 'sdl-level8-v1',

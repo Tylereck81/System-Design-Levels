@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { Level, Goal } from '../js/types.js' */
 // Level 17: News feed.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { fmt } from '../js/format.js';
@@ -17,12 +19,15 @@ const SURGE = 2; // posts on New Year's Eve
 const RUSH = 1.4; // the dinner rush
 
 const fits = (m) => !!m.feed && m.feed.cacheGB <= 200;
+/** @type {Goal} */
 const cacheGoal = { id: 'cachegb', type: 'metric', text: 'Feed cache under 200 GB', test: fits, val: (m) => (m.feed ? `${fmt(m.feed.cacheGB)} GB` : '—') };
 const quick = (m) => !!m.feed && m.feed.lag <= 5;
+/** @type {Goal} */
 const lagGoal = { id: 'lag', type: 'metric', text: 'A post reaches friends\' feeds within 5 s', test: quick, val: (m) => (m.feed ? (m.feed.lag === Infinity ? 'never' : `${fmt(m.feed.lag)} s`) : '—') };
 const ok = (m) => m.servedPct >= targets.servedPct && m.latency != null && m.latency < targets.latencyMs;
 const ON = (key, label, opts) => ({ key, label, options: opts });
 
+/** @type {Level} */
 export default {
   id: 17,
   saveKey: 'sdl-level17-v1',

@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { Level, Goal } from '../js/types.js' */
 // Level 5: CDN for static content.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { fmt } from '../js/format.js';
@@ -13,6 +15,7 @@ const targets = { latencyMs: 150, servedPct: 99 };
 const FAR_MS = 60;
 const BUDGET = 3100;
 
+/** @type {Goal} */
 const farGoal = {
   id: 'far', type: 'metric', text: `Shoppers in America get files in under ${FAR_MS} ms`,
   test: (m) => m.farFileMs != null && m.farFileMs < FAR_MS,
@@ -22,6 +25,7 @@ const served99 = servedAtLeast(targets.servedPct);
 const duration = (s) => ({ 60: '1 minute', 600: '10 minutes', 3600: '1 hour', 86400: '1 day' }[s] || `${s} seconds`);
 const cdnOf = (m) => m.g.onPath('cdn')[0] || null;
 
+/** @type {Level} */
 export default {
   id: 5,
   saveKey: 'sdl-level5-v1',

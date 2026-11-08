@@ -30,6 +30,9 @@ jobs:
       # and nothing runs after a failed install (its errors would bury the real one).
       - run: npm run lint
         if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
+      # The level files' shape against js/types.js (files opt in with // @ts-check).
+      - run: npm run typecheck
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
       # The test steps record code coverage as they run (tests/coverage/); the coverage step below reports on it.
       - id: unit
         run: npm run test:unit

@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { Level, Goal } from '../js/types.js' */
 // Level 16: Notification system.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { fmt } from '../js/format.js';
@@ -12,12 +14,14 @@ const RATE = 460; // notification requests a second at the peak
 
 const served99 = servedAtLeast(targets.servedPct);
 const sentGoal = servedGoal(targets, { text: `Send ${targets.servedPct}% of notifications on time` });
+/** @type {Goal} */
 const optGoal = { id: 'optout', type: 'metric', text: 'Nothing sent to users who opted out', test: (m) => !!m.notify && m.notify.optSent === 0, val: (m) => (m.notify ? fmtPct(100 * m.notify.optSent) : '—') };
 const ON_OFF = (what, offName, offSub, offNote, onName, onSub, onNote) => [
   { id: 'off', name: offName, sub: offSub, note: offNote, log: `${what}: ${offName.toLowerCase()}.` },
   { id: 'on', name: onName, sub: onSub, note: onNote, log: `${what}: ${onName.toLowerCase()}.` },
 ];
 
+/** @type {Level} */
 export default {
   id: 16,
   saveKey: 'sdl-level16-v1',
