@@ -1,6 +1,8 @@
-import { test, expect } from './fixtures.js';
+// tests/e2e/: Playwright tests (npm run test:e2e) of what a player does in the real page: one spec per level, the app
+// shell, the canvas, the mock interview, and checks every level shares. Import test and expect from ../fixtures.js.
+import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, reloadGame, trackErrors } from './helpers.js';
+import { freshPage, reloadGame, trackErrors } from '../helpers.js';
 
 test.describe('App shell · level picker, routing, saved progress', () => {
   test('the header names the level; the picker lists playable levels and closes with Esc or a click outside', async ({ page }) => {

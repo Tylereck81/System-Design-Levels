@@ -1,6 +1,6 @@
-import { test, expect } from './fixtures.js';
+import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from './helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from '../helpers.js';
 
 // Level 20: Video platform.
 // Creators ('u') upload through the upload service ('p': through the API servers, whole files) to transcoding ('t':

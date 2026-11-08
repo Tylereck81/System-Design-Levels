@@ -1,5 +1,5 @@
 // Turns the designs recorded by a capture run into tests/snapshot/designs/level-NN.json.
-// How and when to use it: see the header of tests/snapshot.spec.js.
+// How and when to use it: see the header of tests/snapshot/snapshot.spec.js.
 // Usage: node tests/snapshot/collect.mjs [--max=16] [--accept-fewer]
 //   --max           most designs kept per mission (default 16)
 //   --accept-fewer  write even when a mission ends up with fewer designs than it has now (after removing tests)

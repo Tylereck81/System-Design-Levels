@@ -1,6 +1,6 @@
-import { test, expect } from './fixtures.js';
+import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from './helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from '../helpers.js';
 
 // Level 4: cache tier.
 // The level starts with two load balancers, two XL web servers, an XL primary ('b') and two XL replicas ('r1', 'r2').

@@ -1,9 +1,9 @@
-import { test, expect } from './fixtures.js';
+import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
 import {
   QUIZ_KEY_L1, freshPage, fastForward, playFor, state, nodeIds, model, logText,
   tap, dragBetween, unlockMissions, buildBasic, trackErrors, reloadGame,
-} from './helpers.js';
+} from '../helpers.js';
 
 test.describe('Level 1 · full playthrough', () => {
   test('all three missions can be completed through the UI', async ({ page }) => {

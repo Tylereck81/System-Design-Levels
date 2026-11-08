@@ -1,6 +1,6 @@
-import { test, expect } from './fixtures.js';
+import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from './helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from '../helpers.js';
 
 // Level 19: Search autocomplete.
 // Users ('u') send a request per keystroke to the API servers ('a': 4 servers, no browser caching), which ask the

@@ -33,4 +33,4 @@ npm test
 | `levels/index.js` | The list of playable levels |
 | `levels/level-NN.js` | Everything specific to one level: lesson, components, rules, missions, quiz and text |
 | `css/styles.css` | All styles: design tokens, light and dark themes, layout |
-| `tests/` | Playwright tests (also run on GitHub on every push) |
+| `tests/` | `unit/` and `integration/` run in Node, `e2e/` and `snapshot/` in the browser (Playwright); all run on GitHub on every push |

@@ -6,8 +6,9 @@ import { defineConfig, devices } from '@playwright/test';
 const PORT = Number(process.env.TEST_PORT) || 4199;
 
 export default defineConfig({
+  // The browser tests: player flows and the simulation snapshot. tests/unit/ and tests/integration/ run in Node.
   testDir: './tests',
-  testMatch: '**/*.spec.js', // browser tests only; tests/unit/*.test.mjs run in Node (npm run test:unit)
+  testMatch: ['e2e/**/*.spec.js', 'snapshot/**/*.spec.js'],
   fullyParallel: true,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? 'github' : 'list',

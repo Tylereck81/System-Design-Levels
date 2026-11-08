@@ -1,5 +1,5 @@
-import { test, expect } from './fixtures.js';
-import { freshPage } from './helpers.js';
+import { test, expect } from '../fixtures.js';
+import { freshPage } from '../helpers.js';
 
 // The model works on any graph: peers of the same type share load, a crashed peer's share
 // moves to the others, SPOFs come from the graph, and request dots follow real paths.

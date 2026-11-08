@@ -1,6 +1,6 @@
-import { test, expect } from './fixtures.js';
+import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
-import { fastForward, state, logText, reloadGame, trackErrors } from './helpers.js';
+import { fastForward, state, logText, reloadGame, trackErrors } from '../helpers.js';
 
 // Mock interview: a real-system level (14–21) as a timed problem on a blank canvas, with a self-check at the end.
 // The problem is kept in localStorage (sdl-mock-problem); each problem has its own save (sdl-mock-<id>-v1).

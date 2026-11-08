@@ -1,5 +1,5 @@
-import { test, expect } from './fixtures.js';
-import { freshPage } from './helpers.js';
+import { test, expect } from '../fixtures.js';
+import { freshPage } from '../helpers.js';
 
 // Pins Level 1's simulation numbers so refactors cannot change the game's balance.
 // Expected values are worked out by hand from the formulas in the simulation model

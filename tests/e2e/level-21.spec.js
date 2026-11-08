@@ -1,6 +1,6 @@
-import { test, expect } from './fixtures.js';
+import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from './helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from '../helpers.js';
 
 // Level 21: Cloud file sync.
 // Users ('u') → one load balancer ('l') → block servers ('b': 2, whole files, no compression) → cloud storage ('s':

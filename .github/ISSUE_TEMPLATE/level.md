@@ -11,5 +11,5 @@ labels: [feat]
 - [ ] Break-it experiments
 - [ ] Quiz (10 questions, 8 to pass, balanced key)
 - [ ] Saved progress validated and migrated
-- [ ] `tests/level-NN.spec.js`
+- [ ] `tests/e2e/level-NN.spec.js`
 - [ ] Independent QA pass

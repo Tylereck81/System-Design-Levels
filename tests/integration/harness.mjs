@@ -1,3 +1,5 @@
+// tests/integration/: Node tests (npm run test:integration) of model() and saved data for whole levels, no page.
+// A new file here is added to the test:integration script by name.
 // Runs the simulation in Node for one level, for the integration tests (one level per test file: js/state.js reads
 // the level once, when it is first imported, and node --test runs each file in its own process).
 import { test } from 'node:test';
