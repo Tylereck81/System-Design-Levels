@@ -1,5 +1,5 @@
 // Mock interview panel: the brief, a timer for the four steps, and a self-check list at the end.
-import { $, el } from '../dom.js';
+import { $, el, html, setHtml } from '../dom.js';
 import { level } from '../level.js';
 import { S, save } from '../state.js';
 import { STEPS, PROBLEM_KEY } from '../../levels/mock-steps.js';
@@ -115,7 +115,7 @@ export function paintMock() {
     li.classList.toggle('over', over(i));
   });
   const strip = $('mstrip');
-  if (strip) strip.innerHTML = `<span><b>Mock interview:</b> ${level.interview.title}</span><span>${S.mock.finished ? 'finished' : `${STEPS[S.mock.step].name} · ${clock(seconds(S.mock.step))}`} · brief ↓</span>`;
+  if (strip) setHtml(strip, html`<span><b>Mock interview:</b> ${level.interview.title}</span><span>${S.mock.finished ? 'finished' : `${STEPS[S.mock.step].name} · ${clock(seconds(S.mock.step))}`} · brief ↓</span>`);
 }
 
 /** True while the step that offers the Break-it experiments is open (Stress it, or after the interview). */

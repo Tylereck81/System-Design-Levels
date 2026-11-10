@@ -1,6 +1,6 @@
 // Mission panel: brief, estimate box and goals.
 import { fmt } from '../format.js';
-import { $, el, keepFocus } from '../dom.js';
+import { $, el, keepFocus, html, raw, setHtml } from '../dom.js';
 import { TARGET_MS, MISSIONS, HOLD, S, run, expPassed, trafficHidden } from '../state.js';
 import { model } from '../engine/model.js';
 import { stopRun } from '../view/loop.js';
@@ -50,7 +50,7 @@ function buildMission() {
   box.appendChild(el('p', 'story', M.story));
   const facts = el('div', 'facts');
   const trafficTxt = trafficHidden(M) ? '?' : fmt(M.qps);
-  facts.innerHTML = `<div><b>${trafficTxt}</b><span>req/s at peak</span></div><div><b>${M.budget ? '$' + fmt(M.budget) : '—'}</b><span>monthly budget</span></div><div><b>&lt;${TARGET_MS} ms</b><span>response</span></div>`;
+  setHtml(facts, html`<div><b>${trafficTxt}</b><span>req/s at peak</span></div><div><b>${M.budget ? '$' + fmt(M.budget) : '—'}</b><span>monthly budget</span></div><div><b>&lt;${TARGET_MS} ms</b><span>response</span></div>`);
   box.appendChild(facts);
   if (M.gate) box.appendChild(renderGate(M));
   const ul = el('ul', 'goals'); ul.id = 'goals'; box.appendChild(ul);
@@ -59,7 +59,7 @@ function buildMission() {
   if (S.done[i]) {
     const c = el('div', 'complete');
     const last = i === MISSIONS.length - 1;
-    c.innerHTML = `<b>Mission complete.</b><p>${M.takeaway}</p>`;
+    setHtml(c, html`<b>Mission complete.</b><p>${M.takeaway}</p>`);
     const nb = el('button', 'btn primary', last ? 'Take the quiz →' : `Mission ${i + 2} →`); nb.type = 'button';
     nb.onclick = () => last ? hooks.setTab('quiz') : switchMission(i + 1);
     c.appendChild(nb); box.appendChild(c);
@@ -75,13 +75,14 @@ function buildMission() {
 
 export function renderGate(M) {
   const g = el('div', 'gate' + (S.est ? ' passed' : ''));
+  // A gate's prompt and accepted message are markup the level writes (bold, line breaks); its other fields are text.
   if (S.est) {
-    g.innerHTML = M.gate.acceptedHtml;
+    setHtml(g, raw(M.gate.acceptedHtml));
     return g;
   }
-  g.innerHTML = `<p>${M.gate.prompt}</p>
+  setHtml(g, html`<p>${raw(M.gate.prompt)}</p>
     <div class="row"><label for="estIn" class="label">${M.gate.label}</label><input id="estIn" inputmode="numeric" autocomplete="off" placeholder="${M.gate.placeholder}"><button class="btn primary" id="estBtn" type="button">Check</button></div>
-    <div class="fb" id="estFb" aria-live="polite"></div>`;
+    <div class="fb" id="estFb" aria-live="polite"></div>`);
   const inp = g.querySelector('#estIn'), btn = g.querySelector('#estBtn'), fb = g.querySelector('#estFb');
   inp.value = S.estVal || '';
   const check = () => {
@@ -101,9 +102,9 @@ export function renderGate(M) {
 }
 
 export const ICONS = {
-  pass: '<svg class="gi" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7.5" fill="var(--ok)"/><path d="M4.6 8.2l2.2 2.2 4.6-4.8" fill="none" stroke="var(--surface)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  fail: '<svg class="gi" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7.5" fill="var(--bad)"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="var(--surface)" stroke-width="1.8" stroke-linecap="round"/></svg>',
-  todo: '<svg class="gi" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="var(--ink-3)" stroke-width="1.4"/></svg>',
+  pass: raw('<svg class="gi" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7.5" fill="var(--ok)"/><path d="M4.6 8.2l2.2 2.2 4.6-4.8" fill="none" stroke="var(--surface)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'),
+  fail: raw('<svg class="gi" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7.5" fill="var(--bad)"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="var(--surface)" stroke-width="1.8" stroke-linecap="round"/></svg>'),
+  todo: raw('<svg class="gi" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="var(--ink-3)" stroke-width="1.4"/></svg>'),
 };
 export const STATUS_TXT = { pass: 'met', fail: 'not met', todo: 'not tested yet' };
 export const liveMetrics = () => run.everPlayed && !anyOn();
@@ -121,20 +122,20 @@ export function paintGoals() {
   const M = MISSIONS[S.mission];
   const m = run.mdl || model(); const g = m.g;
   let met = 0;
-  ul.innerHTML = M.goals.map(goal => {
+  setHtml(ul, M.goals.map(goal => {
     const s = goalStatus(goal, m, g); if (s === 'pass') met++;
     let v = '';
     if (goal.val && (goal.type === 'struct' || liveMetrics())) v = goal.val(m, g);
-    return `<li class="${s}">${ICONS[s]}<span>${goal.text}<span class="sr-only"> (${STATUS_TXT[s]})</span></span><span class="gv">${v}</span></li>`;
-  }).join('');
+    return html`<li class="${s}">${ICONS[s]}<span>${goal.text}<span class="sr-only"> (${STATUS_TXT[s]})</span></span><span class="gv">${v}</span></li>`;
+  }));
   const strip = $('mstrip');
-  strip.innerHTML = `<span><b>Mission ${S.mission + 1}:</b> ${M.title}</span><span>${S.done[S.mission] ? 'complete' : met + '/' + M.goals.length + ' goals'} · brief ↓</span>`;
+  setHtml(strip, html`<span><b>Mission ${S.mission + 1}:</b> ${M.title}</span><span>${S.done[S.mission] ? 'complete' : met + '/' + M.goals.length + ' goals'} · brief ↓</span>`);
   const vf = $('verify'); if (!vf) return;
   const failingNow = liveMetrics() && M.goals.some(x => x.type === 'metric' && !x.test(m));
-  if (S.done[S.mission] && failingNow) { vf.innerHTML = '<p class="verify bad">Your current design no longer meets the targets.</p>'; return; }
-  if (S.verified[S.mission]) { vf.innerHTML = `<p class="verify ok">Targets held for ${HOLD} s.${M.goals.some(x => x.type === 'exp') && !S.done[S.mission] ? ' Now break it.' : ''}</p>`; return; }
-  if (run.playing && anyOn()) { vf.innerHTML = '<p class="verify">Experiment running: targets are paused.</p>'; return; }
-  if (run.playing && run.hold > 0) { vf.innerHTML = `<p class="verify">Holding targets… ${run.hold.toFixed(1)} / ${HOLD} s</p><div class="vbar"><i style="width:${Math.min(100, run.hold / HOLD * 100)}%"></i></div>`; return; }
-  vf.innerHTML = run.everPlayed ? '' : `<p class="verify">Press Play to test your design. Targets must hold for ${HOLD} seconds.</p>`;
+  if (S.done[S.mission] && failingNow) { setHtml(vf, html`<p class="verify bad">Your current design no longer meets the targets.</p>`); return; }
+  if (S.verified[S.mission]) { setHtml(vf, html`<p class="verify ok">Targets held for ${HOLD} s.${M.goals.some(x => x.type === 'exp') && !S.done[S.mission] ? ' Now break it.' : ''}</p>`); return; }
+  if (run.playing && anyOn()) { setHtml(vf, html`<p class="verify">Experiment running: targets are paused.</p>`); return; }
+  if (run.playing && run.hold > 0) { setHtml(vf, html`<p class="verify">Holding targets… ${run.hold.toFixed(1)} / ${HOLD} s</p><div class="vbar"><i style="width:${Math.min(100, run.hold / HOLD * 100)}%"></i></div>`); return; }
+  setHtml(vf, run.everPlayed ? '' : html`<p class="verify">Press Play to test your design. Targets must hold for ${HOLD} seconds.</p>`);
 }
 $('mstrip').addEventListener('click', () => { const c = $('missionCard'); c.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }); c.focus({ preventScroll: true }); });

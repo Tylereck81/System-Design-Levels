@@ -1,12 +1,12 @@
 // Page shell: fills in the level's lesson, header and headings, and runs the level picker.
-import { $, el } from '../dom.js';
+import { $, el, raw, prependHtml } from '../dom.js';
 import { level, entry } from '../level.js';
 import { LEVELS, TOTAL_LEVELS, MOCK } from '../../levels/index.js';
 import { routeHash } from '../route.js';
 import { QUIZ, PASS } from '../state.js';
 
 export function renderShell() {
-  $('view-lesson').insertAdjacentHTML('afterbegin', level.lessonHtml);
+  prependHtml($('view-lesson'), raw(level.lessonHtml)); // a lesson is authored markup
   if (level.interview) {
     $('lvlChip').textContent = 'Mock interview';
     $('lvlName').textContent = level.interview.title;

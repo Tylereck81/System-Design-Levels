@@ -102,6 +102,23 @@ test.describe('App shell · level picker, routing, saved progress', () => {
     });
   }
 
+  test('a quote, < or & in level text shows as written and adds no markup', async ({ page }) => {
+    const errors = trackErrors(page);
+    await freshPage(page, '#build');
+    const odd = 'A "quoted" <b>&</b> title';
+    await page.evaluate(async (odd) => {
+      const { MISSIONS } = await import('/js/state.js'); // the game's own module instance
+      MISSIONS[0].title = odd;
+      MISSIONS[0].goals[0].text = odd;
+      window.__sdl.afterChange();
+    }, odd);
+    await expect(page.locator('#mstrip')).toContainText(`Mission 1: ${odd}`);
+    await expect(page.locator('#mstrip b')).toHaveCount(1); // only "Mission 1:"; the title's <b> is text
+    await expect(page.locator('#goals li').first()).toContainText(odd);
+    await expect(page.locator('#goals li').first().locator('b')).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
   test('phone: the open picker fits the screen', async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 740 });
     await freshPage(page);
