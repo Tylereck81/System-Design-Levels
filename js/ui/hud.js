@@ -1,7 +1,7 @@
 // Dashboard metrics and the canvas banner.
 import { fmt } from '../format.js';
 import { $, html, setHtmlIfChanged } from '../dom.js';
-import { TARGET_MS, TARGET_SERVED, nameOf, trafficHidden, MISSIONS, S, connectFrom, run, byId, setConnectFrom } from '../state.js';
+import { TARGET_MS, TARGET_SERVED, nameOf, trafficHidden, MISSIONS, S, ui, run, byId } from '../state.js';
 import { model } from '../engine/model.js';
 import { crashing, spikeHud } from '../engine/experiments.js';
 
@@ -22,8 +22,8 @@ export function renderHUD() {
 
 export function setBanner() {
   const b = $('banner');
-  if (connectFrom && !byId(connectFrom)) setConnectFrom(null);
-  if (connectFrom) { b.className = 'banner info'; b.textContent = `Tap another component to connect it to ${nameOf(byId(connectFrom))}. Press Esc to cancel.`; b.hidden = false; return; }
+  if (ui.connectFrom && !byId(ui.connectFrom)) ui.connectFrom = null;
+  if (ui.connectFrom) { b.className = 'banner info'; b.textContent = `Tap another component to connect it to ${nameOf(byId(ui.connectFrom))}. Press Esc to cancel.`; b.hidden = false; return; }
   const m = run.mdl;
   if (run.playing && m?.issue && !crashing()) { b.className = 'banner'; b.textContent = m.issue; b.hidden = false; return; }
   b.hidden = true;

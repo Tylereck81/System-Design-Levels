@@ -1,6 +1,6 @@
 // Boot, tab routing and the glue that re-renders after a change.
 import { $ } from './dom.js';
-import { MISSIONS, QUIZ, PASS, fresh, S, connectFrom, run, load, save, byId, setS, setConnectFrom, clearOpenResults } from './state.js';
+import { MISSIONS, QUIZ, PASS, fresh, S, ui, run, load, save, byId, replaceState, clearOpenResults } from './state.js';
 import { model, sampleRoute } from './engine/model.js';
 import { renderCanvas } from './view/canvas.js';
 import { renderPalette, addNode, tryConnect } from './view/interaction.js';
@@ -71,7 +71,7 @@ function fixAddress(tab) {
 }
 
 function afterChange(forceFit) {
-  if (connectFrom && !byId(connectFrom)) setConnectFrom(null);
+  if (ui.connectFrom && !byId(ui.connectFrom)) ui.connectFrom = null;
   run.mdl = model();
   renderPalette(); renderCanvas(forceFit); renderInspector(); renderHUD(); renderMission(); renderTabs(); setBanner();
   save();
@@ -89,7 +89,7 @@ function afterDesignChange({ keepResults = false } = {}) {
 }
 
 function start(data) {
-  try { load(data); } catch (err) { console.warn('Saved progress could not be loaded; starting fresh.', err); setS(fresh()); }
+  try { load(data); } catch (err) { console.warn('Saved progress could not be loaded; starting fresh.', err); replaceState(fresh()); }
   const route = parseRoute(location.hash);
   if (TABS.includes(route.tab)) S.tab = route.tab;
   if (!TABS.includes(S.tab)) S.tab = 'lesson';
@@ -104,4 +104,4 @@ function start(data) {
 }
 registerHooks({ afterChange, afterDesignChange, renderTabs, setTab });
 start({});
-window.__sdl = { get S() { return S; }, run, model, sampleRoute, addNode, tryConnect, setTab, switchMission, togglePlay, step, afterChange, afterDesignChange };
+window.__sdl = { S, run, model, sampleRoute, addNode, tryConnect, setTab, switchMission, togglePlay, step, afterChange, afterDesignChange };

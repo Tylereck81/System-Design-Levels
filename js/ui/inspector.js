@@ -1,7 +1,7 @@
 // Inspector panel for the selected component or connection.
 import { fmt } from '../format.js';
 import { $, el, keepFocus, html, setHtml, setHtmlIfChanged } from '../dom.js';
-import { TYPES, OK_PAIRS, pairKey, nameOf, lowerName, edgeInfo, MISSIONS, S, sel, run, byId, setSel, trafficHidden } from '../state.js';
+import { TYPES, OK_PAIRS, pairKey, nameOf, lowerName, edgeInfo, MISSIONS, S, ui, run, byId, trafficHidden } from '../state.js';
 import { T, COMPONENTS, choiceOf, sizesOf } from '../engine/catalog.js';
 import { roleOf, runsAlone, holdsSessions, scales, dayCopies, serverSpec, isEdge, isClustered, costOf, monthlyFileGB, kindRows } from '../engine/components.js';
 import { ringBox, paintRing } from './ring-view.js';
@@ -17,21 +17,21 @@ export function renderInspector() {
 function buildInspector() {
   const box = $('insp'); box.textContent = '';
   box.appendChild(el('p', 'label', 'Inspector'));
-  if (sel?.kind === 'node' && !byId(sel.id)) setSel(null);
-  if (sel?.kind === 'edge' && !S.edges.some(x => x.id === sel.id)) setSel(null);
-  if (!sel) {
+  if (ui.sel?.kind === 'node' && !byId(ui.sel.id)) ui.sel = null;
+  if (ui.sel?.kind === 'edge' && !S.edges.some(x => x.id === ui.sel.id)) ui.sel = null;
+  if (!ui.sel) {
     box.appendChild(el('p', 'empty', 'Select a component on the canvas (click it, or Tab to it and press Enter) to see what it does, change its size and manage its connections.'));
     return;
   }
-  if (sel.kind === 'edge') {
-    const e = S.edges.find(x => x.id === sel.id);
+  if (ui.sel.kind === 'edge') {
+    const e = S.edges.find(x => x.id === ui.sel.id);
     const a = byId(e.from), b = byId(e.to), info = edgeInfo(a, b);
     box.appendChild(el('h2', null, `${nameOf(a)} → ${nameOf(b)}`));
     box.appendChild(el('p', 'desc', info.desc));
     const rm = el('button', 'btn danger', 'Remove connection'); rm.type = 'button'; rm.dataset.focusKey = 'remove'; rm.onclick = removeSel;
     box.appendChild(rm); return;
   }
-  const n = byId(sel.id);
+  const n = byId(ui.sel.id);
   const role = COMPONENTS[n.type].replicated && TYPES[n.type].roles && TYPES[n.type].roles[n.role];
   box.appendChild(el('h2', null, nameOf(n)));
   box.appendChild(el('p', 'desc', role ? role.desc : TYPES[n.type].desc));
@@ -131,8 +131,8 @@ function segmented(box, n, { field, label, layout, options, current }) {
 }
 
 export function paintInspectorLive() {
-  const live = $('inspLive'); if (!live || !sel || sel.kind !== 'node') return;
-  const n = byId(sel.id); if (!n || roleOf(n) !== 'server') return;
+  const live = $('inspLive'); if (!live || !ui.sel || ui.sel.kind !== 'node') return;
+  const n = byId(ui.sel.id); if (!n || roleOf(n) !== 'server') return;
   if (isClustered(n)) paintRing(n); // it changes while an experiment adds or removes a server
   const st = run.mdl && run.everPlayed ? run.mdl.node[n.id] : null;
   setHtmlIfChanged(live, liveRows(n, st).filter(Boolean).map(rowHtml));

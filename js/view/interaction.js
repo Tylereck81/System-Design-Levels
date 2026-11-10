@@ -1,7 +1,7 @@
 // Adding, dragging, connecting and removing components.
 import { level } from '../level.js';
 import { $, svgEl, keepFocus } from '../dom.js';
-import { TYPES, PALETTE, LIMIT_MSG, OK_PAIRS, BAD_PAIRS, pairKey, nameOf, edgeInfo, MISSIONS, TXT, S, sel, connectFrom, save, byId, setSel, setConnectFrom, setRefocus } from '../state.js';
+import { TYPES, PALETTE, LIMIT_MSG, OK_PAIRS, BAD_PAIRS, pairKey, nameOf, edgeInfo, MISSIONS, TXT, S, ui, save, byId } from '../state.js';
 import { drawIcon } from './icons.js';
 import { COMPONENTS, T } from '../engine/catalog.js';
 import { roleOf } from '../engine/components.js';
@@ -52,7 +52,7 @@ export function addNode(type, x, y) {
   for (const k in c.choices || {}) n[k] = c.choices[k].default;
   if (c.replicated && t.roles) n.role = S.nodes.some(m => m.type === type && m.role === 'primary') ? 'replica' : 'primary';
   S.nodes.push(n);
-  setSel({ kind: 'node', id: n.id });
+  ui.sel = { kind: 'node', id: n.id };
   hooks.afterDesignChange();
 }
 
@@ -106,8 +106,8 @@ export function nodeAt(p) {
   }
   return null;
 }
-export function select(next) { setSel(next); renderCanvas(); renderInspector(); }
-export function cancelConnect() { if (connectFrom) { setConnectFrom(null); setBanner(); } }
+export function select(next) { ui.sel = next; renderCanvas(); renderInspector(); }
+export function cancelConnect() { if (ui.connectFrom) { ui.connectFrom = null; setBanner(); } }
 
 export let drag = null, conn = null;
 cv.addEventListener('pointerdown', (e) => {
@@ -118,7 +118,9 @@ cv.addEventListener('pointerdown', (e) => {
   const h = e.target.closest('[data-handle]');
   if (h) {
     e.preventDefault();
-    if (connectFrom && connectFrom !== h.dataset.handle) { tryConnect(connectFrom, h.dataset.handle); setConnectFrom(null); setBanner(); renderCanvas(); return; }
+    if (ui.connectFrom && ui.connectFrom !== h.dataset.handle) {
+      tryConnect(ui.connectFrom, h.dataset.handle); ui.connectFrom = null; setBanner(); renderCanvas(); return;
+    }
     cv.setPointerCapture(e.pointerId);
     const n = byId(h.dataset.handle);
     conn = { from: n.id, sx: e.clientX, sy: e.clientY, moved: false };
@@ -129,7 +131,7 @@ cv.addEventListener('pointerdown', (e) => {
   const ng = e.target.closest('[data-node]');
   if (ng) {
     const n = byId(ng.dataset.node);
-    if (connectFrom && connectFrom !== n.id) { tryConnect(connectFrom, n.id); setConnectFrom(null); setBanner(); renderCanvas(); return; }
+    if (ui.connectFrom && ui.connectFrom !== n.id) { tryConnect(ui.connectFrom, n.id); ui.connectFrom = null; setBanner(); renderCanvas(); return; }
     e.preventDefault();
     cv.setPointerCapture(e.pointerId);
     drag = { id: n.id, ox: p.x - n.x, oy: p.y - n.y, sx: e.clientX, sy: e.clientY, moved: false };
@@ -158,7 +160,7 @@ export const endCanvas = (e) => {
   if (conn) {
     previewLine.setAttribute('visibility', 'hidden');
     const c = conn; conn = null;
-    if (!c.moved) { setConnectFrom(c.from); setSel({ kind: 'node', id: c.from }); setBanner(); renderCanvas(); renderInspector(); return; }
+    if (!c.moved) { ui.connectFrom = c.from; ui.sel = { kind: 'node', id: c.from }; setBanner(); renderCanvas(); renderInspector(); return; }
     const t = nodeAt(svgPt(e));
     if (t && t.id !== c.from) tryConnect(c.from, t.id);
     return;
@@ -180,8 +182,8 @@ cv.addEventListener('keydown', (e) => {
   const n = byId(ng.dataset.node); if (!n) return;
   if (e.key === 'Enter' || e.key === ' ') {
     e.preventDefault(); e.stopPropagation();
-    if (connectFrom && connectFrom !== n.id) { tryConnect(connectFrom, n.id); setConnectFrom(null); setBanner(); }
-    setSel({ kind: 'node', id: n.id }); setRefocus(n.id); renderCanvas(); renderInspector();
+    if (ui.connectFrom && ui.connectFrom !== n.id) { tryConnect(ui.connectFrom, n.id); ui.connectFrom = null; setBanner(); }
+    ui.sel = { kind: 'node', id: n.id }; ui.refocus = n.id; renderCanvas(); renderInspector();
     return;
   }
   const mv = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
@@ -189,7 +191,7 @@ cv.addEventListener('keydown', (e) => {
     e.preventDefault();
     const step = e.shiftKey ? 40 : 10;
     n.x = clampX(n.x + mv[0] * step); n.y = clampY(n.y + mv[1] * step);
-    setRefocus(n.id); renderCanvas(); placeDots(); save();
+    ui.refocus = n.id; renderCanvas(); placeDots(); save();
   }
 });
 
@@ -214,17 +216,17 @@ export function disconnect(aId, bId) {
 }
 
 export function removeSel() {
-  if (!sel) return;
-  if (sel.kind === 'node') {
-    const n = byId(sel.id); if (!n || roleOf(n) === 'client') return;
+  if (!ui.sel) return;
+  if (ui.sel.kind === 'node') {
+    const n = byId(ui.sel.id); if (!n || roleOf(n) === 'client') return;
     S.nodes = S.nodes.filter(x => x.id !== n.id);
     S.edges = S.edges.filter(e => e.from !== n.id && e.to !== n.id);
-    if (connectFrom === n.id) setConnectFrom(null);
+    if (ui.connectFrom === n.id) ui.connectFrom = null;
     dropMissingCrashes();
   } else {
-    S.edges = S.edges.filter(e => e.id !== sel.id);
+    S.edges = S.edges.filter(e => e.id !== ui.sel.id);
   }
-  setSel(null); hooks.afterDesignChange();
+  ui.sel = null; hooks.afterDesignChange();
 }
 
 /** Make replica `n` the primary; the old primary becomes a replica. If it was down, its newest writes never reached `n`. */
@@ -243,7 +245,7 @@ document.addEventListener('keydown', (e) => {
   const tag = (e.target.tagName || '').toLowerCase();
   if (tag === 'input' || tag === 'textarea') return;
   const onCanvas = e.target === document.body || cv.contains(e.target); // not on a button, tab or other control
-  if ((e.key === 'Delete' || e.key === 'Backspace') && sel && onCanvas) { e.preventDefault(); removeSel(); }
-  if (e.key === 'Escape') { setConnectFrom(null); setBanner(); select(null); }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && ui.sel && onCanvas) { e.preventDefault(); removeSel(); }
+  if (e.key === 'Escape') { ui.connectFrom = null; setBanner(); select(null); }
   if (e.key === ' ' && e.target === document.body) { e.preventDefault(); togglePlay(); }
 });
