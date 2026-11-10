@@ -8,6 +8,7 @@ import { dnsLookup, usersToLb, lbToWeb, webToDb, lbBad } from './shared/connecti
 import { lbText, levelComplete } from './shared/text.js';
 import { ONE_DNS, TWO_LBS } from './shared/limits.js';
 import { failText, passText } from './shared/quiz.js';
+import { lessonSteps } from './shared/lesson.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 
@@ -275,22 +276,19 @@ export default {
     </section>
 
     <section>
-      <h2>How each mission maps to the interview</h2>
-      <p class="src">Interview loop · times for a 45-minute interview (formats vary by company)</p>
-      <div class="steps4">
-        <div><span>Step 1 · 5–8 min</span><b>Scope it</b>Read the brief. Estimate the peak.</div>
-        <div><span>Step 2 · 10–12 min</span><b>Sketch it</b>Load balancer, pool, database.</div>
-        <div><span>Step 3 · 15–20 min</span><b>Go deep</b>Size the pool. Keep a spare.</div>
-        <div><span>Step 4 · 5 min</span><b>Stress it</b>Crash your biggest server, then the load balancer.</div>
-      </div>
+      ${lessonSteps([
+        'Read the brief. Estimate the peak.',
+        'Load balancer, pool, database.',
+        'Size the pool. Keep a spare.',
+        'Crash your biggest server, then the load balancer.',
+      ])}
       <p>When the interviewer asks "what happens if this server dies?", follow a request through your design and name the next single point of failure. After the load balancer and the pool, it is usually the database.</p>
     </section>
 `,
 
   // Lesson diagrams. `f` provides the engine's drawing helpers.
   drawFigures(f) {
-    const { $, svgEl, figNode, figArrow, figDefs } = f;
-    const dashed = (svg, x1, y1, x2, y2) => svgEl('line', { x1, y1, x2, y2, class: 'd-line d-dash', 'marker-end': 'url(#figArr)' }, svg);
+    const { $, figNode, figArrow, figDefs, figLabel, figDash } = f;
 
     const f1 = $('figLb'); f1.textContent = ''; figDefs(f1);
     figNode(f1, 'users', 104, 50, 'Users', 'Browser + app');
@@ -312,7 +310,7 @@ export default {
     figArrow(f2, 300, 82, 300, 173, 'heartbeat', null, 288, 132, 'end');
     figArrow(f2, 340, 173, 340, 82, '', null, 352, 132);
     figArrow(f2, 400, 70, 472, 112, 'forward', null, 438, 80);
-    dashed(f2, 400, 186, 472, 146);
-    const t = svgEl('text', { x: 438, y: 196, class: 'd-label', 'text-anchor': 'start' }, f2); t.textContent = 'if it takes over';
+    figDash(f2, 'M400 186 L472 146');
+    figLabel(f2, 438, 196, 'if it takes over', 'start');
   },
 };

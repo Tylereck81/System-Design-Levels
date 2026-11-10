@@ -7,6 +7,7 @@ import { servedGoal, latGoal, costGoal, servedAtLeast, fmtPct } from './shared/g
 import { BROWSER_HIT, API_CAP, SHARD_CAP, LOOKUP_MS, LETTER_TOP } from '../js/engine/typeahead.js';
 import { lbText, levelComplete } from './shared/text.js';
 import { failText, passText } from './shared/quiz.js';
+import { lessonSteps } from './shared/lesson.js';
 
 const targets = { latencyMs: 100, servedPct: 99 };
 const QPS = 55600; // keystroke requests a second at the peak
@@ -273,25 +274,23 @@ export default {
     </section>
 
     <section>
-      <h2>How each mission maps to the interview</h2>
-      <p class="src">Interview loop · times for a 45-minute interview (formats vary by company)</p>
-      <div class="steps4">
-        <div><span>Step 1 · 5–8 min</span><b>Scope it</b>Prefix only, 5 suggestions, ranked by frequency, 100 ms.</div>
-        <div><span>Step 2 · 10–12 min</span><b>Sketch it</b>The gathering path and the query path.</div>
-        <div><span>Step 3 · 15–20 min</span><b>Go deep</b>The trie with stored top 5, trie DB, browser caching, sharding.</div>
-        <div><span>Step 4 · 5 min</span><b>Stress it</b>A traffic spike, uneven letters, a new trending search.</div>
-      </div>
+      ${lessonSteps([
+        'Prefix only, 5 suggestions, ranked by frequency, 100 ms.',
+        'The gathering path and the query path.',
+        'The trie with stored top 5, trie DB, browser caching, sharding.',
+        'A traffic spike, uneven letters, a new trending search.',
+      ])}
     </section>
 `,
 
   // Lesson diagram. `f` provides the engine's drawing helpers.
   drawFigures(f) {
-    const { $, figDefs, svgEl } = f;
+    const { $, figDefs, svgEl, figLabel } = f;
     const f1 = $('figTrie'); f1.textContent = ''; figDefs(f1);
     const box = (x, y, w, title, sub) => {
       svgEl('rect', { x: x - w / 2, y: y - 22, width: w, height: 44, rx: 6, class: 'ic-stroke' }, f1);
-      const t = svgEl('text', { x, y: y - 3, class: 'd-label', 'text-anchor': 'middle' }, f1); t.textContent = title;
-      if (sub) { const s = svgEl('text', { x, y: y + 14, class: 'd-label', 'text-anchor': 'middle' }, f1); s.textContent = sub; }
+      figLabel(f1, x, y - 3, title);
+      if (sub) figLabel(f1, x, y + 14, sub);
     };
     const line = (x1, y1, x2, y2) => svgEl('line', { x1, y1, x2, y2, class: 'd-line' }, f1);
     box(80, 110, 90, 'root', '');

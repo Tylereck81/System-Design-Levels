@@ -10,6 +10,7 @@ import { lbText, replicaText, NO_ORIGIN, levelComplete } from './shared/text.js'
 import { ONE_DNS, TWO_LBS, THREE_DBS, THREE_CACHES, ONE_CDN } from './shared/limits.js';
 import { failText, passText } from './shared/quiz.js';
 import { filesWorkload } from './shared/workload.js';
+import { lessonSteps } from './shared/lesson.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 const FAR_MS = 60;
@@ -271,14 +272,12 @@ export default {
     </section>
 
     <section>
-      <h2>How each mission maps to the interview</h2>
-      <p class="src">Interview loop · times for a 45-minute interview (formats vary by company)</p>
-      <div class="steps4">
-        <div><span>Step 1 · 5–8 min</span><b>Scope it</b>Where are the users? How much is static? Estimate the bandwidth.</div>
-        <div><span>Step 2 · 10–12 min</span><b>Sketch it</b>A CDN for files, the origin behind it.</div>
-        <div><span>Step 3 · 15–20 min</span><b>Go deep</b>TTL, invalidation, versioned names, cost.</div>
-        <div><span>Step 4 · 5 min</span><b>Stress it</b>Take the CDN down. Change a file.</div>
-      </div>
+      ${lessonSteps([
+        'Where are the users? How much is static? Estimate the bandwidth.',
+        'A CDN for files, the origin behind it.',
+        'TTL, invalidation, versioned names, cost.',
+        'Take the CDN down. Change a file.',
+      ])}
       <p>When you add a CDN in an interview, say which files go on it, the TTL, how you replace a changed file, and what pages do when the CDN is down.</p>
     </section>
 `,

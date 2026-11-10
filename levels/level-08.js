@@ -10,6 +10,7 @@ import { dnsLookup, usersToLb, lbToWeb, webToDb, lbBad } from './shared/connecti
 import { lbText, levelComplete } from './shared/text.js';
 import { failText, passText } from './shared/quiz.js';
 import { dayTraffic } from './shared/workload.js';
+import { lessonSteps } from './shared/lesson.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 const BUDGET = 2300;
@@ -305,21 +306,19 @@ export default {
     </section>
 
     <section>
-      <h2>How each mission maps to the interview</h2>
-      <p class="src">Interview loop · times for a 45-minute interview (formats vary by company)</p>
-      <div class="steps4">
-        <div><span>Step 1 · 5–8 min</span><b>Scope it</b>Which work is slow? Does the user need the result right away?</div>
-        <div><span>Step 2 · 10–12 min</span><b>Sketch it</b>Web servers publish to a queue; workers consume.</div>
-        <div><span>Step 3 · 15–20 min</span><b>Go deep</b>Worker capacity, scaling with the queue, what to monitor.</div>
-        <div><span>Step 4 · 5 min</span><b>Stress it</b>Crash the workers. Triple the jobs.</div>
-      </div>
+      ${lessonSteps([
+        'Which work is slow? Does the user need the result right away?',
+        'Web servers publish to a queue; workers consume.',
+        'Worker capacity, scaling with the queue, what to monitor.',
+        'Crash the workers. Triple the jobs.',
+      ])}
       <p>When you add a queue in an interview, say what goes on it, who consumes it, how you scale the consumers, and which alert tells you they are falling behind.</p>
     </section>
 `,
 
   // Lesson diagram. `f` provides the engine's drawing helpers.
   drawFigures(f) {
-    const { $, figNode, figArrow, figDefs } = f;
+    const { $, figNode, figArrow, figDefs, figLabel } = f;
     const f1 = $('figQueue'); f1.textContent = ''; figDefs(f1);
     figNode(f1, 'web', 110, 50, 'Web servers', 'Producers');
     figNode(f1, 'queue', 330, 50, 'Message queue', 'Jobs wait here');
@@ -328,7 +327,6 @@ export default {
     figArrow(f1, 206, 50, 234, 50, '', null, 0, 0);
     figArrow(f1, 426, 50, 454, 50, '', null, 0, 0);
     figArrow(f1, 330, 158, 330, 82, 'watches', null, 342, 126, 'start');
-    const { svgEl } = f;
-    for (const [x, t] of [[220, 'publish'], [440, 'take']]) { const e = svgEl('text', { x, y: 104, class: 'd-label', 'text-anchor': 'middle' }, f1); e.textContent = t; }
+    for (const [x, t] of [[220, 'publish'], [440, 'take']]) figLabel(f1, x, 104, t);
   },
 };

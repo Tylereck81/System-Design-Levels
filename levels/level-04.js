@@ -9,6 +9,7 @@ import { lbText, replicaText, levelComplete } from './shared/text.js';
 import { ONE_DNS, TWO_LBS, THREE_CACHES } from './shared/limits.js';
 import { failText, passText } from './shared/quiz.js';
 import { catalogWorkload } from './shared/workload.js';
+import { lessonSteps } from './shared/lesson.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 const DB_BUSY = 0.7;
@@ -300,14 +301,12 @@ return product</pre>
     </section>
 
     <section>
-      <h2>How each mission maps to the interview</h2>
-      <p class="src">Interview loop · times for a 45-minute interview (formats vary by company)</p>
-      <div class="steps4">
-        <div><span>Step 1 · 5–8 min</span><b>Scope it</b>Which data is read often? Estimate its size.</div>
-        <div><span>Step 2 · 10–12 min</span><b>Sketch it</b>Cache-aside next to the database.</div>
-        <div><span>Step 3 · 15–20 min</span><b>Go deep</b>Memory, TTL, invalidation, eviction.</div>
-        <div><span>Step 4 · 5 min</span><b>Stress it</b>Crash the cache. Change the data.</div>
-      </div>
+      ${lessonSteps([
+        'Which data is read often? Estimate its size.',
+        'Cache-aside next to the database.',
+        'Memory, TTL, invalidation, eviction.',
+        'Crash the cache. Change the data.',
+      ])}
       <p>When you add a cache in an interview, say what you cache, the TTL, how you invalidate on writes, and what happens to the database when the cache is cold.</p>
     </section>
 `,

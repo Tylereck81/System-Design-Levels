@@ -8,6 +8,7 @@ import { dnsLookup, usersToLb, lbToWeb, webToReplicas, lbBad, replicaBad } from 
 import { lbText, replicaText, levelComplete } from './shared/text.js';
 import { ONE_DNS, TWO_LBS } from './shared/limits.js';
 import { failText, passText } from './shared/quiz.js';
+import { lessonSteps } from './shared/lesson.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 const DB_BUSY = 0.7;
@@ -278,23 +279,19 @@ export default {
     </section>
 
     <section>
-      <h2>How each mission maps to the interview</h2>
-      <p class="src">Interview loop · times for a 45-minute interview (formats vary by company)</p>
-      <div class="steps4">
-        <div><span>Step 1 · 5–8 min</span><b>Scope it</b>Read the brief. Estimate peak writes.</div>
-        <div><span>Step 2 · 10–12 min</span><b>Sketch it</b>Primary, replicas, and which query goes where.</div>
-        <div><span>Step 3 · 15–20 min</span><b>Go deep</b>Size replicas for reads plus copied writes.</div>
-        <div><span>Step 4 · 5 min</span><b>Stress it</b>Crash a replica, then the primary.</div>
-      </div>
+      ${lessonSteps([
+        'Read the brief. Estimate peak writes.',
+        'Primary, replicas, and which query goes where.',
+        'Size replicas for reads plus copied writes.',
+        'Crash a replica, then the primary.',
+      ])}
       <p>When the interviewer says "the database is the bottleneck", first ask whether it is reads or writes. Too many reads: add replicas, or a cache (Level 4). Too many writes: split the data (Level 9).</p>
     </section>
 `,
 
   // Lesson diagrams. `f` provides the engine's drawing helpers.
   drawFigures(f) {
-    const { $, svgEl, figNode, figArrow, figDefs } = f;
-    const dashedPath = (svg, d) => svgEl('path', { d, class: 'd-line d-dash', fill: 'none', 'marker-end': 'url(#figArr)' }, svg);
-    const label = (svg, x, y, text, anchor) => { const t = svgEl('text', { x, y, class: 'd-label', 'text-anchor': anchor || 'start' }, svg); t.textContent = text; };
+    const { $, figNode, figArrow, figDefs, figLabel, figDash } = f;
 
     const f1 = $('figRepl'); f1.textContent = ''; figDefs(f1);
     figNode(f1, 'web', 320, 46, 'Web servers', 'Private IPs');
@@ -304,9 +301,9 @@ export default {
     figArrow(f1, 260, 76, 150, 166, 'writes', null, 192, 116, 'end');
     figArrow(f1, 320, 76, 320, 166, 'reads', null, 330, 126);
     figArrow(f1, 380, 76, 490, 166, 'reads', null, 448, 116);
-    dashedPath(f1, 'M104 226 V262 H536 V230');
-    dashedPath(f1, 'M320 262 V230');
-    label(f1, 212, 284, 'copies every write', 'middle');
+    figDash(f1, 'M104 226 V262 H536 V230');
+    figDash(f1, 'M320 262 V230');
+    figLabel(f1, 212, 284, 'copies every write', 'middle');
 
     const f2 = $('figPromote'); f2.textContent = ''; figDefs(f2);
     figNode(f2, 'web', 104, 130, 'Web servers', 'Private IPs');
@@ -315,7 +312,7 @@ export default {
     figNode(f2, 'db', 536, 130, 'Read replica', 'Copies new primary');
     figArrow(f2, 160, 160, 250, 190, 'writes', null, 196, 196, 'end');
     figArrow(f2, 198, 130, 442, 130, 'reads', null, 300, 122, 'middle');
-    dashedPath(f2, 'M424 205 H536 V164');
-    label(f2, 470, 226, 'copies', 'middle');
+    figDash(f2, 'M424 205 H536 V164');
+    figLabel(f2, 470, 226, 'copies', 'middle');
   },
 };

@@ -8,6 +8,7 @@ import { dnsLookup, usersToLb, lbToWeb, lbBad } from './shared/connections.js';
 import { lbText, levelComplete } from './shared/text.js';
 import { failText, passText } from './shared/quiz.js';
 import { dayTraffic } from './shared/workload.js';
+import { lessonSteps } from './shared/lesson.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 const BUDGET = 1600;
@@ -311,21 +312,18 @@ export default {
     </section>
 
     <section>
-      <h2>How each mission maps to the interview</h2>
-      <p class="src">Interview loop · times for a 45-minute interview (formats vary by company)</p>
-      <div class="steps4">
-        <div><span>Step 1 · 5–8 min</span><b>Scope it</b>Value size, data size, and above all: consistent or available when the network splits?</div>
-        <div><span>Step 2 · 10–12 min</span><b>Sketch it</b>Nodes on a ring, N replicas, a coordinator, get and put.</div>
-        <div><span>Step 3 · 15–20 min</span><b>Go deep</b>Quorums, vector clocks, gossip, hinted handoff, Merkle trees, write and read paths.</div>
-        <div><span>Step 4 · 5 min</span><b>Stress it</b>A node fails, a data center goes dark, the network splits.</div>
-      </div>
+      ${lessonSteps([
+        'Value size, data size, and above all: consistent or available when the network splits?',
+        'Nodes on a ring, N replicas, a coordinator, get and put.',
+        'Quorums, vector clocks, gossip, hinted handoff, Merkle trees, write and read paths.',
+        'A node fails, a data center goes dark, the network splits.',
+      ])}
     </section>
 `,
 
   // Lesson diagrams. `f` provides the engine's drawing helpers.
   drawFigures(f) {
-    const { $, figNode, figArrow, figDefs, svgEl } = f;
-    const label = (svg, x, y, t, anchor = 'middle') => { const e = svgEl('text', { x, y, class: 'd-label', 'text-anchor': anchor }, svg); e.textContent = t; };
+    const { $, figNode, figArrow, figDefs, svgEl, figLabel } = f;
 
     const f1 = $('figQuorum'); f1.textContent = ''; figDefs(f1);
     figNode(f1, 'web', 110, 115, 'Web server', 'put(cart:8812)');
@@ -345,8 +343,8 @@ export default {
     figNode(f2, 'users', 540, 50, 'Users, 30%', 'Reach only c');
     figNode(f2, 'kv', 540, 165, 'Replica c', 'Cut off');
     svgEl('line', { x1: 330, y1: 10, x2: 330, y2: 222, class: 'd-line d-dash' }, f2);
-    label(f2, 330, 120, 'partition');
-    label(f2, 330, 140, 'W = 2: c alone');
-    label(f2, 330, 158, 'can\'t confirm');
+    figLabel(f2, 330, 120, 'partition');
+    figLabel(f2, 330, 140, 'W = 2: c alone');
+    figLabel(f2, 330, 158, 'can\'t confirm');
   },
 };

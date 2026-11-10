@@ -9,6 +9,7 @@ import { dnsLookup, usersToLb, lbToWeb, webToShards, lbBad } from './shared/conn
 import { lbText, levelComplete } from './shared/text.js';
 import { failText, passText } from './shared/quiz.js';
 import { dayTraffic } from './shared/workload.js';
+import { lessonSteps } from './shared/lesson.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 const BUDGET = 2100;
@@ -302,21 +303,19 @@ export default {
     </section>
 
     <section>
-      <h2>How each mission maps to the interview</h2>
-      <p class="src">Interview loop · times for a 45-minute interview (formats vary by company)</p>
-      <div class="steps4">
-        <div><span>Step 1 · 5–8 min</span><b>Scope it</b>Client or server side? Limit by key, user or IP? How big, how distributed? Tell users when they are limited?</div>
-        <div><span>Step 2 · 10–12 min</span><b>Sketch it</b>A limiter in front of the API, counters in Redis.</div>
-        <div><span>Step 3 · 15–20 min</span><b>Go deep</b>The algorithm and its tuning, rules, headers, races.</div>
-        <div><span>Step 4 · 5 min</span><b>Stress it</b>Bursts at window edges. Several limiters.</div>
-      </div>
+      ${lessonSteps([
+        'Client or server side? Limit by key, user or IP? How big, how distributed? Tell users when they are limited?',
+        'A limiter in front of the API, counters in Redis.',
+        'The algorithm and its tuning, rules, headers, races.',
+        'Bursts at window edges. Several limiters.',
+      ])}
       <p>When you design a rate limiter in an interview, ask these scoping questions about the API in front of you, a public search API here, before picking an algorithm.</p>
     </section>
 `,
 
   // Lesson diagrams. `f` provides the engine's drawing helpers.
   drawFigures(f) {
-    const { $, figNode, figArrow, figDefs, svgEl } = f;
+    const { $, figNode, figArrow, figDefs, figLabel } = f;
     const f1 = $('figLimiter'); f1.textContent = ''; figDefs(f1);
     figNode(f1, 'users', 110, 100, 'App', '3 requests in 1 s');
     figNode(f1, 'limiter', 330, 100, 'Rate limiter', 'Allows 2 a second');
@@ -324,7 +323,7 @@ export default {
     figArrow(f1, 206, 92, 234, 92, '', null, 0, 0);
     figArrow(f1, 426, 100, 454, 100, '', null, 0, 0);
     figArrow(f1, 234, 112, 206, 112, '', null, 0, 0);
-    for (const [x, y, t] of [[220, 40, 'requests 1, 2, 3'], [440, 60, 'within limit'], [220, 168, '3: 429 Too Many Requests']]) { const e = svgEl('text', { x, y, class: 'd-label', 'text-anchor': 'middle' }, f1); e.textContent = t; }
+    for (const [x, y, t] of [[220, 40, 'requests 1, 2, 3'], [440, 60, 'within limit'], [220, 168, '3: 429 Too Many Requests']]) figLabel(f1, x, y, t);
 
     const f2 = $('figShared'); f2.textContent = ''; figDefs(f2);
     figNode(f2, 'users', 110, 115, 'App', 'Any limiter');

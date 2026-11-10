@@ -7,6 +7,7 @@ import { servedGoal, costGoal, servedAtLeast, fmtPct, fmtMoney } from './shared/
 import { VIDEO_MB, VIEWS_DAY, VIEW_GB, API_SERVERS, API_MBPS, FAIL, PATCHY_FAIL, TRANSCODE_RATE, IN_FLIGHT, POPULAR, CDN_GB, OWN_GB } from '../js/engine/video.js';
 import { lbText, levelComplete } from './shared/text.js';
 import { failText, passText } from './shared/quiz.js';
+import { lessonSteps } from './shared/lesson.js';
 
 const targets = { latencyMs: 1000, servedPct: 99 };
 const MONEY = { millions: true }; // bills reach millions of dollars: "$1.25M"
@@ -286,21 +287,18 @@ export default {
     </section>
 
     <section>
-      <h2>How each mission maps to the interview</h2>
-      <p class="src">Interview loop · times for a 45-minute interview (formats vary by company)</p>
-      <div class="steps4">
-        <div><span>Step 1 · 5–8 min</span><b>Scope it</b>Upload and watch, devices, users, sizes, cloud services.</div>
-        <div><span>Step 2 · 10–12 min</span><b>Sketch it</b>Upload flow, metadata flow, streaming from the CDN.</div>
-        <div><span>Step 3 · 15–20 min</span><b>Go deep</b>Transcoding graph, chunked and pre-signed uploads, protection, cost.</div>
-        <div><span>Step 4 · 5 min</span><b>Stress it</b>Patchy networks, a dead worker, the CDN bill.</div>
-      </div>
+      ${lessonSteps([
+        'Upload and watch, devices, users, sizes, cloud services.',
+        'Upload flow, metadata flow, streaming from the CDN.',
+        'Transcoding graph, chunked and pre-signed uploads, protection, cost.',
+        'Patchy networks, a dead worker, the CDN bill.',
+      ])}
     </section>
 `,
 
   // Lesson diagram. `f` provides the engine's drawing helpers.
   drawFigures(f) {
-    const { $, figNode, figArrow, figDefs, svgEl } = f;
-    const label = (svg, x, y, t, anchor = 'middle') => { const e = svgEl('text', { x, y, class: 'd-label', 'text-anchor': anchor }, svg); e.textContent = t; };
+    const { $, figNode, figArrow, figDefs, figLabel } = f;
     const f1 = $('figUpload'); f1.textContent = ''; figDefs(f1);
     figNode(f1, 'users', 100, 50, 'Phone', 'Uploads chunks');
     figNode(f1, 'db', 330, 50, 'Original storage', 'Pre-signed URL');
@@ -311,6 +309,6 @@ export default {
     figArrow(f1, 426, 50, 464, 50, '', null, 0, 0);
     figArrow(f1, 560, 76, 560, 134, '', null, 0, 0);
     figArrow(f1, 464, 160, 426, 160, '', null, 0, 0);
-    label(f1, 445, 152, 'HLS');
+    figLabel(f1, 445, 152, 'HLS');
   },
 };

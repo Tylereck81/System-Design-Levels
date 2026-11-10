@@ -6,6 +6,7 @@ import { fmt } from '../js/format.js';
 import { servedGoal, latGoal } from './shared/goals.js';
 import { levelComplete } from './shared/text.js';
 import { failText, passText } from './shared/quiz.js';
+import { lessonSteps } from './shared/lesson.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 
@@ -285,14 +286,12 @@ export default {
     </section>
 
     <section>
-      <h2>How each mission maps to the interview</h2>
-      <p class="src">Interview loop · times for a 45-minute interview (formats vary by company)</p>
-      <div class="steps4">
-        <div><span>Step 1 · 5–8 min</span><b>Scope it</b>Read the brief. Estimate traffic.</div>
-        <div><span>Step 2 · 10–12 min</span><b>Sketch it</b>Drag and connect components.</div>
-        <div><span>Step 3 · 15–20 min</span><b>Go deep</b>Press play, tune sizes and types.</div>
-        <div><span>Step 4 · 5 min</span><b>Stress it</b>Break it and name the bottleneck.</div>
-      </div>
+      ${lessonSteps([
+        'Read the brief. Estimate traffic.',
+        'Drag and connect components.',
+        'Press play, tune sizes and types.',
+        'Break it and name the bottleneck.',
+      ])}
       <p>Do not start drawing in the first minute. A design for the wrong problem is a red flag, however good it is. Ask which features matter, how many people will use it, how fast they will grow, and what technology already exists.</p>
     </section>
 `,

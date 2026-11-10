@@ -10,6 +10,7 @@ import { dnsLookup, usersToLb, lbToWeb, webToDb, lbBad } from './shared/connecti
 import { lbText, levelComplete } from './shared/text.js';
 import { failText, passText } from './shared/quiz.js';
 import { dayTraffic } from './shared/workload.js';
+import { lessonSteps } from './shared/lesson.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 const PCT = { scale: 100 }; // percentages are given as 0–1 shares
@@ -297,21 +298,19 @@ export default {
     </section>
 
     <section>
-      <h2>How each mission maps to the interview</h2>
-      <p class="src">Interview loop · times for a 45-minute interview (formats vary by company)</p>
-      <div class="steps4">
-        <div><span>Step 1 · 5–8 min</span><b>Scope it</b>How many keys, how many servers, and how often do servers change?</div>
-        <div><span>Step 2 · 10–12 min</span><b>Sketch it</b>Clients hash keys onto a ring of cache servers.</div>
-        <div><span>Step 3 · 15–20 min</span><b>Go deep</b>Clockwise lookup, virtual nodes, the affected range.</div>
-        <div><span>Step 4 · 5 min</span><b>Stress it</b>A server fails or joins: how many keys move, and can the database take the misses?</div>
-      </div>
+      ${lessonSteps([
+        'How many keys, how many servers, and how often do servers change?',
+        'Clients hash keys onto a ring of cache servers.',
+        'Clockwise lookup, virtual nodes, the affected range.',
+        'A server fails or joins: how many keys move, and can the database take the misses?',
+      ])}
       <p>Consistent hashing is rarely the whole question. It comes up inside a bigger design, such as a distributed cache or key-value store, the moment you say "partition the data".</p>
     </section>
 `,
 
   // Lesson diagrams: two rings drawn from the game's own hash. `f` provides the engine's drawing helpers.
   drawFigures(f) {
-    const { $, svgEl } = f;
+    const { $, svgEl, figLabel } = f;
     const keys = ['user:17', 'user:4410', 'user:204', 'user:3311', 'user:58'];
     const ring = (svg, names, added) => {
       svg.textContent = '';
@@ -328,12 +327,12 @@ export default {
       for (const [p, s] of ringPoints(names, 1)) {
         const [x, y] = at(p / 2 ** 32, R), [lx, ly] = at(p / 2 ** 32, R + 20);
         svgEl('rect', { x: x - 7, y: y - 7, width: 14, height: 14, rx: 2, class: s === added ? 'd-step' : 'ic-data' }, svg);
-        const t = svgEl('text', { x: lx, y: ly + 4, class: 'd-label', 'text-anchor': 'middle' }, svg); t.textContent = s;
+        figLabel(svg, lx, ly + 4, s);
       }
       keys.forEach((k, i) => {
         const home = keyHome(k, names, method), [x, y] = at(home.pos, R), [lx, ly] = at(home.pos, R - 17);
         svgEl('circle', { cx: x, cy: y, r: 4, class: 'ch-pt' }, svg);
-        const n = svgEl('text', { x: lx, y: ly + 4, class: 'd-label', 'text-anchor': 'middle' }, svg); n.textContent = i + 1;
+        figLabel(svg, lx, ly + 4, i + 1);
         const was = before ? keyHome(k, before, method).server : home.server;
         const t = svgEl('text', { x: 360, y: 82 + i * 34, class: 'd-label' }, svg);
         t.textContent = `${i + 1}  ${k} → ${home.server}${was !== home.server ? ` (was ${was})` : ''}`;

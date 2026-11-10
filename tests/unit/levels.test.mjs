@@ -63,6 +63,16 @@ for (const { entry, data, error } of levels) {
   });
 }
 
+test('every lesson shows the four interview steps once, with the minutes of a 45-minute interview', () => {
+  // Written out by hand: 5–8 + 10–12 + 15–20 + 5 minutes is 35–45, which fits in 45.
+  const headers = ['Step 1 · 5–8 min</span><b>Scope it</b>', 'Step 2 · 10–12 min</span><b>Sketch it</b>',
+    'Step 3 · 15–20 min</span><b>Go deep</b>', 'Step 4 · 5 min</span><b>Stress it</b>'];
+  for (const { entry, data } of loaded) {
+    assert.equal(data.lessonHtml.split('class="steps4"').length - 1, 1, `Level ${entry.id}: one step block`);
+    for (const h of headers) assert.ok(data.lessonHtml.includes(h), `Level ${entry.id}: ${h}`);
+  }
+});
+
 test('no two levels have the same answer key', () => {
   const byKey = new Map();
   for (const { entry, data } of withQuiz) {
