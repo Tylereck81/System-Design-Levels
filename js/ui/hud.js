@@ -1,6 +1,6 @@
 // Dashboard metrics and the canvas banner.
 import { fmt } from '../format.js';
-import { $, html, setHtml } from '../dom.js';
+import { $, html, setHtmlIfChanged } from '../dom.js';
 import { TARGET_MS, TARGET_SERVED, nameOf, trafficHidden, MISSIONS, S, connectFrom, run, byId, setConnectFrom } from '../state.js';
 import { model } from '../engine/model.js';
 import { crashing, spikeHud } from '../engine/experiments.js';
@@ -17,7 +17,7 @@ export function renderHUD() {
     { l: 'Cost', v: '$' + fmt(m.cost), u: '/mo', t: M.budget ? 'budget $' + fmt(M.budget) : 'no budget', s: M.budget ? (m.cost <= M.budget ? 'pass' : 'fail') : '' },
     { l: 'SPOFs', v: String(m.spof), u: '', t: m.spof > 0 ? 'no redundancy' : (m.g.ready ? 'redundant' : '—'), s: '' },
   ];
-  setHtml($('hud'), cells.map(c => html`<div class="metric ${c.s}"><p class="label">${c.l}</p><div class="mv">${c.v}<small>${c.u}</small></div><div class="mt" title="${c.t}">${c.t}</div></div>`));
+  setHtmlIfChanged($('hud'), cells.map(c => html`<div class="metric ${c.s}"><p class="label">${c.l}</p><div class="mv">${c.v}<small>${c.u}</small></div><div class="mt" title="${c.t}">${c.t}</div></div>`));
 }
 
 export function setBanner() {
