@@ -2,11 +2,11 @@
 import { fmt } from '../format.js';
 import { $, svgEl } from '../dom.js';
 import { TYPES, nameOf, edgeInfo, S, sel, connectFrom, refocus, run, byId, setRefocus } from '../state.js';
-import { SIZES, COMPONENTS, sizesOf } from './catalog.js';
-import { runsAlone, serverSpec } from './components.js';
+import { SIZES, COMPONENTS, sizesOf } from '../engine/catalog.js';
+import { runsAlone, serverSpec } from '../engine/components.js';
 import { drawIcon } from './icons.js';
-import { crashing } from './experiments.js';
-import { standbyPeers } from './model.js';
+import { crashing } from '../engine/experiments.js';
+import { standbyPeers } from '../engine/model.js';
 
 export const VW = 760, VH = 520; // the design area: level slots and start designs fit inside it
 export const ZOOMS = [1, 0.85, 0.7]; // desktop zoom levels, from 100% out to 70%

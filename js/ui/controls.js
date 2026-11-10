@@ -2,7 +2,7 @@
 import { $ } from '../dom.js';
 import { MISSIONS, EXPERIMENTS, fresh, S, run, setS, setSel, setConnectFrom, expPassed } from '../state.js';
 import { graph, model } from '../engine/model.js';
-import { paintLive } from '../engine/canvas.js';
+import { paintLive } from '../view/canvas.js';
 import { stopRun } from '../engine/sim.js';
 import { renderHUD, setBanner } from './hud.js';
 import { renderInspector } from './inspector.js';

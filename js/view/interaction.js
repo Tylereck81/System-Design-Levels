@@ -3,15 +3,15 @@ import { level } from '../level.js';
 import { $, svgEl, keepFocus } from '../dom.js';
 import { TYPES, PALETTE, LIMIT_MSG, OK_PAIRS, BAD_PAIRS, pairKey, nameOf, edgeInfo, MISSIONS, TXT, S, sel, connectFrom, save, byId, setSel, setConnectFrom, setRefocus } from '../state.js';
 import { drawIcon } from './icons.js';
-import { COMPONENTS, T } from './catalog.js';
-import { roleOf } from './components.js';
+import { COMPONENTS, T } from '../engine/catalog.js';
+import { roleOf } from '../engine/components.js';
 import { NW, NH, cv, previewLine, nodeRefs, renderEdges, renderCanvas, clampX, clampY, freeSpot, overlaps } from './canvas.js';
 import { setBanner } from '../ui/hud.js';
 import { renderInspector } from '../ui/inspector.js';
 import { togglePlay } from '../ui/controls.js';
 import { log } from '../ui/log.js';
 import { afterDesignChange } from '../main.js';
-import { dropMissingCrashes, downIds, trafficFactor } from './experiments.js';
+import { dropMissingCrashes, downIds, trafficFactor } from '../engine/experiments.js';
 import { placeDots } from './dots.js';
 
 /* ---------------- Palette ---------------- */

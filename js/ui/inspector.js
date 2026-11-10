@@ -5,7 +5,7 @@ import { TYPES, OK_PAIRS, pairKey, nameOf, lowerName, edgeInfo, MISSIONS, S, sel
 import { T, COMPONENTS, choiceOf, sizesOf } from '../engine/catalog.js';
 import { roleOf, runsAlone, holdsSessions, scales, dayCopies, serverSpec, isEdge, isClustered, costOf, monthlyFileGB } from '../engine/components.js';
 import { ringBox, paintRing } from './ring-view.js';
-import { tryConnect, disconnect, removeSel, promote } from '../engine/interaction.js';
+import { tryConnect, disconnect, removeSel, promote } from '../view/interaction.js';
 import { log } from './log.js';
 import { afterDesignChange } from '../main.js';
 import { trafficFactor, downIds } from '../engine/experiments.js';

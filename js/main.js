@@ -2,8 +2,8 @@
 import { $ } from './dom.js';
 import { MISSIONS, QUIZ, PASS, fresh, S, connectFrom, run, load, save, byId, setS, setConnectFrom, clearOpenResults } from './state.js';
 import { model, sampleRoute } from './engine/model.js';
-import { renderCanvas } from './engine/canvas.js';
-import { renderPalette, addNode, tryConnect } from './engine/interaction.js';
+import { renderCanvas } from './view/canvas.js';
+import { renderPalette, addNode, tryConnect } from './view/interaction.js';
 import { step, frame } from './engine/sim.js';
 import { relogNotMet } from './engine/experiments.js';
 import { renderHUD, setBanner } from './ui/hud.js';
