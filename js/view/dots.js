@@ -24,7 +24,7 @@ export function dwellFor(id, forward) {
   const n = byId(id); if (!n) return 0;
   if (roleOf(n) === 'resolver') return 0.25;
   if (!forward) return 0.02;
-  const st = run.mdl && run.mdl.node[id];
+  const st = run.mdl?.node[id];
   if (!st) return 0.05;
   return Math.min(1.4, 0.06 * (st.mult || 1));
 }

@@ -17,8 +17,8 @@ export function renderInspector() {
 function buildInspector() {
   const box = $('insp'); box.textContent = '';
   box.appendChild(el('p', 'label', 'Inspector'));
-  if (sel && sel.kind === 'node' && !byId(sel.id)) setSel(null);
-  if (sel && sel.kind === 'edge' && !S.edges.some(x => x.id === sel.id)) setSel(null);
+  if (sel?.kind === 'node' && !byId(sel.id)) setSel(null);
+  if (sel?.kind === 'edge' && !S.edges.some(x => x.id === sel.id)) setSel(null);
   if (!sel) {
     box.appendChild(el('p', 'empty', 'Select a component on the canvas (click it, or Tab to it and press Enter) to see what it does, change its size and manage its connections.'));
     return;

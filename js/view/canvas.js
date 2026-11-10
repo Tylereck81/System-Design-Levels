@@ -28,7 +28,7 @@ export function nodeSub(n) {
     if (standby && st && !st.down && st.load > 0) return `${TYPES[n.type].sub} · took over`;
     const algo = c.algos && (TYPES[n.type].algos || []).find(a => a.id === (n.algo || c.defaultAlgo));
     if (!algo) return standby ? TYPES[n.type].standbySub : TYPES[n.type].sub;
-    if (st && st.down) return algo.short; // short, so it clears the DOWN mark
+    if (st?.down) return algo.short; // short, so it clears the DOWN mark
     if (standby) return `${TYPES[n.type].standbySub} · ${algo.short}`;
     return count > 1 ? `${TYPES[n.type].sub} · ${algo.short}` : algo.short; // with a standby, say which one is active
   }
@@ -100,7 +100,7 @@ export function renderNodes() {
   nodesG.textContent = '';
   for (const k in nodeRefs) delete nodeRefs[k];
   for (const n of S.nodes) {
-    const isSel = (sel && sel.kind === 'node' && sel.id === n.id) || connectFrom === n.id;
+    const isSel = (sel?.kind === 'node' && sel.id === n.id) || connectFrom === n.id;
     const sub = nodeSub(n);
     const g = svgEl('g', { class: 'node' + (isSel ? ' sel' : ''), 'data-node': n.id, tabindex: '0', role: 'button', 'aria-label': `${nameOf(n)}, ${sub}${isSel ? ', selected' : ''}`, transform: `translate(${n.x - NW / 2} ${n.y - NH / 2})` }, nodesG);
     svgEl('rect', { x: 0, y: 0, width: NW, height: NH, rx: 11, class: 'node-box' }, g);
@@ -153,7 +153,7 @@ export function renderEdges() {
     const a = byId(e.from), b = byId(e.to);
     if (!a || !b) continue;
     const p1 = edgePoint(a, b.x, b.y, 2), p2 = edgePoint(b, a.x, a.y, 5);
-    const isSel = sel && sel.kind === 'edge' && sel.id === e.id;
+    const isSel = sel?.kind === 'edge' && sel.id === e.id;
     const g = svgEl('g', { class: 'edge' + (isSel ? ' sel' : ''), 'data-edge': e.id }, edgesG);
     svgEl('line', { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, class: 'edge-line', 'marker-end': isSel ? 'url(#arrSel)' : 'url(#arr)' }, g);
     svgEl('line', { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, class: 'edge-hit' }, g);

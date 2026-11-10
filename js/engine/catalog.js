@@ -339,13 +339,17 @@ export function choiceOf(n, key) {
 export const optionOf = (n, key) => COMPONENTS[n.type].choices[key].options[choiceOf(n, key)];
 /** True when `n` exists and its picked option for `key` turns that choice on. */
 export const isOn = (n, key) => !!n && !!optionOf(n, key).on;
-export const sizesOf = (type) => (COMPONENTS[type] || {}).sizes || SIZES;
+/** The catalog entry for node `n`'s type; an empty entry when `n` is missing or its type is unknown. */
+export const componentOf = (n) => COMPONENTS[n?.type] ?? {};
+/** A predicate: true for a node whose catalog entry has flag `key` set. */
+export const hasFlag = (key) => (n) => !!componentOf(n)[key];
+export const sizesOf = (type) => COMPONENTS[type]?.sizes ?? SIZES;
 /** How many servers a fixed choice runs (1 unless its scaling option gives a count). */
-export const countOf = (n) => { const c = COMPONENTS[n.type] || {}; return (c.choices && c.choices.scaling && c.choices.scaling.options[choiceOf(n, 'scaling')].count) || 1; };
+export const countOf = (n) => componentOf(n).choices?.scaling?.options[choiceOf(n, 'scaling')].count || 1;
 /** The first node whose type has catalog flag `key` (equal to `value`, when given); null when there is none. */
 export function byFlag(nodes, key, value) {
   return nodes.find((n) => {
-    const flag = (COMPONENTS[n.type] || {})[key];
+    const flag = componentOf(n)[key];
     return value === undefined ? !!flag : flag === value;
   }) || null;
 }
