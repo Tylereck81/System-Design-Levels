@@ -40,7 +40,7 @@ export const typeaheadApi = {
 export const typeaheadTrie = {
   id: 'typeahead-trie',
   matches: (c) => c.typeahead === 'trie',
-  liveRows: ({ typeahead: o }) => !(o && o.shards) ? [] : [
+  liveRows: ({ typeahead: o }) => !o?.shards ? [] : [
     { value: `${Math.round(100 * o.topShare)}%`, label: `of lookups on the busiest of ${o.shards} ${o.shards === 1 ? 'shard' : 'shards'}: ${fmt(o.shardLoad)} a second`, wide: true },
     { value: `${o.staleH} h`, label: 'until a new trending search can show up', wide: true },
   ],

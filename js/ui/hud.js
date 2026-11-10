@@ -25,6 +25,6 @@ export function setBanner() {
   if (connectFrom && !byId(connectFrom)) setConnectFrom(null);
   if (connectFrom) { b.className = 'banner info'; b.textContent = `Tap another component to connect it to ${nameOf(byId(connectFrom))}. Press Esc to cancel.`; b.hidden = false; return; }
   const m = run.mdl;
-  if (run.playing && m && m.issue && !crashing()) { b.className = 'banner'; b.textContent = m.issue; b.hidden = false; return; }
+  if (run.playing && m?.issue && !crashing()) { b.className = 'banner'; b.textContent = m.issue; b.hidden = false; return; }
   b.hidden = true;
 }

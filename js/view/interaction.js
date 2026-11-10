@@ -208,7 +208,7 @@ export function tryConnect(aId, bId) {
 }
 export function disconnect(aId, bId) {
   // Two servers of the same type can be connected both ways (e.g. replication); remove only the one asked for.
-  const same = (byId(aId) || {}).type === (byId(bId) || {}).type;
+  const same = byId(aId)?.type === byId(bId)?.type;
   S.edges = S.edges.filter(e => !((e.from === aId && e.to === bId) || (!same && e.from === bId && e.to === aId)));
   hooks.afterDesignChange();
 }

@@ -16,7 +16,7 @@ export function validateLevel(data) {
     ids.add(e.id);
     if (!EXP_KINDS.includes(e.kind)) problems.push(`experiment "${e.id}" has unknown kind "${e.kind}"`);
     if (e.kind === 'crash' && typeof e.target !== 'function' && typeof e.targets !== 'function') problems.push(`crash experiment "${e.id}" needs a target or targets function`);
-    if (e.kind === 'day' && !(e.secs > 0 && Array.isArray((data.workload || {}).day) && data.workload.day.length === 24)) problems.push(`day experiment "${e.id}" needs secs and a 24-hour workload.day`);
+    if (e.kind === 'day' && !(e.secs > 0 && Array.isArray(data.workload?.day) && data.workload.day.length === 24)) problems.push(`day experiment "${e.id}" needs secs and a 24-hour workload.day`);
   }
   data.missions.forEach((M, i) => {
     for (const g of M.goals) if (g.type === 'exp' && !ids.has(g.id)) problems.push(`Mission ${i + 1} goal "${g.id}" has no matching experiment`);

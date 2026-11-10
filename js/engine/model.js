@@ -1,18 +1,18 @@
 // Simulation model: load, latency, failures and cost, for any graph of components.
 import { MISSIONS, TXT, PALETTE, S, run, byId, WORKLOAD } from '../state.js';
-import { COMPONENTS, T, qmul } from './catalog.js';
+import { COMPONENTS, T, qmul, componentOf } from './catalog.js';
 import { workloadsAt, trafficShape } from './workloads.js';
 import { kindOf, RESULT_DEFAULTS, COMBINE } from './kinds/index.js';
 import { clusterLayout } from './kinds/cluster.js';
 import { botsOf } from './kinds/limiter.js';
-import { roleOf, isServer, isReplica, isCache, isEdge, isStore, isSticky, scales, sessionsOn, holdsSessions, copiesFor, isLocated, isFar, isGeo, replicates, isQueue, isOffload, createQueries, isClustered, clusterHit, hitRate, edgeHit, fallsBack, staleSecs, costOf, serverSpec, splitRule } from './components.js';
+import { roleOf, isServer, isReplica, isCache, isEdge, isStore, isSticky, scales, sessionsOn, holdsSessions, copiesFor, isLocated, isFar, isGeo, replicates, isQueue, isOffload, createQueries, isClustered, isReplicated, isSyncing, isStateful, clusterHit, hitRate, edgeHit, fallsBack, staleSecs, costOf, serverSpec, splitRule } from './components.js';
 import { activeExps, downIds, trafficFactor, uploadFactor, dayShift, resizeBy, expTotal, expFlag, textOf, PEAK, WOBBLE } from './experiments.js';
 
 const outs = (id) => S.edges.filter(e => e.from === id).map(e => byId(e.to)).filter(Boolean);
 /** The components that connect to `id`. */
 const ins = (id) => S.edges.filter(e => e.to === id).map(e => byId(e.from)).filter(Boolean);
 /** Servers `n` sends requests to. A connection that copies data between servers of a type that syncs carries none. */
-const sendsTo = (n) => outs(n.id).filter(c => isServer(c) && !(c.type === n.type && (COMPONENTS[n.type] || {}).syncs));
+const sendsTo = (n) => outs(n.id).filter(c => isServer(c) && !(c.type === n.type && isSyncing(n)));
 
 /** Downstream servers of a node, grouped by type (peers of the same type share the load). */
 export function childGroups(n) {
@@ -47,7 +47,7 @@ export function graph() {
   const dns = uo.find(n => roleOf(n) === 'resolver') || null;
   // entry: the servers Users send pages to. cdn: the CDNs they fetch files from (only where the level has files).
   const entry = uo.filter(c => isServer(c) && !isEdge(c)), cdn = uo.filter(isEdge);
-  const needsDns = PALETTE.some(t => (COMPONENTS[t] || {}).role === 'resolver');
+  const needsDns = PALETTE.some(t => COMPONENTS[t]?.role === 'resolver');
   const cost = S.nodes.reduce((s, n) => s + (scales(n) ? 0 : costOf(n)), 0);
   const ready = entry.length > 0 && (!needsDns || !!dns);
   // Goal helpers. They only count servers on the request path, i.e. reachable from Users.
@@ -63,21 +63,21 @@ export function graph() {
   const reached = (n, to) => outs(n.id).filter(c => c.type === to && path.includes(c)).length;
   const next = (n) => outs(n.id);
   // monitored: the servers a monitoring component watches.
-  const monitored = new Set(S.edges.filter(e => roleOf(byId(e.from) || {}) === 'monitor').map(e => e.to));
+  const monitored = new Set(S.edges.filter(e => roleOf(byId(e.from)) === 'monitor').map(e => e.to));
   const g = { users, dns, hasDNS: !!dns, entry, cdn, needsDns, ready, cost, onPath, count, everyReaches, reached, next, peak: new Map(), monitored };
   // An autoscaled group pays for the servers it runs each hour, so its cost needs its load at the peak (peak).
   if (S.nodes.some(scales)) {
     const scratch = { node: {}, issue: null, staleSecs: 0, fileStaleSecs: 0, noDataPct: 0, lagWrites: 0, queues: {} };
     const M = MISSIONS[S.mission], env = workloadEnv(true), out = workloadsAt(M.qps, M.qps, env); // it ignores experiments
     loadPhase(g, out.qps, 1, new Set(), scratch, null, () => 0, M.uploads || 0, trafficOf(out, env));
-    for (const n of S.nodes.filter(scales)) { const w = (scratch.node[n.id] || {}).load || 0; g.peak.set(n.id, w); g.cost += costOf(n, w); }
+    for (const n of S.nodes.filter(scales)) { const w = scratch.node[n.id]?.load || 0; g.peak.set(n.id, w); g.cost += costOf(n, w); }
   }
   return g;
 }
 
 /** Replicas that copy `n`'s writes: every replica of its type, when `n` is a primary. */
 function replicasOf(n) {
-  if (!(COMPONENTS[n.type] || {}).replicated || isReplica(n) || !n.role) return [];
+  if (!isReplicated(n) || isReplica(n) || !n.role) return [];
   return S.nodes.filter(c => c.type === n.type && isReplica(c));
 }
 /** Servers that come after `n`: the ones it sends to, and the replicas that copy its writes. */
@@ -97,7 +97,7 @@ function topoOrder(entry) {
   return order; // servers inside a cycle never reach in-degree 0 and are left out, so a bad design cannot hang the loop
 }
 
-const standbyRouting = (group) => (COMPONENTS[group[0].type] || {}).routing === 'standby';
+const standbyRouting = (group) => componentOf(group[0]).routing === 'standby';
 
 /**
  * Split `flow` across a group: healthy peers share it evenly; with none healthy, the dead ones receive it and fail.
@@ -237,7 +237,7 @@ function loadPhase(g, qps, sizing, down, r, day, backlog, U, traffic) {
   // Sessions: the share of a pool's pages each server receives, the share landing where sessions are shared, and
   // whether the sender keeps each user on one server. A down server that held sessions in memory loses its users' sessions.
   const notePool = (grp, sender, parts, flow, fileFrac) => {
-    if (!sessionsOn() || !flow || !(COMPONENTS[grp[0].type] || {}).stateful) return;
+    if (!sessionsOn() || !flow || !isStateful(grp[0])) return;
     const shared = parts.filter(([c]) => !holdsSessions(c)).reduce((a, [, f]) => a + f, 0) / flow;
     for (const [c, f] of parts) pool.set(c.id, { p: f / flow, shared, sticky: isSticky(sender) });
     for (const [c, f] of split(grp, flow, new Set(), sender)) if (down.has(c.id) && holdsSessions(c)) lost += f * (1 - fileFrac);
@@ -269,7 +269,7 @@ function loadPhase(g, qps, sizing, down, r, day, backlog, U, traffic) {
     }
     if (L <= 0) {
       // A waiting standby is shown idle; anything else that gets no traffic sits behind a failed component.
-      if ((COMPONENTS[n.type] || {}).routing === 'standby') {
+      if (componentOf(n).routing === 'standby') {
         const sp = serverSpec(n);
         r.node[n.id] = { standby: true, load: 0, cap: sp.cap, util: 0, ms: 0, mult: 1, base: sp.base, unit: sp.unit, drop: 0 };
       }
@@ -541,7 +541,7 @@ export function sampleRoute(m, rand = Math.random) {
     const st = m.node[n.id];
     return { route: [m.g.users.id, n.id, m.g.users.id], failAt: !st || st.down || (!file && noData) || rand() < st.drop ? 1 : -1 };
   }
-  while (group && group.length) {
+  while (group?.length) {
     const down = new Set(group.filter(c => m.node[c.id] && m.node[c.id].down).map(c => c.id));
     const shares = split(group, 1, down, sender, w), total = shares.reduce((a, [, f]) => a + f, 0);
     let pick = rand(), n = total > 1 - 1e-9 ? shares[shares.length - 1][0] : null;
@@ -551,7 +551,7 @@ export function sampleRoute(m, rand = Math.random) {
     seen.add(n.id); fwd.push(n.id);
     sender = n; w = undefined;
     if (job) {
-      if (isQueue(n) || (m.node[n.id] || {}).jobMs != null) break; // published, or processed right here
+      if (isQueue(n) || m.node[n.id]?.jobMs != null) break; // published, or processed right here
       const qg = queueGroup(n);
       if (qg) { group = qg; continue; }
     }
@@ -560,7 +560,7 @@ export function sampleRoute(m, rand = Math.random) {
     if (sg && rand() < 0.5) { group = sg; continue; }
     if (file) {
       const st = m.node[n.id];
-      if (st && st.fileMs != null) break; // the web server sends the file
+      if (st?.fileMs != null) break; // the web server sends the file
       if (isEdge(n) && (!st || st.down || st.drop || rand() < st.hit)) break; // a hit ends at the edge
       group = childGroups(n)[0]; continue; // a miss goes on to the origin
     }
@@ -574,7 +574,7 @@ export function sampleRoute(m, rand = Math.random) {
   let failAt = lost;
   for (let i = 1; i < fwd.length && failAt < 0; i++) {
     const st = m.node[fwd[i]];
-    const drop = st && st.realPass != null ? (bot ? 1 - st.botPass / Math.max(st.bots, 1e-9) : 1 - st.realPass) : st ? st.drop + (!file && st.sessionMiss || 0) : 1;
+    const drop = st?.realPass != null ? (bot ? 1 - st.botPass / Math.max(st.bots, 1e-9) : 1 - st.realPass) : st ? st.drop + (!file && st.sessionMiss || 0) : 1;
     if (!st || st.down || rand() < drop) { failAt = i; break; }
   }
   return { route: fwd.concat(fwd.slice(0, -1).reverse()), failAt };
@@ -584,7 +584,7 @@ export function sampleRoute(m, rand = Math.random) {
 export const isStandby = (n) => standbyPeers(n).index > 0;
 /** For standby-routed types: n's place among the peers its sender reaches (0 = active), and how many there are. */
 export function standbyPeers(n) {
-  if ((COMPONENTS[n.type] || {}).routing !== 'standby') return { index: 0, count: 1 };
+  if (componentOf(n).routing !== 'standby') return { index: 0, count: 1 };
   const parent = S.edges.find(e => e.to === n.id);
   if (!parent) return { index: 0, count: 1 };
   const p = byId(parent.from);

@@ -1,20 +1,24 @@
 // Component helpers: what each component does with its settings, its capacity, cost and failure mode. The data they
 // read (component types, sizes, time constants) is in catalog.js.
 import { S, byId, WORKLOAD, MISSIONS } from '../state.js';
-import { T, COMPONENTS, choiceOf, sizesOf, countOf } from './catalog.js';
+import { T, COMPONENTS, choiceOf, optionOf, sizesOf, countOf, componentOf, hasFlag } from './catalog.js';
 import { CREATE_QUERIES } from './links.js';
 import { kindOf } from './kinds/index.js';
 
-export const roleOf = (n) => (COMPONENTS[n.type] || {}).role;
+export const roleOf = (n) => componentOf(n).role;
 export const isServer = (n) => roleOf(n) === 'server';
-export const isReplica = (n) => !!(COMPONENTS[n.type] || {}).replicated && n.role === 'replica';
-export const isCache = (n) => !!(COMPONENTS[n.type] || {}).aside;
-export const isEdge = (n) => !!(COMPONENTS[n.type] || {}).edge;
-export const isStore = (n) => !!(COMPONENTS[n.type] || {}).store;
-export const isLocated = (n) => !!(COMPONENTS[n.type] || {}).located;
-export const isQueue = (n) => !!(COMPONENTS[n.type] || {}).queue;
-export const isOffload = (n) => !!(COMPONENTS[n.type] || {}).offload;
-export const isClustered = (n) => !!(COMPONENTS[n.type] || {}).clustered;
+export const isReplicated = hasFlag('replicated');
+export const isReplica = (n) => isReplicated(n) && n.role === 'replica';
+export const isCache = hasFlag('aside');
+export const isEdge = hasFlag('edge');
+export const isStore = hasFlag('store');
+export const isLocated = hasFlag('located');
+export const isQueue = hasFlag('queue');
+export const isOffload = hasFlag('offload');
+export const isClustered = hasFlag('clustered');
+/** True for a type whose servers copy their data to each other when connected (see replicates). */
+export const isSyncing = hasFlag('syncs');
+export const isStateful = hasFlag('stateful');
 /**
  * Share of reads a cache cluster answers. Each server holds its share of the keys and keeps as many of them as its
  * memory fits, the most read first (the 80/20 rule, as in hitRate), so a server holding more than its share keeps
@@ -27,24 +31,26 @@ export function clusterHit(n, shares) {
 /** True for the far region ('far'), false for the near one, for a located server. */
 export const isFar = (n) => choiceOf(n, 'region') === 'far';
 /** True when DNS answers by the user's location (GeoDNS), with health checks. */
-export const isGeo = (dns) => !!dns && !!(COMPONENTS[dns.type].choices || {}).routing && COMPONENTS[dns.type].choices.routing.options[choiceOf(dns, 'routing')].geo === true;
+export const isGeo = (dns) => !!componentOf(dns).choices?.routing && optionOf(dns, 'routing').geo === true;
 /** True when `a` copies its data to `b` (a connection between two servers of a type that syncs). */
-export const replicates = (a, b) => a.type === b.type && !!(COMPONENTS[a.type] || {}).syncs && S.edges.some(e => e.from === a.id && e.to === b.id);
-export const isSticky = (n) => { const c = n && COMPONENTS[n.type]; return !!(c && c.algos && (c.algos[n.algo] || c.algos[c.defaultAlgo]).sticky); };
-/** True when the server runs as an autoscaled group. */
+export const replicates = (a, b) => a.type === b.type && isSyncing(a) && S.edges.some(e => e.from === a.id && e.to === b.id);
+/** The balancing algorithm node `n` runs (its type's default when none is picked); undefined for a type with none. */
+const algoOf = (n) => { const c = componentOf(n); return c.algos && (c.algos[n.algo] ?? c.algos[c.defaultAlgo]); };
+export const isSticky = (n) => !!algoOf(n)?.sticky;
 /** A URL shortener's settings on its web server: 301 redirects, a per-account limit on new links, how codes are made. */
 export function linkSettingsOf(n) {
   const ch = COMPONENTS[n.type].choices;
   return { permanent: !!ch.redirect.options[choiceOf(n, 'redirect')].permanent, limit: !!ch.limit.options[choiceOf(n, 'limit')].limit, code: choiceOf(n, 'code') };
 }
 /** Database queries one new link costs the server's database (1 except for a URL shortener's hashed codes). */
-export const createQueries = (n) => { const ch = (COMPONENTS[n.type] || {}).choices; return ch && ch.code ? CREATE_QUERIES[choiceOf(n, 'code')] : 1; };
-export const scales = (n) => { const c = COMPONENTS[n.type] || {}; return !!(c.choices && c.choices.scaling && c.choices.scaling.options[choiceOf(n, 'scaling')].auto); };
+export const createQueries = (n) => componentOf(n).choices?.code ? CREATE_QUERIES[choiceOf(n, 'code')] : 1;
+/** True when the server runs as an autoscaled group. */
+export const scales = (n) => !!componentOf(n).choices?.scaling?.options[choiceOf(n, 'scaling')].auto;
 /** True when the mission's pages carry a session (a login and a cart). */
 export const sessionsOn = () => !!MISSIONS[S.mission].sessions;
 /** True when the server keeps sessions in its own memory: a stateful server with no session store to share them. */
 export function holdsSessions(n) {
-  return sessionsOn() && !!(COMPONENTS[n.type] || {}).stateful && !S.edges.some(e => e.from === n.id && isStore(byId(e.to) || {}));
+  return sessionsOn() && isStateful(n) && !S.edges.some(e => e.from === n.id && isStore(byId(e.to)));
 }
 
 /**
@@ -90,7 +96,7 @@ export const dayCopies = (work, cap) => (WORKLOAD.day || [1]).map(f => copiesFor
 export function costOf(n, work = 0) {
   const kind = kindOf(n);
   if (kind?.cost) return kind.cost(n, work, S.nodes);
-  const c = COMPONENTS[n.type] || {};
+  const c = componentOf(n);
   if (c.sized && scales(n)) { const k = dayCopies(work, serverSpec(n).cap); return Math.round(sizesOf(n.type)[n.size].cost * k.reduce((a, b) => a + b, 0) / k.length); }
   if (c.sized) return n.size ? sizesOf(n.type)[n.size].cost * countOf(n) : 0;
   if (c.perGB) return Math.round(monthlyFileGB() * c.perGB);
@@ -112,8 +118,8 @@ export function monthlyFileGB() {
 
 /** True when a server lacks the dependency it normally hands work to, so it does that work itself. */
 export function runsAlone(n) {
-  const a = (COMPONENTS[n.type] || {}).alone;
-  return !!a && !S.edges.some(e => e.from === n.id && [].concat(a.missing).includes((byId(e.to) || {}).type));
+  const a = componentOf(n).alone;
+  return !!a && !S.edges.some(e => e.from === n.id && [].concat(a.missing).includes(byId(e.to)?.type));
 }
 
 /** Capacity and work per request for a server, given its size, kind and dependencies. */
@@ -131,8 +137,4 @@ export function serverSpec(n) {
 }
 
 /** How `n` splits traffic over the servers behind it: 'even' (default) or 'capacity'. */
-export function splitRule(n) {
-  const c = n && COMPONENTS[n.type];
-  if (!c || !c.algos) return 'even';
-  return (c.algos[n.algo] || c.algos[c.defaultAlgo]).split;
-}
+export const splitRule = (n) => algoOf(n)?.split ?? 'even';

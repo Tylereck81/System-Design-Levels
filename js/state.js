@@ -15,10 +15,10 @@ export const pairKey = (a, b) => [a, b].sort().join('|');
 /** A component's display name: its role's name when the level gives roles (e.g. "Read replica"). */
 export const nameOf = (n) => { const t = TYPES[n.type], r = t.roles && n.role && t.roles[n.role]; return r ? r.name : t.nameOf ? t.nameOf(n) : t.name; };
 /** A component's name inside a sentence: its role's lowercase name when the level gives one (e.g. "primary database"). */
-export const lowerName = (n) => { const t = TYPES[n.type], r = t.roles && n.role && t.roles[n.role]; return (r && r.lower) || nameOf(n).toLowerCase(); };
+export const lowerName = (n) => TYPES[n.type].roles?.[n.role]?.lower || nameOf(n).toLowerCase();
 /** Label and description of the connection a → b; a level can word it by the receiver's role. */
 export const edgeInfo = (a, b) => {
-  const info = OK_PAIRS[pairKey(a.type, b.type)], byRole = info && info.byRole && b.role && info.byRole[b.role];
+  const info = OK_PAIRS[pairKey(a.type, b.type)], byRole = info?.byRole?.[b.role];
   return byRole ? { ...info, ...byRole } : info;
 };
 export const MISSIONS = level.missions;
@@ -58,7 +58,7 @@ export const run = { queues: {}, playing: false, t: 0, on: {}, hold: 0, dnsDone:
 
 export function validState(src) {
   if (!src || typeof src !== 'object' || !Array.isArray(src.nodes) || !Array.isArray(src.edges)) return false;
-  if (!src.nodes.some(n => n && n.type === 'users')) return false;
+  if (!src.nodes.some(n => n?.type === 'users')) return false;
   const okNode = (n) => n && typeof n.id === 'string' && TYPES[n.type] && Number.isFinite(n.x) && Number.isFinite(n.y) && (n.size == null || SIZES[n.size]);
   if (!src.nodes.every(okNode)) return false;
   const ids = new Set(src.nodes.map(n => n.id));
@@ -73,7 +73,7 @@ function readSave() {
   try { return JSON.parse(text); } catch (err) { console.warn('Saved progress is not valid JSON; starting fresh.', err); return null; }
 }
 export function load(data) {
-  const src = data && data.S ? data.S : readSave();
+  const src = data?.S || readSave();
   if (!validState(src)) {
     if (src != null) console.warn('Saved progress does not fit this level; starting fresh.', src);
     return;

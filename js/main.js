@@ -32,7 +32,7 @@ function renderTabs() {
   }
   const nd = S.done.filter(Boolean).length;
   const bm = $('buildMeta');
-  if (level.interview) { bm.textContent = S.mock && S.mock.finished ? '✓' : `${((S.mock && S.mock.step) || 0) + 1}/4`; bm.title = 'Interview step'; bm.classList.toggle('done', !!(S.mock && S.mock.finished)); }
+  if (level.interview) { bm.textContent = S.mock?.finished ? '✓' : `${(S.mock?.step || 0) + 1}/4`; bm.title = 'Interview step'; bm.classList.toggle('done', !!S.mock?.finished); }
   else { bm.textContent = nd + '/' + MISSIONS.length; bm.classList.toggle('done', nd === MISSIONS.length); }
   const qa = quizScore(), qm = $('quizMeta');
   if (qa.answered < QUIZ.length) { qm.textContent = qa.answered + '/' + QUIZ.length; qm.title = 'Questions answered'; qm.classList.remove('done'); }
