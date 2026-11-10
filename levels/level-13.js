@@ -10,6 +10,7 @@ import { dnsLookup, usersToLb, lbToWeb, lbBad } from './shared/connections.js';
 import { lbText, levelComplete } from './shared/text.js';
 import { failText, passText } from './shared/quiz.js';
 import { dayTraffic } from './shared/workload.js';
+import { lessonSteps } from './shared/lesson.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 const PCT = { wholeUpTo: 0, wholeFrom: 1 }; // percentages: whole numbers, with one decimal between 0% and 1%
@@ -324,21 +325,18 @@ export default {
     </section>
 
     <section>
-      <h2>How each mission maps to the interview</h2>
-      <p class="src">Interview loop · times for a 45-minute interview (formats vary by company)</p>
-      <div class="steps4">
-        <div><span>Step 1 · 5–8 min</span><b>Scope it</b>Unique? Numbers only? How many bits? Sorted by time? How many a second?</div>
-        <div><span>Step 2 · 10–12 min</span><b>Sketch it</b>Compare multi-primary, UUID, ticket server and timestamp-based IDs against each requirement.</div>
-        <div><span>Step 3 · 15–20 min</span><b>Go deep</b>The bit layout, the epoch, the sequence, and how machine IDs are given out.</div>
-        <div><span>Step 4 · 5 min</span><b>Stress it</b>A server fails, one is added, a clock goes back.</div>
-      </div>
+      ${lessonSteps([
+        'Unique? Numbers only? How many bits? Sorted by time? How many a second?',
+        'Compare multi-primary, UUID, ticket server and timestamp-based IDs against each requirement.',
+        'The bit layout, the epoch, the sequence, and how machine IDs are given out.',
+        'A server fails, one is added, a clock goes back.',
+      ])}
     </section>
 `,
 
   // Lesson diagrams. `f` provides the engine's drawing helpers.
   drawFigures(f) {
-    const { $, figNode, figArrow, figDefs, svgEl } = f;
-    const label = (svg, x, y, t, anchor = 'middle') => { const e = svgEl('text', { x, y, class: 'd-label', 'text-anchor': anchor }, svg); e.textContent = t; };
+    const { $, figNode, figArrow, figDefs, svgEl, figLabel } = f;
 
     const f1 = $('figStep'); f1.textContent = ''; figDefs(f1);
     figNode(f1, 'web', 110, 100, 'Web servers', 'Ask for IDs');
@@ -346,8 +344,8 @@ export default {
     figNode(f1, 'db', 400, 150, 'Server 2', 'Starts at 2, step 2');
     figArrow(f1, 206, 90, 304, 56, '', null, 0, 0);
     figArrow(f1, 206, 110, 304, 144, '', null, 0, 0);
-    label(f1, 510, 54, '1, 3, 5, 7…', 'start');
-    label(f1, 510, 154, '2, 4, 6, 8…', 'start');
+    figLabel(f1, 510, 54, '1, 3, 5, 7…', 'start');
+    figLabel(f1, 510, 154, '2, 4, 6, 8…', 'start');
 
     const f2 = $('figBits'); f2.textContent = ''; figDefs(f2);
     // Widths in proportion to the bits, 9.5 px a bit.
@@ -357,12 +355,11 @@ export default {
     parts.forEach(([name, bits, sub], i) => {
       const w = bits * 9.5;
       svgEl('rect', { x, y: 40, width: w, height: 40, rx: 2, class: i === 1 ? 'd-step' : 'ic-stroke' }, f2);
-      const t = svgEl('text', { x: x + w / 2, y: 65, class: i === 1 ? 'd-step-t' : 'd-label', 'text-anchor': 'middle' }, f2);
-      t.textContent = name;
-      label(f2, x + w / 2, 104, sub);
+      figLabel(f2, x + w / 2, 65, name, 'middle', i === 1 ? 'd-step-t' : 'd-label');
+      figLabel(f2, x + w / 2, 104, sub);
       x += w;
     });
-    label(f2, 26, 26, 'bit 63', 'start');
-    label(f2, x, 26, 'bit 0', 'end');
+    figLabel(f2, 26, 26, 'bit 63', 'start');
+    figLabel(f2, x, 26, 'bit 0', 'end');
   },
 };

@@ -8,6 +8,7 @@ import { dnsLookup, usersToLb, lbToWeb, webToReplicas, webToShards, lbBad } from
 import { lbText, replicaText, levelComplete } from './shared/text.js';
 import { failText } from './shared/quiz.js';
 import { dayTraffic } from './shared/workload.js';
+import { lessonSteps } from './shared/lesson.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 const BUDGET = 2500;
@@ -262,28 +263,26 @@ export default {
     </section>
 
     <section>
-      <h2>How each mission maps to the interview</h2>
-      <p class="src">Interview loop · times for a 45-minute interview (formats vary by company)</p>
-      <div class="steps4">
-        <div><span>Step 1 · 5–8 min</span><b>Scope it</b>How many queries, how many writes? How big is the data?</div>
-        <div><span>Step 2 · 10–12 min</span><b>Sketch it</b>Shards by a key, a NoSQL store for counters.</div>
-        <div><span>Step 3 · 15–20 min</span><b>Go deep</b>The shard key, hotspots, joins and denormalization.</div>
-        <div><span>Step 4 · 5 min</span><b>Stress it</b>Add a shard: how much data moves?</div>
-      </div>
+      ${lessonSteps([
+        'How many queries, how many writes? How big is the data?',
+        'Shards by a key, a NoSQL store for counters.',
+        'The shard key, hotspots, joins and denormalization.',
+        'Add a shard: how much data moves?',
+      ])}
       <p>When you shard in an interview, name the key and say why it spreads evenly, how you handle hot keys, and how you will add shards later.</p>
     </section>
 `,
 
   // Lesson diagrams. `f` provides the engine's drawing helpers.
   drawFigures(f) {
-    const { $, figNode, figArrow, figDefs } = f;
+    const { $, figNode, figArrow, figDefs, figLabel } = f;
     const f1 = $('figShards'); f1.textContent = ''; figDefs(f1);
     figNode(f1, 'web', 330, 40, 'Web servers', 'account_id % 4');
     figNode(f1, 'shards', 100, 190, 'Shard 0', '1004, 1008, …');
     figNode(f1, 'shards', 560, 190, 'Shard 2', '1006, 1010, …');
     figArrow(f1, 290, 70, 140, 158, 'account 1004', null, 200, 112, 'end');
     figArrow(f1, 370, 70, 520, 158, 'account 1006', null, 460, 112, 'start');
-    const t = f.svgEl('text', { x: 330, y: 194, class: 'd-label', 'text-anchor': 'middle' }, f1); t.textContent = 'shards 1 and 3 …';
+    figLabel(f1, 330, 194, 'shards 1 and 3 …');
 
     const f2 = $('figData'); f2.textContent = ''; figDefs(f2);
     figNode(f2, 'web', 330, 40, 'Web servers', 'Each page');

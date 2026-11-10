@@ -7,6 +7,7 @@ import { costGoal, fmtPct } from './shared/goals.js';
 import { DNS_MS, SLOW_DNS_MS, DNS_MISS, DUP_SHARE, PAGE_KB, POLITE, TOP_HOST, FLOOD_SHARE, TRAP_SHARE, TRAP_LINKS, THREADS, PAGE_MS } from '../js/engine/crawl.js';
 import { lbText, levelComplete } from './shared/text.js';
 import { failText, passText } from './shared/quiz.js';
+import { lessonSteps } from './shared/lesson.js';
 
 const targets = { latencyMs: 1000, servedPct: 99 };
 const BUDGET = 1500;
@@ -317,21 +318,18 @@ export default {
     </section>
 
     <section>
-      <h2>How each mission maps to the interview</h2>
-      <p class="src">Interview loop · times for a 45-minute interview (formats vary by company)</p>
-      <div class="steps4">
-        <div><span>Step 1 · 5–8 min</span><b>Scope it</b>Purpose, pages a month, content types, how long to keep pages, duplicates.</div>
-        <div><span>Step 2 · 10–12 min</span><b>Sketch it</b>The loop: seeds, frontier, downloader, DNS, parser, content seen, URL filter, URL seen.</div>
-        <div><span>Step 3 · 15–20 min</span><b>Go deep</b>The frontier's priority and politeness queues, robots.txt, the DNS cache.</div>
-        <div><span>Step 4 · 5 min</span><b>Stress it</b>A slow DNS, a flooded site, a crawler trap, a crash mid-crawl.</div>
-      </div>
+      ${lessonSteps([
+        'Purpose, pages a month, content types, how long to keep pages, duplicates.',
+        'The loop: seeds, frontier, downloader, DNS, parser, content seen, URL filter, URL seen.',
+        'The frontier\'s priority and politeness queues, robots.txt, the DNS cache.',
+        'A slow DNS, a flooded site, a crawler trap, a crash mid-crawl.',
+      ])}
     </section>
 `,
 
   // Lesson diagram. `f` provides the engine's drawing helpers.
   drawFigures(f) {
-    const { $, figNode, figArrow, figDefs, svgEl } = f;
-    const label = (svg, x, y, t, anchor = 'middle') => { const e = svgEl('text', { x, y, class: 'd-label', 'text-anchor': anchor }, svg); e.textContent = t; };
+    const { $, figNode, figArrow, figDefs, figLabel } = f;
     const f1 = $('figCrawl'); f1.textContent = ''; figDefs(f1);
     figNode(f1, 'users', 110, 45, 'URL frontier', 'URLs to download');
     figNode(f1, 'downloader', 330, 45, 'Downloader', 'DNS, then HTTP');
@@ -343,7 +341,7 @@ export default {
     figArrow(f1, 550, 71, 550, 159, '', null, 0, 0);
     figArrow(f1, 454, 70, 316, 160, '', null, 0, 0);
     figArrow(f1, 160, 159, 120, 71, '', null, 0, 0);
-    label(f1, 420, 128, 'links');
-    label(f1, 98, 122, 'new URLs', 'end');
+    figLabel(f1, 420, 128, 'links');
+    figLabel(f1, 98, 122, 'new URLs', 'end');
   },
 };

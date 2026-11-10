@@ -5,6 +5,7 @@
 /** @import { Level } from '../js/types.js' */
 import { MOCK_LEVELS } from './index.js';
 import { STEPS, PROBLEM_KEY } from './mock-steps.js';
+import { stepsGrid } from './shared/lesson.js';
 
 function chosenProblem() {
   let id = null;
@@ -28,7 +29,6 @@ export function mockOf(src, id) {
   const mission = { ...first, title: src.mock.title, ref: 'Mock interview', story: src.mock.brief, goals: [], hint: '', takeaway: '' };
   delete mission.gate;
   delete mission.budget;
-  const stepsHtml = STEPS.map((s, i) => `<div><span>Step ${i + 1} · ${s.min === s.max ? s.min : `${s.min}–${s.max}`} min</span><b>${s.name}</b>${s.tip}</div>`).join('');
   return {
     ...src,
     id: 'mock',
@@ -51,7 +51,7 @@ export function mockOf(src, id) {
     <section>
       <h2>How it works</h2>
       <p class="src">Interview loop · 45 minutes</p>
-      <div class="steps4">${stepsHtml}</div>
+      ${stepsGrid(STEPS.map((s) => s.tip))}
       <p>Start the timer on the Build tab and move to the next step yourself. A step turns amber when it runs over. Talk through your choices out loud, as you would to an interviewer.</p>
     </section>`,
     drawFigures() {},

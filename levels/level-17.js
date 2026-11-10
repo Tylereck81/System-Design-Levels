@@ -10,6 +10,7 @@ import { dnsLookup, usersToLb, lbToWeb, lbBad } from './shared/connections.js';
 import { lbText, levelComplete } from './shared/text.js';
 import { failText, passText } from './shared/quiz.js';
 import { dayTraffic } from './shared/workload.js';
+import { lessonSteps } from './shared/lesson.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 const BUDGET = 2600;
@@ -306,31 +307,28 @@ export default {
     </section>
 
     <section>
-      <h2>How each mission maps to the interview</h2>
-      <p class="src">Interview loop · times for a 45-minute interview (formats vary by company)</p>
-      <div class="steps4">
-        <div><span>Step 1 · 5–8 min</span><b>Scope it</b>Features, order, friends, users, media.</div>
-        <div><span>Step 2 · 10–12 min</span><b>Sketch it</b>Publishing and building flows, the two APIs.</div>
-        <div><span>Step 3 · 15–20 min</span><b>Go deep</b>Fanout on write vs read, the hybrid, the feed cache, cache layers.</div>
-        <div><span>Step 4 · 5 min</span><b>Stress it</b>A star posts, midnight, scaling the database.</div>
-      </div>
+      ${lessonSteps([
+        'Features, order, friends, users, media.',
+        'Publishing and building flows, the two APIs.',
+        'Fanout on write vs read, the hybrid, the feed cache, cache layers.',
+        'A star posts, midnight, scaling the database.',
+      ])}
     </section>
 `,
 
   // Lesson diagram. `f` provides the engine's drawing helpers.
   drawFigures(f) {
-    const { $, figNode, figArrow, figDefs, svgEl } = f;
-    const label = (svg, x, y, t, anchor = 'middle') => { const e = svgEl('text', { x, y, class: 'd-label', 'text-anchor': anchor }, svg); e.textContent = t; };
+    const { $, figNode, figArrow, figDefs, figLabel } = f;
     const f1 = $('figFanout'); f1.textContent = ''; figDefs(f1);
-    label(f1, 165, 18, 'On write (push)');
+    figLabel(f1, 165, 18, 'On write (push)');
     figNode(f1, 'users', 165, 60, 'Ana posts', '300 friends');
     figNode(f1, 'feedcache', 165, 175, 'Friends\' feeds', '+ post ID, each');
     figArrow(f1, 165, 86, 165, 149, '', null, 0, 0);
-    label(f1, 175, 122, '300 writes', 'start');
-    label(f1, 495, 18, 'On read (pull)');
+    figLabel(f1, 175, 122, '300 writes', 'start');
+    figLabel(f1, 495, 18, 'On read (pull)');
     figNode(f1, 'users', 495, 60, 'Ben opens his feed', 'Asks 300 friends');
     figNode(f1, 'feedsvc', 495, 175, 'Friends\' posts', 'Looked up now');
     figArrow(f1, 495, 86, 495, 149, '', null, 0, 0);
-    label(f1, 505, 122, '300 lookups', 'start');
+    figLabel(f1, 505, 122, '300 lookups', 'start');
   },
 };

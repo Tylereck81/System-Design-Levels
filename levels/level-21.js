@@ -9,6 +9,7 @@ import { lb } from './shared/components.js';
 import { usersToLb } from './shared/connections.js';
 import { lbText } from './shared/text.js';
 import { failText } from './shared/quiz.js';
+import { lessonSteps } from './shared/lesson.js';
 
 const targets = { latencyMs: 1000, servedPct: 99 };
 const MONEY = { millions: true }; // bills reach millions of dollars: "$1.25M"
@@ -303,32 +304,29 @@ export default {
     </section>
 
     <section>
-      <h2>How each mission maps to the interview</h2>
-      <p class="src">Interview loop · times for a 45-minute interview (formats vary by company)</p>
-      <div class="steps4">
-        <div><span>Step 1 · 5–8 min</span><b>Scope it</b>Features, devices, sizes, users, and above all: never lose data.</div>
-        <div><span>Step 2 · 10–12 min</span><b>Sketch it</b>Block servers, cloud storage, metadata DB, notifications, offline queue.</div>
-        <div><span>Step 3 · 15–20 min</span><b>Go deep</b>Delta sync, consistency, the upload and download flows, conflicts, saving space.</div>
-        <div><span>Step 4 · 5 min</span><b>Stress it</b>A load balancer fails, a notification server dies, the bill grows.</div>
-      </div>
+      ${lessonSteps([
+        'Features, devices, sizes, users, and above all: never lose data.',
+        'Block servers, cloud storage, metadata DB, notifications, offline queue.',
+        'Delta sync, consistency, the upload and download flows, conflicts, saving space.',
+        'A load balancer fails, a notification server dies, the bill grows.',
+      ])}
     </section>
 `,
 
   // Lesson diagram. `f` provides the engine's drawing helpers.
   drawFigures(f) {
-    const { $, figDefs, svgEl } = f;
-    const label = (svg, x, y, t, anchor = 'middle', cls = 'd-label') => { const e = svgEl('text', { x, y, class: cls, 'text-anchor': anchor }, svg); e.textContent = t; };
+    const { $, figDefs, svgEl, figLabel } = f;
     const f1 = $('figBlocks'); f1.textContent = ''; figDefs(f1);
-    label(f1, 30, 30, 'report.docx, after an edit', 'start');
+    figLabel(f1, 30, 30, 'report.docx, after an edit', 'start');
     for (let i = 0; i < 5; i++) {
       const x = 30 + i * 80, changed = i === 1 || i === 4;
       svgEl('rect', { x, y: 50, width: 70, height: 44, rx: 4, class: changed ? 'd-step' : 'ic-stroke' }, f1);
-      label(f1, x + 35, 77, `block ${i + 1}`, 'middle', changed ? 'd-step-t' : 'd-label');
+      figLabel(f1, x + 35, 77, `block ${i + 1}`, 'middle', changed ? 'd-step-t' : 'd-label');
     }
     svgEl('line', { x1: 440, y1: 72, x2: 500, y2: 72, class: 'd-line' }, f1);
-    label(f1, 515, 68, 'only 2 and 5:', 'start');
-    label(f1, 515, 86, 'compress, encrypt,', 'start');
-    label(f1, 515, 104, 'upload', 'start');
-    label(f1, 30, 130, 'Unchanged blocks keep their hash and stay where they are.', 'start');
+    figLabel(f1, 515, 68, 'only 2 and 5:', 'start');
+    figLabel(f1, 515, 86, 'compress, encrypt,', 'start');
+    figLabel(f1, 515, 104, 'upload', 'start');
+    figLabel(f1, 30, 130, 'Unchanged blocks keep their hash and stay where they are.', 'start');
   },
 };

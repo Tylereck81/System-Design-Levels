@@ -7,6 +7,7 @@ import { servedGoal, costGoal, servedAtLeast, fmtPct } from './shared/goals.js';
 import { ONLINE, CONN_KB, SERVER_CONNS, MSG_CAP, REQ_CAP, POLL_S, LONG_S, OFFLINE, NIGHT_OFFLINE, FRIENDS, PRESENCE_CAP, HEARTBEAT_S, TRAIN, DROPS_MIN } from '../js/engine/chat.js';
 import { lbText, levelComplete } from './shared/text.js';
 import { failText, passText } from './shared/quiz.js';
+import { lessonSteps } from './shared/lesson.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 const BUDGET = 1800;
@@ -295,14 +296,12 @@ export default {
     </section>
 
     <section>
-      <h2>How each mission maps to the interview</h2>
-      <p class="src">Interview loop · times for a 45-minute interview (formats vary by company)</p>
-      <div class="steps4">
-        <div><span>Step 1 · 5–8 min</span><b>Scope it</b>One-on-one and groups, devices, users, message size, history.</div>
-        <div><span>Step 2 · 10–12 min</span><b>Sketch it</b>WebSocket, stateless API servers, stateful chat servers, KV store, push.</div>
-        <div><span>Step 3 · 15–20 min</span><b>Go deep</b>Service discovery, message IDs and sync, group inboxes, presence.</div>
-        <div><span>Step 4 · 5 min</span><b>Stress it</b>A chat server dies, a user goes offline, a train goes through tunnels.</div>
-      </div>
+      ${lessonSteps([
+        'One-on-one and groups, devices, users, message size, history.',
+        'WebSocket, stateless API servers, stateful chat servers, KV store, push.',
+        'Service discovery, message IDs and sync, group inboxes, presence.',
+        'A chat server dies, a user goes offline, a train goes through tunnels.',
+      ])}
     </section>
 `,
 

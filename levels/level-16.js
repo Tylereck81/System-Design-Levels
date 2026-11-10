@@ -7,6 +7,7 @@ import { servedGoal, costGoal, servedAtLeast, fmtPct } from './shared/goals.js';
 import { SHARES, SEND_MS, TIMEOUT_MS, OPT_OUT, BLAST, IN_FLIGHT } from '../js/engine/notify.js';
 import { lbText, levelComplete } from './shared/text.js';
 import { failText, passText } from './shared/quiz.js';
+import { lessonSteps } from './shared/lesson.js';
 
 const targets = { latencyMs: 1000, servedPct: 99 };
 const BUDGET = 700;
@@ -303,14 +304,12 @@ export default {
     </section>
 
     <section>
-      <h2>How each mission maps to the interview</h2>
-      <p class="src">Interview loop · times for a 45-minute interview (formats vary by company)</p>
-      <div class="steps4">
-        <div><span>Step 1 · 5–8 min</span><b>Scope it</b>Channels, devices, triggers, opt-out, volume, how real-time.</div>
-        <div><span>Step 2 · 10–12 min</span><b>Sketch it</b>Services, notification servers, a queue per channel, workers, providers.</div>
-        <div><span>Step 3 · 15–20 min</span><b>Go deep</b>The log and retries, dedupe, settings, limits, templates, security.</div>
-        <div><span>Step 4 · 5 min</span><b>Stress it</b>A provider down, workers crashing, a marketing blast.</div>
-      </div>
+      ${lessonSteps([
+        'Channels, devices, triggers, opt-out, volume, how real-time.',
+        'Services, notification servers, a queue per channel, workers, providers.',
+        'The log and retries, dedupe, settings, limits, templates, security.',
+        'A provider down, workers crashing, a marketing blast.',
+      ])}
     </section>
 `,
 

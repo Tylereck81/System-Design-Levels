@@ -9,6 +9,7 @@ import { dnsLookup, usersToLb, lbToWeb, webToDb, lbBad, replicaBad, cacheBad } f
 import { lbText, levelComplete } from './shared/text.js';
 import { failText, passText } from './shared/quiz.js';
 import { dayTraffic } from './shared/workload.js';
+import { lessonSteps } from './shared/lesson.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 const BUDGET = 1300;
@@ -301,29 +302,26 @@ export default {
     </section>
 
     <section>
-      <h2>How each mission maps to the interview</h2>
-      <p class="src">Interview loop · times for a 45-minute interview (formats vary by company)</p>
-      <div class="steps4">
-        <div><span>Step 1 · 5–8 min</span><b>Scope it</b>Links a day, read to write ratio, characters, how long links live.</div>
-        <div><span>Step 2 · 10–12 min</span><b>Sketch it</b>Two APIs, 301 or 302, a table of code and long link.</div>
-        <div><span>Step 3 · 15–20 min</span><b>Go deep</b>Code length, hash and collisions vs base 62, the cache for redirects.</div>
-        <div><span>Step 4 · 5 min</span><b>Stress it</b>A viral link, a bulk script, analytics, scaling the database.</div>
-      </div>
+      ${lessonSteps([
+        'Links a day, read to write ratio, characters, how long links live.',
+        'Two APIs, 301 or 302, a table of code and long link.',
+        'Code length, hash and collisions vs base 62, the cache for redirects.',
+        'A viral link, a bulk script, analytics, scaling the database.',
+      ])}
     </section>
 `,
 
   // Lesson diagram. `f` provides the engine's drawing helpers.
   drawFigures(f) {
-    const { $, figNode, figArrow, figDefs, svgEl } = f;
-    const label = (svg, x, y, t, anchor = 'middle') => { const e = svgEl('text', { x, y, class: 'd-label', 'text-anchor': anchor }, svg); e.textContent = t; };
+    const { $, figNode, figArrow, figDefs, figLabel } = f;
     const f1 = $('figRedirect'); f1.textContent = ''; figDefs(f1);
     figNode(f1, 'users', 110, 100, 'Browser', 'Clicks aZ3k9Qe');
     figNode(f1, 'web', 540, 40, 'Link service', 'Looks up the code');
     figNode(f1, 'web', 540, 160, 'example.com', 'The long link');
     figArrow(f1, 206, 92, 444, 46, '', null, 0, 0);
     figArrow(f1, 206, 108, 444, 154, '', null, 0, 0);
-    label(f1, 300, 58, '1. GET /aZ3k9Qe');
-    label(f1, 540, 100, '2. 302, Location: long link');
-    label(f1, 300, 160, '3. GET the long link');
+    figLabel(f1, 300, 58, '1. GET /aZ3k9Qe');
+    figLabel(f1, 540, 100, '2. 302, Location: long link');
+    figLabel(f1, 300, 160, '3. GET the long link');
   },
 };

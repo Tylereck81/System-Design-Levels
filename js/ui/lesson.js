@@ -17,11 +17,19 @@ export function figArrow(svg, x1, y1, x2, y2, label, step, lx, ly, anchor) {
     svgEl('circle', { cx: lx - 13, cy: ly - 4, r: 9, class: 'd-step' }, svg);
     const s = svgEl('text', { x: lx - 13, y: ly, class: 'd-step-t', 'text-anchor': 'middle' }, svg); s.textContent = step;
   }
-  const t = svgEl('text', { x: lx, y: ly, class: 'd-label', 'text-anchor': anchor || 'start' }, svg); t.textContent = label;
+  figLabel(svg, lx, ly, label, anchor || 'start');
+}
+/** A text label; centred on (x, y) unless `anchor` says otherwise. */
+export function figLabel(svg, x, y, text, anchor = 'middle', cls = 'd-label') {
+  const t = svgEl('text', { x, y, class: cls, 'text-anchor': anchor }, svg); t.textContent = text;
+}
+/** A dashed arrow along the path `d` (for example 'M10 20 H80'). */
+export function figDash(svg, d) {
+  svgEl('path', { d, class: 'd-line d-dash', fill: 'none', 'marker-end': 'url(#figArr)' }, svg);
 }
 export function figDefs(svg) {
   const defs = svgEl('defs', {}, svg);
   const mk = svgEl('marker', { id: 'figArr', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, defs);
   svgEl('path', { d: 'M0 0L10 5L0 10z', class: 'arrowhead' }, mk);
 }
-export const drawFigures = () => level.drawFigures({ $, svgEl, figNode, figArrow, figDefs });
+export const drawFigures = () => level.drawFigures({ $, svgEl, figNode, figArrow, figDefs, figLabel, figDash });

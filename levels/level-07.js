@@ -11,6 +11,7 @@ import { lbText, replicaText, levelComplete } from './shared/text.js';
 import { ONE_DNS, ONE_CDN } from './shared/limits.js';
 import { failText, passText } from './shared/quiz.js';
 import { filesWorkload } from './shared/workload.js';
+import { lessonSteps } from './shared/lesson.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 const PCT = { wholeFrom: 10 }; // percentages: whole numbers from 10% up
@@ -253,14 +254,12 @@ export default {
     </section>
 
     <section>
-      <h2>How each mission maps to the interview</h2>
-      <p class="src">Interview loop · times for a 45-minute interview (formats vary by company)</p>
-      <div class="steps4">
-        <div><span>Step 1 · 5–8 min</span><b>Scope it</b>Where are the users? How much traffic comes from each region?</div>
-        <div><span>Step 2 · 10–12 min</span><b>Sketch it</b>A data center per region, GeoDNS in front.</div>
-        <div><span>Step 3 · 15–20 min</span><b>Go deep</b>Replication between data centers, sync or async, deployment.</div>
-        <div><span>Step 4 · 5 min</span><b>Stress it</b>Take a data center offline. Is the other big enough? Is the data there?</div>
-      </div>
+      ${lessonSteps([
+        'Where are the users? How much traffic comes from each region?',
+        'A data center per region, GeoDNS in front.',
+        'Replication between data centers, sync or async, deployment.',
+        'Take a data center offline. Is the other big enough? Is the data there?',
+      ])}
       <p>When you add a data center in an interview, say how users reach it, how much spare capacity each one keeps, and how data is copied between them.</p>
     </section>
 `,
