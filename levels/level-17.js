@@ -13,7 +13,9 @@ import { dayTraffic } from './shared/workload.js';
 import { lessonSteps } from './shared/lesson.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
-const BUDGET = 2600;
+// Skipping inactive friends fits, buying 8 workers does not: DNS $5 + LB $20 + 2 L web groups × $417 + feed cache
+// 120 GB × $2 + feed service $300 + $100 per worker = $1,799 with 4 workers, $2,199 with 8.
+const BUDGET = 2000;
 const READS = 3000; // feed loads a second at the evening peak
 const POSTS = 150; // new posts a second at the peak
 const SURGE = 2; // posts on New Year's Eve

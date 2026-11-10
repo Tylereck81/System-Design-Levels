@@ -11,7 +11,8 @@ import { dayTraffic } from './shared/workload.js';
 import { lessonSteps } from './shared/lesson.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
-const BUDGET = 1600;
+// N = 3 replicas fit, N = 5 do not: DNS $5 + LB $20 + 2 L web groups × $333 + N × $150 = $1,141 (N = 3), $1,441 (N = 5).
+const BUDGET = 1300;
 
 // The store's setting as the canvas shows it (saved settings are checked on load, so these are valid options).
 const quorumOf = (n) => { const N = Number(n.n) || 3; return { N, W: Math.min(N, Number(n.w) || 1), R: Math.min(N, Number(n.r) || 1), sloppy: n.mode === 'sloppy' }; };

@@ -48,7 +48,8 @@ export const qmul = (u) => (u >= 0.96 ? 25 : 1 / (1 - u));
 //       'server' sits on the request path and has a capacity.
 // sized: capacity and cost come from the server size (S–XL); `sizes` replaces the default table (e.g. memory sizes).
 // kinds: variants that change the work per request (per = operations per request, base = ms per request).
-// alone: what happens when a dependency is missing (the server does that work itself).
+// alone: what happens when the server sends to nothing that holdsData (it keeps the data and does that work itself).
+// holdsData: the component keeps the application's data (a database, shards, a NoSQL store, a key-value store, a feed service).
 // cap, cost: fixed capacity (req/s) and monthly cost for servers that have no sizes.
 // routing 'standby': peers of this type don't share traffic; the first healthy one takes it all
 //   and the others wait as standbys (default: healthy peers split traffic evenly).
@@ -105,7 +106,7 @@ export const COMPONENTS = {
   lb: { role: 'server', cap: 5000, base: T.lb, cost: 20, unit: 'req/s', routing: 'standby', forwards: true,
     algos: { rr: { split: 'even' }, wrr: { split: 'capacity' }, lc: { split: 'capacity' }, sticky: { split: 'even', sticky: true } }, defaultAlgo: 'rr' },
   web: {
-    role: 'server', sized: true, base: T.web, unit: 'req/s', alone: { missing: ['db', 'shards'], capFactor: 0.5, base: T.web + T.db }, files: { per: T.file / T.web, base: T.file },
+    role: 'server', sized: true, base: T.web, unit: 'req/s', alone: { capFactor: 0.5, base: T.web + T.db }, files: { per: T.file / T.web, base: T.file },
     jobs: { per: 2000, base: T.job }, // a web server of a size does as many jobs as a worker of that size
     stateful: true,
     links: true, // it carries a URL shortener's settings (see links.js), read by the link workload
@@ -126,7 +127,7 @@ export const COMPONENTS = {
   },
   monitor: { role: 'monitor', cost: 30 },
   shards: {
-    role: 'server', sized: true, base: T.db, unit: 'queries/s', sharded: true,
+    role: 'server', sized: true, base: T.db, unit: 'queries/s', sharded: true, holdsData: true,
     choices: {
       count: { options: { 2: { count: 2 }, 3: { count: 3 }, 4: { count: 4 }, 8: { count: 8 } }, default: '2' },
       key: { options: { account: {}, country: {}, date: {} }, default: 'account' },
@@ -155,7 +156,7 @@ export const COMPONENTS = {
     },
   },
   kv: {
-    role: 'server', cap: 20000, base: 2, cost: 150, unit: 'requests/s', quorum: true,
+    role: 'server', cap: 20000, base: 2, cost: 150, unit: 'requests/s', quorum: true, holdsData: true,
     choices: {
       n: { options: { 1: { n: 1 }, 3: { n: 3 }, 5: { n: 5 } }, default: '3' },
       w: { options: { 1: { q: 1 }, 2: { q: 2 }, 3: { q: 3 }, 4: { q: 4 }, 5: { q: 5 } }, default: '1' },
@@ -208,7 +209,7 @@ export const COMPONENTS = {
   //   fanout workers, optionally skipping inactive users; the feed cache keeps each feed as IDs or as whole posts, and
   //   costs $2 a month per GB it holds.
   feedsvc: {
-    role: 'server', cap: 20000, base: 5, cost: 300, unit: 'requests/s', feed: true,
+    role: 'server', cap: 20000, base: 5, cost: 300, unit: 'requests/s', feed: true, holdsData: true,
     choices: {
       fanout: { options: { read: {}, write: {}, hybrid: {} }, default: 'read' },
       workers: { options: { 1: { count: 1 }, 2: { count: 2 }, 4: { count: 4 }, 8: { count: 8 } }, default: '2' },
@@ -290,7 +291,7 @@ export const COMPONENTS = {
   provider: { role: 'server', cap: 100000, base: 50, cost: 0, unit: 'notifications/s', managed: true },
   contentstore: { role: 'server', cap: 5000, base: 10, cost: 300, unit: 'pages/s', managed: true },
   counter: { role: 'server', cap: 50000, base: T.cache, cost: 60, unit: 'ops/s', store: true, managed: true },
-  nosql: { role: 'server', cap: 20000, base: T.nosqlLookup, cost: 200, unit: 'lookups/s', offload: true, managed: true },
+  nosql: { role: 'server', cap: 20000, base: T.nosqlLookup, cost: 200, unit: 'lookups/s', offload: true, managed: true, holdsData: true },
   // A whole data center: load balancers, autoscaled web servers, caches, databases and a session store.
   dc: {
     role: 'server', sized: true, base: T.dcPage, unit: 'pages/s', flat: true, located: true, syncs: true, files: { per: T.file / T.web, base: T.file },
@@ -322,7 +323,7 @@ export const COMPONENTS = {
     staleBy: 'onChange',
   },
   db: {
-    role: 'server', sized: true, replicated: true,
+    role: 'server', sized: true, replicated: true, holdsData: true,
     kinds: {
       sql: { per: 1, base: T.db, unit: 'queries/s' },
       nosql: { per: T.nosqlLookups, base: T.nosqlLookup * T.nosqlLookups, unit: 'lookups/s' },

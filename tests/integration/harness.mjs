@@ -86,9 +86,9 @@ export async function loadLevel(id) {
     return out;
   };
 
-  /** The goals of the mission that design `d` misses, in the mission's order. */
+  /** The goals of the mission that design `d` (a recorded design id, or a design) misses, in the mission's order. */
   const missed = (d, mission) => {
-    place(design(d), mission);
+    place(typeof d === 'string' ? design(d) : d, mission);
     const r = allGoals(mission);
     return Object.keys(r).filter((k) => !r[k]);
   };

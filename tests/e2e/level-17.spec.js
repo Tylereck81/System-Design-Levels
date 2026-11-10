@@ -30,7 +30,7 @@ test.describe('Level 17 · playthrough', () => {
     await selectNode(page, 'c');
     await click(page, 'store-ids');
     await expect(page.locator('[data-node="f"] .node-sub')).toHaveText('fanout on write · 4 workers');
-    expect((await measure(page)).cost).toBe(2481);
+    expect((await measure(page)).cost).toBe(1799); // DNS $5 + LB $20 + feed service $300 + 4 workers × $100 + feed cache 120 GB × $2 + 2 L web groups × $417
     await page.click('#playBtn');
     await fastForward(page, 5);
     await breakIt(page, 'rush');
@@ -84,7 +84,7 @@ test.describe('Level 17 · numbers', () => {
     await setProps(page, 'f', { workers: '4' });
     r = await measure(page);
     expect([r.o.lag, r.o.cacheGB]).toEqual([1, expect.closeTo(120, 9)]);
-    expect(r.cost).toBe(2041 - 300 - 200 + 300 + 400 + 240);
+    expect(r.cost).toBe(1359 - 300 - 200 + 300 + 400 + 240); // start $1,359 (DNS $5 + LB $20 + $300 + 2 workers × $100 + 2 L web groups × $417, 50 server-hours each) − 2 workers + 4 workers + 120 GB × $2
   });
 
   test('a star\'s post, the hybrid, midnight and inactive users', async ({ page }) => {
