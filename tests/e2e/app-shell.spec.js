@@ -2,7 +2,7 @@
 // shell, the canvas, the mock interview, and checks every level shares. Import test and expect from ../fixtures.js.
 import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, reloadGame, trackErrors } from '../helpers.js';
+import { freshPage, reloadGame, trackErrors, buildBasic, playFor } from '../helpers.js';
 
 test.describe('App shell · level picker, routing, saved progress', () => {
   test('the header names the level; the picker lists playable levels and closes with Esc or a click outside', async ({ page }) => {
@@ -127,5 +127,25 @@ test.describe('App shell · level picker, routing, saved progress', () => {
     expect(box.x).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(360);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+  });
+});
+
+test.describe('Live panels · repainted only when they change', () => {
+  test('while a steady design plays, the HUD and goals are not rewritten', async ({ page }) => {
+    await freshPage(page, '#level-1/build');
+    await buildBasic(page);
+    await page.click('#playBtn');
+    await playFor(page, 1); // the first paints swap the "—" placeholders for numbers
+    // Watch for 30 animation frames (at least two 0.2 s paints at 60 frames a second), counted in the page, not timed.
+    const rewritten = await page.evaluate(() => new Promise((done) => {
+      const changed = [];
+      const obs = new MutationObserver((list) => list.forEach((m) => changed.push(m.target.id || m.target.className)));
+      ['hud', 'goals'].forEach((id) => obs.observe(document.getElementById(id), { childList: true, subtree: true, characterData: true }));
+      let frames = 0;
+      const tick = () => { if (++frames < 30) requestAnimationFrame(tick); else { obs.disconnect(); done(changed); } };
+      requestAnimationFrame(tick);
+    }));
+    expect(await page.evaluate(() => window.__sdl.run.playing)).toBe(true);
+    expect(rewritten).toEqual([]);
   });
 });

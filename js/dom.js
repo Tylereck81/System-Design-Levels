@@ -34,8 +34,25 @@ const part = (v) => v instanceof SafeHtml ? v.__html
 /** Tagged template: html`<b>${name}</b>` escapes `name`. Nest html results, or arrays of them, without escaping twice. */
 export const html = (strings, ...values) => new SafeHtml(strings.reduce((out, s, i) => out + part(values[i - 1]) + s));
 
+// The markup each live panel was last given by setHtmlIfChanged (compared as written, not as the browser reads it back).
+const lastHtml = new WeakMap();
+
 /** Replace an element's contents. Anything but `html`/raw() output is shown as text. */
-export function setHtml(e, h) { e.innerHTML = part(h); } // eslint-disable-line no-restricted-syntax -- the one place
+export function setHtml(e, h) {
+  lastHtml.delete(e);
+  e.innerHTML = part(h); // eslint-disable-line no-restricted-syntax -- the one place
+}
+
+/**
+ * setHtml for a panel repainted while the game plays: skips the write when the markup is the same as last time, so a
+ * hover, a text selection or a screen reader's place inside it survives.
+ */
+export function setHtmlIfChanged(e, h) {
+  const s = part(h);
+  if (lastHtml.get(e) === s) return;
+  e.innerHTML = s; // eslint-disable-line no-restricted-syntax -- the one place
+  lastHtml.set(e, s);
+}
 
 /** Put markup at the start of an element, before what is already there. */
 export function prependHtml(e, h) { e.insertAdjacentHTML('afterbegin', part(h)); } // eslint-disable-line no-restricted-syntax -- the one place

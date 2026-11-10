@@ -1,7 +1,7 @@
 // js/dom.js: the html tagged template escapes every value; raw() marks authored markup.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { html, raw, escapeHtml } from '../../js/dom.js';
+import { html, raw, escapeHtml, setHtml, setHtmlIfChanged } from '../../js/dom.js';
 
 test('escapeHtml escapes the five characters that can break markup', () => {
   assert.equal(escapeHtml(`a "b" 'c' <d> & e`), 'a &quot;b&quot; &#39;c&#39; &lt;d&gt; &amp; e');
@@ -23,4 +23,15 @@ test('arrays join their parts; null, undefined and false add nothing; 0 is kept'
   assert.equal(String(html`<ul>${['<a>', html`<li>b</li>`]}</ul>`), '<ul>&lt;a&gt;<li>b</li></ul>');
   assert.equal(String(html`${null}${undefined}${false}${0}`), '0');
   assert.equal(String(raw(null)), '');
+});
+
+test('setHtmlIfChanged writes only when the markup differs from what it last wrote', () => {
+  const writes = [];
+  const e = { set innerHTML(s) { writes.push(s); } };
+  setHtmlIfChanged(e, html`<b>${1}</b>`);
+  setHtmlIfChanged(e, html`<b>${1}</b>`); // same: skipped
+  setHtmlIfChanged(e, html`<b>${2}</b>`);
+  setHtml(e, html`<i>x</i>`); // another writer: what setHtmlIfChanged remembers no longer holds
+  setHtmlIfChanged(e, html`<b>${2}</b>`);
+  assert.deepEqual(writes, ['<b>1</b>', '<b>2</b>', '<i>x</i>', '<b>2</b>']);
 });

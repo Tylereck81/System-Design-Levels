@@ -1,6 +1,6 @@
 // Mission panel: brief, estimate box and goals.
 import { fmt } from '../format.js';
-import { $, el, keepFocus, html, raw, setHtml } from '../dom.js';
+import { $, el, keepFocus, html, raw, setHtml, setHtmlIfChanged } from '../dom.js';
 import { TARGET_MS, MISSIONS, HOLD, S, run, expPassed, trafficHidden } from '../state.js';
 import { model } from '../engine/model.js';
 import { stopRun } from '../view/loop.js';
@@ -117,25 +117,30 @@ export function goalStatus(goal, m, g) {
   return S.verified[S.mission] ? 'pass' : 'todo';
 }
 
+/** Repaint the goals, the mission strip and the verify line; each is rewritten only when its content changed. */
 export function paintGoals() {
   const ul = $('goals'); if (!ul) return;
   const M = MISSIONS[S.mission];
   const m = run.mdl || model(); const g = m.g;
-  let met = 0;
-  setHtml(ul, M.goals.map(goal => {
-    const s = goalStatus(goal, m, g); if (s === 'pass') met++;
-    let v = '';
-    if (goal.val && (goal.type === 'struct' || liveMetrics())) v = goal.val(m, g);
+  const status = M.goals.map(goal => goalStatus(goal, m, g)); // each goal is tested once per paint
+  const met = status.filter(s => s === 'pass').length;
+  setHtmlIfChanged(ul, M.goals.map((goal, k) => {
+    const s = status[k];
+    const v = goal.val && (goal.type === 'struct' || liveMetrics()) ? goal.val(m, g) : '';
     return html`<li class="${s}">${ICONS[s]}<span>${goal.text}<span class="sr-only"> (${STATUS_TXT[s]})</span></span><span class="gv">${v}</span></li>`;
   }));
-  const strip = $('mstrip');
-  setHtml(strip, html`<span><b>Mission ${S.mission + 1}:</b> ${M.title}</span><span>${S.done[S.mission] ? 'complete' : met + '/' + M.goals.length + ' goals'} · brief ↓</span>`);
+  setHtmlIfChanged($('mstrip'), html`<span><b>Mission ${S.mission + 1}:</b> ${M.title}</span><span>${S.done[S.mission] ? 'complete' : met + '/' + M.goals.length + ' goals'} · brief ↓</span>`);
   const vf = $('verify'); if (!vf) return;
-  const failingNow = liveMetrics() && M.goals.some(x => x.type === 'metric' && !x.test(m));
-  if (S.done[S.mission] && failingNow) { setHtml(vf, html`<p class="verify bad">Your current design no longer meets the targets.</p>`); return; }
-  if (S.verified[S.mission]) { setHtml(vf, html`<p class="verify ok">Targets held for ${HOLD} s.${M.goals.some(x => x.type === 'exp') && !S.done[S.mission] ? ' Now break it.' : ''}</p>`); return; }
-  if (run.playing && anyOn()) { setHtml(vf, html`<p class="verify">Experiment running: targets are paused.</p>`); return; }
-  if (run.playing && run.hold > 0) { setHtml(vf, html`<p class="verify">Holding targets… ${run.hold.toFixed(1)} / ${HOLD} s</p><div class="vbar"><i style="width:${Math.min(100, run.hold / HOLD * 100)}%"></i></div>`); return; }
-  setHtml(vf, run.everPlayed ? '' : html`<p class="verify">Press Play to test your design. Targets must hold for ${HOLD} seconds.</p>`);
+  // While metrics are live, a metric goal's status is its test against the model (goalStatus).
+  const failingNow = liveMetrics() && M.goals.some((x, k) => x.type === 'metric' && status[k] === 'fail');
+  setHtmlIfChanged(vf, verifyLine(M, failingNow));
+}
+
+function verifyLine(M, failingNow) {
+  if (S.done[S.mission] && failingNow) return html`<p class="verify bad">Your current design no longer meets the targets.</p>`;
+  if (S.verified[S.mission]) return html`<p class="verify ok">Targets held for ${HOLD} s.${M.goals.some(x => x.type === 'exp') && !S.done[S.mission] ? ' Now break it.' : ''}</p>`;
+  if (run.playing && anyOn()) return html`<p class="verify">Experiment running: targets are paused.</p>`;
+  if (run.playing && run.hold > 0) return html`<p class="verify">Holding targets… ${run.hold.toFixed(1)} / ${HOLD} s</p><div class="vbar"><i style="width:${Math.min(100, run.hold / HOLD * 100)}%"></i></div>`;
+  return run.everPlayed ? '' : html`<p class="verify">Press Play to test your design. Targets must hold for ${HOLD} seconds.</p>`;
 }
 $('mstrip').addEventListener('click', () => { const c = $('missionCard'); c.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }); c.focus({ preventScroll: true }); });

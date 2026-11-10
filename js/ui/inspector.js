@@ -1,6 +1,6 @@
 // Inspector panel for the selected component or connection.
 import { fmt } from '../format.js';
-import { $, el, keepFocus, html, setHtml } from '../dom.js';
+import { $, el, keepFocus, html, setHtml, setHtmlIfChanged } from '../dom.js';
 import { TYPES, OK_PAIRS, pairKey, nameOf, lowerName, edgeInfo, MISSIONS, S, sel, run, byId, setSel, trafficHidden } from '../state.js';
 import { T, COMPONENTS, choiceOf, sizesOf } from '../engine/catalog.js';
 import { roleOf, runsAlone, holdsSessions, scales, dayCopies, serverSpec, isEdge, isClustered, costOf, monthlyFileGB } from '../engine/components.js';
@@ -146,16 +146,16 @@ export function paintInspectorLive() {
   if (!st && scales(n)) {
     // An autoscaled group: what it costs, and how many servers it runs over a day, from its load at the peak.
     const w = graph().peak.get(n.id) || 0, k = dayCopies(w, serverSpec(n).cap);
-    setHtml(live, html`<div><b>$${fmt(costOf(n, w))}</b><span>a month, paid by the hour</span></div><div><b>${Math.min(...k)} to ${Math.max(...k)}</b><span>servers over a day</span></div>`);
+    setHtmlIfChanged(live, html`<div><b>$${fmt(costOf(n, w))}</b><span>a month, paid by the hour</span></div><div><b>${Math.min(...k)} to ${Math.max(...k)}</b><span>servers over a day</span></div>`);
     return;
   }
-  if (!st && isEdge(n)) { setHtml(live, html`<div><b>$${fmt(costOf(n))}</b><span>a month, for ${fmt(monthlyFileGB() / 1000)} TB sent</span></div><div><b>—</b><span>press Play for load</span></div>`); return; }
-  if (!st) { setHtml(live, html`<div><b>${fmt(serverSpec(n).cap)}</b><span>capacity, per second</span></div><div><b>—</b><span>press Play for load</span></div>`); return; }
-  if (st.standby) { setHtml(live, html`<div><b>standby</b><span>takes no traffic</span></div><div><b>${fmt(st.cap)}</b><span>capacity, ready to take over</span></div>`); return; }
-  if (st.down) { setHtml(live, html`<div><b style="color:var(--bad)">down</b><span>serving nothing</span></div><div><b>0</b><span>req/s served</span></div>`); return; }
+  if (!st && isEdge(n)) { setHtmlIfChanged(live, html`<div><b>$${fmt(costOf(n))}</b><span>a month, for ${fmt(monthlyFileGB() / 1000)} TB sent</span></div><div><b>—</b><span>press Play for load</span></div>`); return; }
+  if (!st) { setHtmlIfChanged(live, html`<div><b>${fmt(serverSpec(n).cap)}</b><span>capacity, per second</span></div><div><b>—</b><span>press Play for load</span></div>`); return; }
+  if (st.standby) { setHtmlIfChanged(live, html`<div><b>standby</b><span>takes no traffic</span></div><div><b>${fmt(st.cap)}</b><span>capacity, ready to take over</span></div>`); return; }
+  if (st.down) { setHtmlIfChanged(live, html`<div><b style="color:var(--bad)">down</b><span>serving nothing</span></div><div><b>0</b><span>req/s served</span></div>`); return; }
   if (st.consumer) {
     // A worker group: jobs in and out, and what waits in its queue.
-    setHtml(live, [
+    setHtmlIfChanged(live, [
       html`<div><b>${st.load.toFixed(2)}</b><span>jobs/s arriving</span></div><div><b>${st.cap.toFixed(2)}</b><span>jobs/s it can take</span></div>`,
       html`<div><b>${Math.round(st.util * 100)}%</b><span>busy</span></div><div><b>${fmt(st.backlog)}</b><span>jobs waiting in the queue</span></div>`,
       st.copies ? html`<div class="wide"><b>${st.copies} ${st.copies === 1 ? 'server' : 'servers'} now</b><span>of size ${n.size}</span></div>` : '',
@@ -165,7 +165,7 @@ export function paintInspectorLive() {
   if (st.ids) {
     // An ID generator: IDs asked for and what it can make, what its IDs look like, and repeats.
     const x = st.ids, col = st.load > st.cap * 1.005 ? 'var(--bad)' : 'var(--ok)';
-    setHtml(live, [
+    setHtmlIfChanged(live, [
       html`<div><b>${fmt(st.load)}</b><span>IDs/s asked for</span></div>`,
       x.method === 'uuid' ? html`<div><b>no limit</b><span>made in each web server</span></div>` : html`<div><b style="color:${col}">${fmt(st.cap)}</b><span>IDs/s on ${x.healthy} ${x.healthy === 1 ? 'server' : 'servers'}</span></div>`,
       html`<div class="wide"><b>${x.bits} bits</b><span>${x.numeric ? 'a number' : 'written as hex digits and dashes'}, ${x.ordered ? 'in time order' : 'not in time order'}</span></div>`,
@@ -176,7 +176,7 @@ export function paintInspectorLive() {
   if (st.hit != null) {
     // A cache's words by default; a level can word them for another type (e.g. a CDN's files and origin).
     const w = { arriving: 'reads arriving, per second', misses: 'misses/s sent to the database', per: 'per lookup', ...TYPES[n.type].live };
-    setHtml(live, [
+    setHtmlIfChanged(live, [
       html`<div><b>${fmt(st.load)}</b><span>${w.arriving}</span></div><div><b>${Math.round(st.hit * 100)}%</b><span>hit rate</span></div>`,
       html`<div><b>${fmt(st.misses)}</b><span>${w.misses}</span></div><div><b>${st.ms.toFixed(1)} ms</b><span>${w.per}</span></div>`,
     ]);
@@ -186,7 +186,7 @@ export function paintInspectorLive() {
   const col = st.load > st.cap * 1.005 ? 'var(--bad)' : st.util >= 0.8 ? 'var(--warn)' : 'var(--ok)';
   // A value coloured only when it is bad (or a warning); otherwise the style attribute is empty.
   const tone = (on, c) => on ? `color:var(--${c})` : '';
-  setHtml(live, [
+  setHtmlIfChanged(live, [
     html`<div><b>${fmt(st.load)}</b><span>${st.files ? `${st.unit} of work` : `${st.unit} arriving`}</span></div><div><b>${fmt(st.cap)}</b><span>capacity${st.combined ? ' (code + data)' : ''}</span></div><div><b style="color:${col}">${pct}%</b><span>busy</span></div><div><b>${st.ms.toFixed(st.ms < 10 ? 1 : 0)} ms</b><span>per request (${st.mult.toFixed(1)}× base)</span></div>`,
     st.copied ? html`<div class="wide"><b>${fmt(st.load - st.copied)} + ${fmt(st.copied)}</b><span>reads + writes copied from the primary</span></div>` : '',
     st.files ? html`<div class="wide"><b>${fmt(st.pages)} + ${fmt(st.files)}</b><span>pages + files arriving per second. A file takes ${fmt(100 * serverSpec(n).filePer)}% of a page's work.</span></div>` : '',
