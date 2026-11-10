@@ -14,7 +14,8 @@ let loaded = null;
 
 /**
  * Sets level `id` as the one being played and imports the game modules that read it. Returns the level data, the
- * state module, model(), and helpers that place a design and judge a mission's goals the way the game does.
+ * state module, model(), startExp and crashCandidates, the components module (engine/components.js), and helpers
+ * that place a design and judge a mission's goals the way the game does.
  */
 export async function loadLevel(id) {
   if (loaded && loaded.id !== id) throw new Error(`level ${loaded.id} is already loaded: use one test file per level`);
@@ -25,7 +26,7 @@ export async function loadLevel(id) {
   const state = await import('../../js/state.js');
   const { model } = await import('../../js/engine/model.js');
   const { startExp, crashCandidates, expectMet } = await import('../../js/engine/experiments.js');
-  const { costOf } = await import('../../js/engine/components.js');
+  const components = await import('../../js/engine/components.js'), { costOf } = components;
   const { S, run } = state;
 
   // The designs other tests built, recorded for the snapshot; a test names one by its id.
@@ -96,7 +97,7 @@ export async function loadLevel(id) {
   /** Monthly cost of every component of `type` in the placed design (for types that do not autoscale). */
   const costOfType = (type) => S.nodes.filter((n) => n.type === type).reduce((sum, n) => sum + costOf(n), 0);
 
-  const api = { level, state, model, design, place, missed, costOfType };
+  const api = { level, state, model, startExp, crashCandidates, components, design, place, missed, costOfType };
   loaded = { id, api };
   return api;
 }
