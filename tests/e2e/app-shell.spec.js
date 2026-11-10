@@ -131,21 +131,31 @@ test.describe('App shell · level picker, routing, saved progress', () => {
 });
 
 test.describe('Live panels · repainted only when they change', () => {
-  test('while a steady design plays, the HUD and goals are not rewritten', async ({ page }) => {
+  test('while a design plays, the HUD and goals are rewritten only when what they show changed', async ({ page }) => {
     await freshPage(page, '#level-1/build');
     await buildBasic(page);
     await page.click('#playBtn');
     await playFor(page, 1); // the first paints swap the "—" placeholders for numbers
+    // The traffic wobbles a few percent, so a number such as the response time may really move between paints
+    // (80 ↔ 81 ms in this design). What must never happen is a rewrite that leaves a panel showing what it showed.
     // Watch for 30 animation frames (at least two 0.2 s paints at 60 frames a second), counted in the page, not timed.
-    const rewritten = await page.evaluate(() => new Promise((done) => {
-      const changed = [];
-      const obs = new MutationObserver((list) => list.forEach((m) => changed.push(m.target.id || m.target.className)));
-      ['hud', 'goals'].forEach((id) => obs.observe(document.getElementById(id), { childList: true, subtree: true, characterData: true }));
+    const sameAsBefore = await page.evaluate(() => new Promise((done) => {
+      const ids = ['hud', 'goals'];
+      const shown = Object.fromEntries(ids.map((id) => [id, document.getElementById(id).innerHTML]));
+      const same = [];
+      const obs = new MutationObserver((list) => {
+        for (const id of new Set(list.map((m) => m.target.closest('#hud, #goals').id))) {
+          const now = document.getElementById(id).innerHTML;
+          if (now === shown[id]) same.push(id);
+          shown[id] = now;
+        }
+      });
+      ids.forEach((id) => obs.observe(document.getElementById(id), { childList: true, subtree: true, characterData: true }));
       let frames = 0;
-      const tick = () => { if (++frames < 30) requestAnimationFrame(tick); else { obs.disconnect(); done(changed); } };
+      const tick = () => { if (++frames < 30) requestAnimationFrame(tick); else { obs.disconnect(); done(same); } };
       requestAnimationFrame(tick);
     }));
     expect(await page.evaluate(() => window.__sdl.run.playing)).toBe(true);
-    expect(rewritten).toEqual([]);
+    expect(sameAsBefore).toEqual([]);
   });
 });
