@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, sampleRoutes } from '../helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, sampleRoutes, openMission, selectNode, setProps, calm, pressEnterOn } from '../helpers.js';
 
 // Level 10: Rate limiter.
 // The level starts inside one data center: Users ('u'), DNS ('d'), one load balancer ('l'), two autoscaled groups of
@@ -17,18 +17,10 @@ const addLimiter = (page, props = {}) => page.evaluate((p) => {
   return n.id;
 }, props);
 const addCounters = (page, ids) => page.evaluate((list) => { const s = window.__sdl; s.addNode('counter'); const c = s.S.nodes.at(-1).id; for (const i of list) s.tryConnect(i, c); s.afterDesignChange(); return c; }, ids);
-const goTo = (page, i) => page.evaluate((k) => {
-  const S = window.__sdl.S;
-  for (let j = 0; j < k; j++) { S.done[j] = true; S.verified[j] = true; }
-  S.mission = k; S.est = true; window.__sdl.afterChange(true);
-}, i);
 const measure = (page) => page.evaluate(() => {
   const m = window.__sdl.model();
   return { served: m.servedPct, latency: m.latency, cost: m.cost, quota: m.keyQuota, botThrough: m.botThrough, index: (m.node.z || {}).util };
 });
-const calm = (page) => page.evaluate(() => { const s = window.__sdl; s.run.playing = false; s.run.t = 0; });
-const select = async (page, id) => { await page.focus(`[data-node="${id}"]`); await page.keyboard.press('Enter'); };
-const set = (page, id, props) => page.evaluate(([i, p]) => { Object.assign(window.__sdl.S.nodes.find((n) => n.id === i), p); window.__sdl.afterDesignChange(); }, [id, props]);
 
 test.describe('Level 10 · playthrough', () => {
   test('all three missions can be completed', async ({ page }) => {
@@ -38,7 +30,7 @@ test.describe('Level 10 · playthrough', () => {
 
     // Mission 1: a rate limiter with a bucket of 12 (set through the inspector).
     const r1 = await addLimiter(page);
-    await select(page, r1);
+    await selectNode(page, r1);
     await page.locator('#insp [data-focus-key="bucket-12"]').click();
     await expect(page.locator(`[data-node="${r1}"] .node-sub`)).toHaveText('token bucket · 12, 1/s');
     expect((await measure(page)).cost).toBe(1955);
@@ -48,7 +40,7 @@ test.describe('Level 10 · playthrough', () => {
 
     // Mission 2: a sliding window counter, then the edge burst.
     await page.click('#mission .complete button');
-    await select(page, r1);
+    await selectNode(page, r1);
     await page.locator('#insp').getByRole('button', { name: /^Sliding window counter/ }).click();
     await page.click('#playBtn');
     await fastForward(page, 5);
@@ -95,14 +87,14 @@ test.describe('Level 10 · numbers', () => {
     expect(r.served).toBeCloseTo(50, 6);
     expect(r.botThrough).toBeCloseTo(160, 6); // 160 keys × 1 a second
     // A bucket of 12 fits the burst. Bots no longer cost API servers.
-    await set(page, id, { bucket: '12' });
+    await setProps(page, id, { bucket: '12' });
     await calm(page);
     r = await measure(page);
     expect(r.served).toBeCloseTo(100, 6);
     expect(r.quota).toBe(1);
     expect(r.cost).toBe(1955);
     // Refilling 5 a second lets each key through 5 times the limit.
-    await set(page, id, { refill: '5' });
+    await setProps(page, id, { refill: '5' });
     await calm(page);
     r = await measure(page);
     expect(r.quota).toBe(5);
@@ -111,7 +103,7 @@ test.describe('Level 10 · numbers', () => {
 
   test('the leaking bucket makes typed searches wait', async ({ page }) => {
     await freshPage(page, '#level-10/build');
-    await goTo(page, 0);
+    await openMission(page, 0, { estimate: true });
     await addLimiter(page, { algo: 'leaky', bucket: '12' });
     await calm(page);
     expect((await measure(page)).latency).toBeGreaterThan(5000); // 12 requests at 1 a second: 5 s on average
@@ -140,18 +132,18 @@ test.describe('Level 10 · teaching feedback', () => {
 
   test('at the window edge: fixed window 2×, token bucket of 12 1.2×, sliding windows 1×', async ({ page }) => {
     await freshPage(page, '#level-10/build');
-    await goTo(page, 1);
+    await openMission(page, 1, { estimate: true });
     const id = await addLimiter(page, { bucket: '12' });
     await page.click('#playBtn');
     await page.click('#exp-edge-burst');
     for (const [props, quota] of [[{ algo: 'token' }, 1.2], [{ algo: 'fixed' }, 2], [{ algo: 'slog' }, 1], [{ algo: 'scount' }, 1], [{ algo: 'token', bucket: '60' }, 2]]) {
-      await set(page, id, props);
+      await setProps(page, id, props);
       await calm(page);
       const r = await measure(page);
       expect([props.algo, r.quota]).toEqual([props.algo, quota]);
       expect(r.cost).toBe(1955); // the bill follows normal days, not the experiment
     }
-    await set(page, id, { algo: 'fixed', bucket: '12' });
+    await setProps(page, id, { algo: 'fixed', bucket: '12' });
     await page.click('#playBtn');
     await fastForward(page, 2);
     expect(await state(page, () => window.__sdl.S.exp[window.__sdl.S.mission]['edge-burst'])).toBe(false);
@@ -161,7 +153,7 @@ test.describe('Level 10 · teaching feedback', () => {
 
   test('one limiter overloads; two without shared counters let each key through twice', async ({ page }) => {
     await freshPage(page, '#level-10/build');
-    await goTo(page, 2);
+    await openMission(page, 2, { estimate: true });
     const r1 = await addLimiter(page, { algo: 'scount' });
     await calm(page);
     let r = await measure(page);
@@ -204,7 +196,7 @@ test.describe('Level 10 · teaching feedback', () => {
     const id = await addLimiter(page);
     await page.click('#playBtn');
     await fastForward(page, 1);
-    await select(page, id);
+    await selectNode(page, id);
     await expect(page.locator('#inspLive')).toContainText('bot requests/s arriving → let through');
     await expect(page.locator('#inspLive')).toContainText('of real users\' requests rejected');
   });
@@ -226,7 +218,7 @@ test.describe('Level 10 · teaching feedback', () => {
 
   test('the limiter estimate accepts "2" and gives specific hints', async ({ page }) => {
     await freshPage(page, '#level-10/build');
-    await goTo(page, 2);
+    await openMission(page, 2, { estimate: true });
     await page.evaluate(() => { window.__sdl.S.est = false; window.__sdl.afterChange(true); });
     for (const [v, hint] of [['0.33', 'real apps alone'], ['1.5', 'bots alone']]) {
       await page.fill('#estIn', v);
@@ -242,20 +234,19 @@ test.describe('Level 10 · teaching feedback', () => {
 test.describe('Level 10 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-10/build');
-    const enter = async (selector) => { await page.focus(selector); await page.keyboard.press('Enter'); };
-    await enter('.pal-item[data-type="limiter"]');
+    await pressEnterOn(page, '.pal-item[data-type="limiter"]');
     const id = await state(page, () => window.__sdl.S.nodes.at(-1).id);
-    await enter(`[data-node="${id}"]`);
-    await enter('#insp [data-focus-key="bucket-12"]');
+    await pressEnterOn(page, `[data-node="${id}"]`);
+    await pressEnterOn(page, '#insp [data-focus-key="bucket-12"]');
     while (await page.locator('#insp .conn').getByRole('button', { name: 'Connect', exact: true }).count()) {
       await page.locator('#insp .conn').getByRole('button', { name: 'Connect', exact: true }).first().focus();
       await page.keyboard.press('Enter');
     }
-    await enter('[data-node="u"]');
+    await pressEnterOn(page, '[data-node="u"]');
     await page.locator('#insp .conn', { hasText: 'Users → Load balancer' }).getByRole('button', { name: 'Disconnect' }).focus();
     await page.keyboard.press('Enter');
     expect((await measure(page)).cost).toBe(1955);
-    await enter('#playBtn');
+    await pressEnterOn(page, '#playBtn');
     await fastForward(page, 5);
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
   });
@@ -290,7 +281,7 @@ test.describe('Level 10 · layout and accessibility', () => {
             const id = await addLimiter(page);
             await addCounters(page, [id]);
             await page.click('#playBtn'); await playFor(page, 0.5);
-            await select(page, id);
+            await selectNode(page, id);
           }
           const results = await new AxeBuilder({ page }).setLegacyMode().analyze();
           expect(results.violations.map((v) => `${tab}: ${v.id} (${v.nodes.length})`)).toEqual([]);

@@ -1,23 +1,16 @@
 import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from '../helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, openMission, selectNode, setProps, pressEnterOn } from '../helpers.js';
 
 // Level 14: URL shortener.
 // The level starts inside one data center: Users ('u'), DNS ('d'), one load balancer ('l'), an autoscaled group of
 // L web servers ('w', the link service: 301 redirects, base 62 codes, no limit) and an XL database ('b').
 // Missions 1 and 2: 2,200 requests a second, 1 in 11 a new link. Mission 3: 800 new links and 2,000 clicks.
 
-const goTo = (page, i) => page.evaluate((k) => {
-  const S = window.__sdl.S;
-  for (let j = 0; j < k; j++) { S.done[j] = true; S.verified[j] = true; }
-  S.mission = k; S.est = true; window.__sdl.afterChange(true);
-}, i);
 const measure = (page) => page.evaluate(() => {
   const m = window.__sdl.model({ peak: true }), at = (id) => m.node[id] || {}, c = m.g && window.__sdl.S.nodes.find((n) => n.type === 'cache');
   return { qps: m.qps, served: m.servedPct, latency: m.latency, cost: m.cost, link: m.link, db: at('b').load, hit: c ? at(c.id).hit : null };
 });
-const select = async (page, id) => { await page.focus(`[data-node="${id}"]`); await page.keyboard.press('Enter'); };
-const set = (page, id, props) => page.evaluate(([x, p]) => { Object.assign(window.__sdl.S.nodes.find((n) => n.id === x), p); window.__sdl.afterDesignChange(); }, [id, props]);
 /** Add a cache of `size` (TTL 1 hour) connected to the link service; returns its id. */
 const addCache = (page, size = 'L') => page.evaluate((sz) => {
   const s = window.__sdl, S = s.S;
@@ -51,7 +44,7 @@ test.describe('Level 14 · playthrough', () => {
 
     // Mission 2: 302 redirects count every click; a per-account limit stops the bulk script.
     await page.click('#mission .complete button');
-    await select(page, 'w');
+    await selectNode(page, 'w');
     await click(page, 'redirect-302');
     await click(page, 'limit-account');
     await expect(page.locator('[data-node="w"] .node-sub')).toContainText('302 · base 62');
@@ -64,7 +57,7 @@ test.describe('Level 14 · playthrough', () => {
 
     // Mission 3: hashed codes checked against a bloom filter, and an XL database.
     await page.click('#mission .complete button');
-    await select(page, 'w');
+    await selectNode(page, 'w');
     await click(page, 'code-bloom');
     await expect(page.locator('[data-node="w"] .node-sub')).toContainText('hash + bloom');
     expect((await measure(page)).cost).toBe(1255);
@@ -89,7 +82,7 @@ test.describe('Level 14 · numbers', () => {
     expect(r.qps).toBeCloseTo(1030 + 206, 6);
     expect(r.link.counted).toBeCloseTo(0.5, 9);
     expect(r.db).toBeCloseTo(1236, 6); // no cache: every click and new link reaches the database
-    await set(page, 'w', { redirect: '302' });
+    await setProps(page, 'w', { redirect: '302' });
     r = await measure(page);
     expect(r.qps).toBeCloseTo(2266, 6);
     expect(r.link.counted).toBe(1);
@@ -98,13 +91,13 @@ test.describe('Level 14 · numbers', () => {
 
   test('a new link costs 1, 2 or 1.01 database queries; a viral link is one cached key', async ({ page }) => {
     await freshPage(page, '#level-14/build');
-    await set(page, 'w', { redirect: '302' });
+    await setProps(page, 'w', { redirect: '302' });
     await addCache(page, 'L');
     let r = await measure(page);
     const misses = 2060 * (1 - r.hit);
     expect(r.db).toBeCloseTo(misses + 206, 6);
     for (const [code, k] of [['hash', 2], ['bloom', 1.01], ['base62', 1]]) {
-      await set(page, 'w', { code });
+      await setProps(page, 'w', { code });
       expect([code, (await measure(page)).db]).toEqual([code, expect.closeTo(misses + 206 * k, 6)]);
     }
     // 1,500 viral clicks all hit the cache, so the database load doesn't change.
@@ -123,7 +116,7 @@ test.describe('Level 14 · numbers', () => {
     expect(r.link.bots).toBe(3000);
     expect(r.db).toBeCloseTo(1236 + 3000, 6);
     expect(r.served).toBeLessThan(50);
-    await set(page, 'w', { limit: 'account' });
+    await setProps(page, 'w', { limit: 'account' });
     r = await measure(page);
     expect(r.link.bots).toBe(0);
     expect(r.served).toBe(100);
@@ -140,7 +133,7 @@ test.describe('Level 14 · numbers', () => {
 test.describe('Level 14 · teaching feedback', () => {
   test('Mission 2 with 301: half the clicks are not counted', async ({ page }) => {
     await freshPage(page, '#level-14/build');
-    await goTo(page, 1);
+    await openMission(page, 1, { estimate: true });
     await addCache(page, 'L');
     await page.click('#playBtn');
     await fastForward(page, 1);
@@ -150,9 +143,9 @@ test.describe('Level 14 · teaching feedback', () => {
 
   test('the bulk script without a limit: the log says to limit new links', async ({ page }) => {
     await freshPage(page, '#level-14/build');
-    await goTo(page, 1);
+    await openMission(page, 1, { estimate: true });
     await addCache(page, 'L');
-    await set(page, 'w', { redirect: '302' });
+    await setProps(page, 'w', { redirect: '302' });
     await page.click('#playBtn');
     await page.click('#exp-bulk');
     await fastForward(page, 2);
@@ -162,14 +155,14 @@ test.describe('Level 14 · teaching feedback', () => {
 
   test('Mission 3: base 62 codes are guessable; hashing with a database check overloads it', async ({ page }) => {
     await freshPage(page, '#level-14/build');
-    await goTo(page, 2);
+    await openMission(page, 2, { estimate: true });
     await addCache(page, 'L');
-    await set(page, 'w', { redirect: '302', limit: 'account' });
+    await setProps(page, 'w', { redirect: '302', limit: 'account' });
     await page.click('#playBtn');
     await fastForward(page, 1);
     await expect(page.locator('#goals li', { hasText: 'can\'t be guessed' })).toHaveClass(/fail/);
     await expect(page.locator('#goals li', { hasText: 'can\'t be guessed' })).toContainText('in sequence');
-    await set(page, 'w', { code: 'hash' });
+    await setProps(page, 'w', { code: 'hash' });
     await fastForward(page, 1);
     expect((await measure(page)).served).toBeLessThan(99);
     await expect(page.locator('#log')).toContainText('Database is over capacity');
@@ -177,7 +170,7 @@ test.describe('Level 14 · teaching feedback', () => {
 
   test('no cache: a viral link takes the database down', async ({ page }) => {
     await freshPage(page, '#level-14/build');
-    await goTo(page, 0);
+    await openMission(page, 0, { estimate: true });
     await page.click('#playBtn');
     await page.click('#exp-viral');
     await fastForward(page, 2);
@@ -187,7 +180,7 @@ test.describe('Level 14 · teaching feedback', () => {
 
   test('link service settings survive a reload; bad saved settings load as the defaults', async ({ page }) => {
     await freshPage(page, '#level-14/build');
-    await set(page, 'w', { redirect: '302', code: 'bloom', limit: 'account' });
+    await setProps(page, 'w', { redirect: '302', code: 'bloom', limit: 'account' });
     await reloadGame(page);
     const get = () => state(page, () => { const n = window.__sdl.S.nodes.find((x) => x.id === 'w'); return [n.redirect, n.code, n.limit]; });
     expect(await get()).toEqual(['302', 'bloom', 'account']);
@@ -221,17 +214,16 @@ test.describe('Level 14 · teaching feedback', () => {
 test.describe('Level 14 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-14/build');
-    const enter = async (selector) => { await page.focus(selector); await page.keyboard.press('Enter'); };
     await page.focus('#estIn');
     await page.keyboard.type('7');
     await page.keyboard.press('Enter');
     expect(await state(page, () => window.__sdl.S.est)).toBe(true);
     await addCache(page, 'L');
-    await enter('#playBtn');
+    await pressEnterOn(page, '#playBtn');
     await fastForward(page, 5);
-    await enter('#exp-viral');
+    await pressEnterOn(page, '#exp-viral');
     await fastForward(page, 2);
-    await enter('#exp-viral');
+    await pressEnterOn(page, '#exp-viral');
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
   });
 
@@ -240,7 +232,7 @@ test.describe('Level 14 · layout and accessibility', () => {
     await freshPage(page, '#level-14/build');
     const top = await page.locator('#cv').evaluate((e) => e.getBoundingClientRect().top);
     expect(top).toBeLessThan(844);
-    await select(page, 'w');
+    await selectNode(page, 'w');
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   });
 
@@ -263,7 +255,7 @@ test.describe('Level 14 · layout and accessibility', () => {
           if (tab === 'build') {
             await page.evaluate(() => { window.__sdl.S.est = true; window.__sdl.afterChange(true); });
             await page.click('#playBtn'); await playFor(page, 0.5);
-            await select(page, 'w');
+            await selectNode(page, 'w');
           }
           const results = await new AxeBuilder({ page }).setLegacyMode().analyze();
           expect(results.violations.map((v) => `${tab}: ${v.id} (${v.nodes.length})`)).toEqual([]);

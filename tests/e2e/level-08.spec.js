@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, sampleRoutes } from '../helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, sampleRoutes, openMission, selectNode, setProps, calm, pressEnterOn } from '../helpers.js';
 
 // Level 8: Message queue, workers and monitoring.
 // The level starts inside one data center: Users ('u'), DNS ('d'), one load balancer ('l'), two XL web servers
@@ -16,18 +16,10 @@ const addQueue = (page, { scaling = '8', size = 'M' } = {}) => page.evaluate(([s
   return { q, k: k.id };
 }, [scaling, size]);
 const addMonitor = (page, q) => page.evaluate((qid) => { const s = window.__sdl; s.addNode('monitor'); s.tryConnect(s.S.nodes.at(-1).id, qid); s.afterDesignChange(); }, q);
-const goTo = (page, i) => page.evaluate((k) => {
-  const S = window.__sdl.S;
-  for (let j = 0; j < k; j++) { S.done[j] = true; S.verified[j] = true; }
-  S.mission = k; S.est = true; window.__sdl.afterChange(true);
-}, i);
 const measure = (page) => page.evaluate(() => {
   const s = window.__sdl, m = s.model(), at = (id) => m.node[id] || {};
   return { served: m.servedPct, latency: m.latency, cost: m.cost, uploadMs: m.uploadMs, jobsIn: m.jobsIn, jobsOut: m.jobsOut, backlog: m.backlog, alert: !!m.alert, web: at('w1').util };
 });
-const calm = (page) => page.evaluate(() => { const s = window.__sdl; s.run.playing = false; s.run.t = 0; });
-const select = async (page, id) => { await page.focus(`[data-node="${id}"]`); await page.keyboard.press('Enter'); };
-const set = (page, id, props) => page.evaluate(([i, p]) => { Object.assign(window.__sdl.S.nodes.find((n) => n.id === i), p); window.__sdl.afterDesignChange(); }, [id, props]);
 
 test.describe('Level 8 · playthrough', () => {
   test('all three missions can be completed', async ({ page }) => {
@@ -39,7 +31,7 @@ test.describe('Level 8 · playthrough', () => {
     await page.fill('#estIn', '20');
     await page.click('#estBtn');
     const { q, k } = await addQueue(page, { scaling: '1', size: 'S' });
-    await select(page, k);
+    await selectNode(page, k);
     await page.locator('#insp').getByRole('button', { name: /^8 workers/ }).click();
     await page.locator('#insp [data-focus-key="size-M"]').click();
     await expect(page.locator(`[data-node="${k}"] .node-sub`)).toHaveText('8 × M · 1.6/s');
@@ -62,7 +54,7 @@ test.describe('Level 8 · playthrough', () => {
 
     // Mission 3: autoscaled L workers, then the Monday rush.
     await page.click('#mission .complete button');
-    await select(page, k);
+    await selectNode(page, k);
     await page.locator('#insp').getByRole('button', { name: /^Autoscale/ }).click();
     await page.locator('#insp [data-focus-key="size-L"]').click();
     expect((await measure(page)).cost).toBe(1972);
@@ -106,7 +98,7 @@ test.describe('Level 8 · numbers', () => {
     await freshPage(page, '#level-8/build');
     const { k } = await addQueue(page);
     for (const [scaling, size, cost, keepsUp] of [['4', 'L', 2225, true], ['2', 'XL', 2325, true], ['4', 'M', 1785, false], ['8', 'S', 1745, false], ['auto', 'M', 1849, true], ['auto', 'L', 1942, true], ['auto', 'XL', 2175, true]]) {
-      await set(page, k, { scaling, size });
+      await setProps(page, k, { scaling, size });
       await calm(page);
       const r = await measure(page);
       expect([scaling, size, r.cost]).toEqual([scaling, size, cost]);
@@ -126,7 +118,7 @@ test.describe('Level 8 · numbers', () => {
 test.describe('Level 8 · teaching feedback', () => {
   test('too few workers: the queue grows, and the log says so', async ({ page }) => {
     await freshPage(page, '#level-8/build');
-    await goTo(page, 0);
+    await openMission(page, 0, { estimate: true });
     await addQueue(page, { scaling: '4', size: 'M' });
     await page.click('#playBtn');
     await fastForward(page, 3);
@@ -139,7 +131,7 @@ test.describe('Level 8 · teaching feedback', () => {
 
   test('crashed workers: uploads still answered, jobs wait, and they drain afterwards', async ({ page }) => {
     await freshPage(page, '#level-8/build');
-    await goTo(page, 1);
+    await openMission(page, 1, { estimate: true });
     const { q } = await addQueue(page);
     await page.click('#playBtn');
     await page.click('#exp-crash-workers');
@@ -166,7 +158,7 @@ test.describe('Level 8 · teaching feedback', () => {
 
   test('the Monday rush: fixed workers fall behind; autoscaled M stop at 10 servers', async ({ page }) => {
     await freshPage(page, '#level-8/build');
-    await goTo(page, 2);
+    await openMission(page, 2, { estimate: true });
     const { k } = await addQueue(page);
     await page.click('#playBtn');
     await page.click('#exp-upload-rush');
@@ -179,11 +171,11 @@ test.describe('Level 8 · teaching feedback', () => {
     await fastForward(page, 2);
     expect(await state(page, () => window.__sdl.S.exp[window.__sdl.S.mission]['upload-rush'])).toBe(false);
     await expect(page.locator('#log')).toContainText('Set the workers to autoscale');
-    await set(page, k, { scaling: 'auto', size: 'M' });
+    await setProps(page, k, { scaling: 'auto', size: 'M' });
     await calm(page);
     r = await measure(page);
     expect(r.jobsOut).toBeCloseTo(2, 6); // 10 × 0.2
-    await set(page, k, { scaling: 'auto', size: 'L' });
+    await setProps(page, k, { scaling: 'auto', size: 'L' });
     await calm(page);
     r = await measure(page);
     expect(r.jobsOut).toBeGreaterThanOrEqual(r.jobsIn); // and faster while it clears the backlog
@@ -213,19 +205,19 @@ test.describe('Level 8 · teaching feedback', () => {
 
   test('the inspector shows uploads, the backlog and the workers', async ({ page }) => {
     await freshPage(page, '#level-8/build');
-    await goTo(page, 0);
+    await openMission(page, 0, { estimate: true });
     await page.click('#playBtn');
     await fastForward(page, 1);
-    await select(page, 'w1');
+    await selectNode(page, 'w1');
     await expect(page.locator('#inspLive')).toContainText('processed here before it answers');
     const { q, k } = await addQueue(page, { scaling: '4', size: 'M' });
     await fastForward(page, 2);
-    await select(page, k);
+    await selectNode(page, k);
     await expect(page.locator('#insp')).toContainText('Worker size');
     await expect(page.locator('#insp [data-focus-key="size-M"]')).toContainText('4 vCPU');
     await expect(page.locator('#inspLive')).toContainText('jobs/s it can take');
     await expect(page.locator('#inspLive')).toContainText('jobs waiting in the queue');
-    await select(page, q);
+    await selectNode(page, q);
     await expect(page.locator('#inspLive')).toContainText('waiting for a worker');
   });
 
@@ -260,25 +252,24 @@ test.describe('Level 8 · teaching feedback', () => {
 test.describe('Level 8 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-8/build');
-    const enter = async (selector) => { await page.focus(selector); await page.keyboard.press('Enter'); };
     await page.fill('#estIn', '20');
-    await enter('#estBtn');
-    await enter('.pal-item[data-type="queue"]');
+    await pressEnterOn(page, '#estBtn');
+    await pressEnterOn(page, '.pal-item[data-type="queue"]');
     const q = await state(page, () => window.__sdl.S.nodes.at(-1).id);
-    await enter(`[data-node="${q}"]`);
+    await pressEnterOn(page, `[data-node="${q}"]`);
     while (await page.locator('#insp .conn').getByRole('button', { name: 'Connect', exact: true }).count()) {
       await page.locator('#insp .conn').getByRole('button', { name: 'Connect', exact: true }).first().focus();
       await page.keyboard.press('Enter');
     }
-    await enter('.pal-item[data-type="worker"]');
+    await pressEnterOn(page, '.pal-item[data-type="worker"]');
     const k = await state(page, () => window.__sdl.S.nodes.at(-1).id);
-    await enter(`[data-node="${k}"]`);
-    await enter('#insp [data-focus-key="scaling-8"]');
-    await enter('#insp [data-focus-key="size-M"]');
+    await pressEnterOn(page, `[data-node="${k}"]`);
+    await pressEnterOn(page, '#insp [data-focus-key="scaling-8"]');
+    await pressEnterOn(page, '#insp [data-focus-key="size-M"]');
     await page.locator('#insp .conn').getByRole('button', { name: 'Connect', exact: true }).first().focus();
     await page.keyboard.press('Enter');
     expect((await measure(page)).cost).toBe(2145);
-    await enter('#playBtn');
+    await pressEnterOn(page, '#playBtn');
     await fastForward(page, 5);
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
   });
@@ -310,11 +301,11 @@ test.describe('Level 8 · layout and accessibility', () => {
         for (const tab of ['lesson', 'build', 'quiz']) {
           await page.click(`#tab-${tab}`);
           if (tab === 'build') {
-            await goTo(page, 1);
+            await openMission(page, 1, { estimate: true });
             const { q, k } = await addQueue(page);
             await addMonitor(page, q);
             await page.click('#playBtn'); await playFor(page, 0.5);
-            await select(page, k);
+            await selectNode(page, k);
           }
           const results = await new AxeBuilder({ page }).setLegacyMode().analyze();
           expect(results.violations.map((v) => `${tab}: ${v.id} (${v.nodes.length})`)).toEqual([]);

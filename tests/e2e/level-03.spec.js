@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from '../helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, openMission, selectNode, calm, pressEnterOn } from '../helpers.js';
 
 // Level 3: database replication.
 // The level starts with Users, DNS, two load balancers, two XL web servers and one XL primary database ('b').
@@ -18,19 +18,12 @@ async function addReplicas(page, sizes, { connect = true } = {}) {
     return ids;
   }, { sizes, connect });
 }
-const goTo = (page, i) => page.evaluate((k) => {
-  const S = window.__sdl.S;
-  for (let j = 0; j < k; j++) { S.done[j] = true; S.verified[j] = true; }
-  S.mission = k; if (k > 0) S.est = true; window.__sdl.afterChange(true);
-}, i);
 const measure = (page) => page.evaluate(() => {
   const s = window.__sdl, m = s.model();
   const dbs = s.S.nodes.filter((n) => n.type === 'db').map((n) => ({ id: n.id, role: n.role, ...(m.node[n.id] || {}) }));
   return { served: m.servedPct, latency: m.latency, cost: m.cost, spof: m.spof, issue: m.issue, dbs };
 });
 // Pause and go back to t = 0, where traffic has no wobble, so numbers can be pinned exactly.
-const calm = (page) => page.evaluate(() => { const s = window.__sdl; s.run.playing = false; s.run.t = 0; });
-const select = async (page, id) => { await page.focus(`[data-node="${id}"]`); await page.keyboard.press('Enter'); };
 
 test.describe('Level 3 · playthrough', () => {
   test('all three missions can be completed', async ({ page }) => {
@@ -72,7 +65,7 @@ test.describe('Level 3 · playthrough', () => {
     expect((await measure(page)).served).toBeLessThan(81);
     await expect(page.locator('#log')).toContainText('press Promote to primary');
     const replica = await state(page, () => window.__sdl.S.nodes.find((n) => n.role === 'replica').id);
-    await select(page, replica);
+    await selectNode(page, replica);
     await page.locator('#insp').getByRole('button', { name: 'Promote to primary' }).click();
     await expect(page.locator('#log')).toContainText('roughly 400 writes are missing');
     await fastForward(page, 2);
@@ -116,7 +109,7 @@ test.describe('Level 3 · numbers', () => {
     expect(r.latency).toBeCloseTo(99.76, 1);
     expect(r.spof).toBe(0);
     // Mission 2: 2,000 req/s, 1 in 5 writes, three XL replicas: 533 reads + 400 copied writes each.
-    await goTo(page, 1);
+    await openMission(page, 1, { estimate: true });
     await addReplicas(page, ['XL']);
     await calm(page);
     r = await measure(page);
@@ -162,7 +155,7 @@ test.describe('Level 3 · teaching feedback', () => {
     const [id] = await addReplicas(page, ['XL', 'XL']);
     await page.click('#playBtn');
     await fastForward(page, 1);
-    await select(page, id);
+    await selectNode(page, id);
     await expect(page.locator('#inspLive')).toContainText('reads + writes copied from the primary');
   });
 
@@ -201,7 +194,7 @@ test.describe('Level 3 · teaching feedback', () => {
   test('Mission 2: the Mission 1 design is 75% busy, and L replicas cannot keep up with the writes', async ({ page }) => {
     await freshPage(page, '#level-3/build');
     const ids = await addReplicas(page, ['XL', 'XL']);
-    await goTo(page, 1);
+    await openMission(page, 1, { estimate: true });
     await calm(page);
     let r = await measure(page);
     expect(r.dbs.filter((d) => d.role === 'replica').map((d) => d.util)).toEqual([0.75, 0.75]);
@@ -215,7 +208,7 @@ test.describe('Level 3 · teaching feedback', () => {
   test('Mission 2: with only two XL replicas, a replica crash leaves too little', async ({ page }) => {
     await freshPage(page, '#level-3/build');
     await addReplicas(page, ['XL', 'XL']);
-    await goTo(page, 1);
+    await openMission(page, 1, { estimate: true });
     await page.click('#playBtn');
     await page.click('#exp-crash-replica');
     await calm(page);
@@ -231,7 +224,7 @@ test.describe('Level 3 · teaching feedback', () => {
   test('Mission 3: a crashed primary fails every write until a replica is promoted', async ({ page }) => {
     await freshPage(page, '#level-3/build');
     await addReplicas(page, ['XL', 'XL', 'XL']);
-    await goTo(page, 2);
+    await openMission(page, 2, { estimate: true });
     await page.click('#playBtn');
     await page.click('#exp-crash-primary');
     await calm(page);
@@ -239,7 +232,7 @@ test.describe('Level 3 · teaching feedback', () => {
     expect(r.served).toBeCloseTo(80, 6);
     expect(r.issue).toContain('The primary database is down');
     const replica = r.dbs.find((d) => d.role === 'replica').id;
-    await select(page, replica);
+    await selectNode(page, replica);
     await page.locator('#insp').getByRole('button', { name: 'Promote to primary' }).click();
     await calm(page);
     r = await measure(page);
@@ -258,10 +251,10 @@ test.describe('Level 3 · teaching feedback', () => {
     await page.click('#playBtn');
     await page.click('#exp-crash-replica');
     const down = await state(page, () => window.__sdl.S.nodes.find((n) => window.__sdl.model().down.has(n.id)).id);
-    await select(page, down);
+    await selectNode(page, down);
     await expect(page.locator('#insp').getByRole('button', { name: 'Promote to primary' })).toBeDisabled();
     await page.click('#exp-crash-replica');
-    await select(page, down === a ? b : a);
+    await selectNode(page, down === a ? b : a);
     await page.locator('#insp').getByRole('button', { name: 'Promote to primary' }).click();
     await expect(page.locator('#log')).toContainText('nothing is lost');
     expect(await state(page, () => window.__sdl.S.nodes.filter((n) => n.role === 'primary').length)).toBe(1);
@@ -303,7 +296,7 @@ test.describe('Level 3 · teaching feedback', () => {
 test.describe('Level 3 · fixes from QA', () => {
   test('Mission 2: the replica crash takes down the one the others can least cover for', async ({ page }) => {
     await freshPage(page, '#level-3/build');
-    await goTo(page, 1);
+    await openMission(page, 1, { estimate: true });
     await page.evaluate(() => { window.__sdl.S.nodes.find((n) => n.id === 'b').size = 'L'; });
     const [a, b] = await addReplicas(page, ['XL', 'XL']);
     const [c] = await addReplicas(page, ['XL'], { connect: false });
@@ -321,13 +314,13 @@ test.describe('Level 3 · fixes from QA', () => {
 
   test('Mission 3: an old primary that comes back smaller is explained, and promoting it back finishes the mission', async ({ page }) => {
     await freshPage(page, '#level-3/build');
-    await goTo(page, 2);
+    await openMission(page, 2, { estimate: true });
     await page.evaluate(() => { window.__sdl.S.nodes.find((n) => n.id === 'b').size = 'L'; });
     const [r1] = await addReplicas(page, ['XL', 'XL', 'XL']);
     await page.click('#playBtn');
     await fastForward(page, 5);
     await page.click('#exp-crash-primary');
-    await select(page, r1);
+    await selectNode(page, r1);
     await page.locator('#insp').getByRole('button', { name: 'Promote to primary' }).click();
     await fastForward(page, 2);
     expect(await state(page, () => window.__sdl.S.exp[2]['crash-primary'])).toBe(true);
@@ -335,7 +328,7 @@ test.describe('Level 3 · fixes from QA', () => {
     await fastForward(page, 2);
     await expect(page.locator('#log')).toContainText('It was the primary and is smaller than the other replicas.');
     expect(await state(page, () => window.__sdl.S.done[2])).toBe(false);
-    await select(page, 'b');
+    await selectNode(page, 'b');
     await page.locator('#insp').getByRole('button', { name: 'Promote to primary' }).click();
     await fastForward(page, 5);
     expect(await state(page, () => window.__sdl.S.done[2])).toBe(true);
@@ -343,12 +336,12 @@ test.describe('Level 3 · fixes from QA', () => {
 
   test('Mission 3: resizing the old primary is a design change, so the crash test runs again', async ({ page }) => {
     await freshPage(page, '#level-3/build');
-    await goTo(page, 2);
+    await openMission(page, 2, { estimate: true });
     await page.evaluate(() => { window.__sdl.S.nodes.find((n) => n.id === 'b').size = 'L'; });
     const [r1] = await addReplicas(page, ['XL', 'XL', 'XL']);
     await page.click('#playBtn');
     await page.click('#exp-crash-primary');
-    await select(page, r1);
+    await selectNode(page, r1);
     await page.locator('#insp').getByRole('button', { name: 'Promote to primary' }).click();
     await fastForward(page, 2);
     expect(await state(page, () => window.__sdl.S.exp[2]['crash-primary'])).toBe(true); // promoting kept nothing from counting
@@ -388,9 +381,9 @@ test.describe('Level 3 · fixes from QA', () => {
   test('sentences name the primary database in full, and Promote has room under it', async ({ page }) => {
     await freshPage(page, '#level-3/build');
     const [r] = await addReplicas(page, ['XL']);
-    await select(page, 'b');
+    await selectNode(page, 'b');
     await expect(page.locator('#insp [data-focus-key="remove"]')).toHaveText('Remove primary database');
-    await select(page, r);
+    await selectNode(page, r);
     const gap = await page.evaluate(() => {
       const btn = document.querySelector('#insp [data-focus-key="promote"]'), note = btn.nextElementSibling;
       return note.getBoundingClientRect().top - btn.getBoundingClientRect().bottom;
@@ -402,23 +395,22 @@ test.describe('Level 3 · fixes from QA', () => {
 test.describe('Level 3 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-3/build');
-    const enter = async (selector) => { await page.focus(selector); await page.keyboard.press('Enter'); };
-    for (let i = 0; i < 2; i++) await enter('.pal-item[data-type="db"]');
+    for (let i = 0; i < 2; i++) await pressEnterOn(page, '.pal-item[data-type="db"]');
     const ids = await state(page, () => window.__sdl.S.nodes.filter((n) => n.role === 'replica').map((n) => n.id));
     for (const id of ids) {
-      await enter(`[data-node="${id}"]`);
-      await enter('#insp .seg button:nth-child(4)'); // XL
+      await pressEnterOn(page, `[data-node="${id}"]`);
+      await pressEnterOn(page, '#insp .seg button:nth-child(4)'); // XL
       while (await page.locator('#insp .conn').getByRole('button', { name: 'Connect', exact: true }).count()) {
         await page.locator('#insp .conn').getByRole('button', { name: 'Connect', exact: true }).first().focus();
         await page.keyboard.press('Enter');
       }
     }
     expect((await measure(page)).cost).toBe(2295);
-    await enter('#playBtn');
+    await pressEnterOn(page, '#playBtn');
     await fastForward(page, 5);
-    await enter('#exp-crash-replica');
+    await pressEnterOn(page, '#exp-crash-replica');
     await fastForward(page, 2);
-    await enter('#exp-crash-replica');
+    await pressEnterOn(page, '#exp-crash-replica');
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
   });
 
@@ -450,7 +442,7 @@ test.describe('Level 3 · layout and accessibility', () => {
           if (tab === 'build') {
             const [id] = await addReplicas(page, ['XL', 'XL']);
             await page.click('#playBtn'); await playFor(page, 0.5);
-            await select(page, id);
+            await selectNode(page, id);
           }
           const results = await new AxeBuilder({ page }).setLegacyMode().analyze();
           expect(results.violations.map((v) => `${tab}: ${v.id} (${v.nodes.length})`)).toEqual([]);

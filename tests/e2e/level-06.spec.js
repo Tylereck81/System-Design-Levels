@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, sampleRoutes } from '../helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, sampleRoutes, openMission, selectNode, setProps, calm, pressEnterOn } from '../helpers.js';
 
 // Level 6: Stateless web tier and autoscaling.
 // The level starts with Level 5's design: a CDN ('k'), two load balancers ('l1', 'l2') using round robin, two XL web
@@ -15,11 +15,6 @@ const addStore = (page) => page.evaluate(() => {
   s.afterDesignChange();
   return n.id;
 });
-const goTo = (page, i) => page.evaluate((k) => {
-  const S = window.__sdl.S;
-  for (let j = 0; j < k; j++) { S.done[j] = true; S.verified[j] = true; }
-  S.mission = k; S.est = true; window.__sdl.afterChange(true);
-}, i);
 const measure = (page) => page.evaluate(() => {
   const s = window.__sdl, m = s.model(), at = (id) => m.node[id] || {};
   const store = s.S.nodes.find((n) => n.type === 'session');
@@ -29,11 +24,8 @@ const measure = (page) => page.evaluate(() => {
   };
 });
 // Pause and go back to t = 0, where traffic has no wobble, so numbers can be pinned exactly.
-const calm = (page) => page.evaluate(() => { const s = window.__sdl; s.run.playing = false; s.run.t = 0; });
-const select = async (page, id) => { await page.focus(`[data-node="${id}"]`); await page.keyboard.press('Enter'); };
-const set = (page, id, props) => page.evaluate(([i, p]) => { Object.assign(window.__sdl.S.nodes.find((n) => n.id === i), p); window.__sdl.afterDesignChange(); }, [id, props]);
-const sticky = async (page) => { await set(page, 'l1', { algo: 'sticky' }); await set(page, 'l2', { algo: 'sticky' }); };
-const autoscale = async (page, size) => { await set(page, 'w1', { scaling: 'auto', size }); await set(page, 'w2', { scaling: 'auto', size }); };
+const sticky = async (page) => { await setProps(page, 'l1', { algo: 'sticky' }); await setProps(page, 'l2', { algo: 'sticky' }); };
+const autoscale = async (page, size) => { await setProps(page, 'w1', { scaling: 'auto', size }); await setProps(page, 'w2', { scaling: 'auto', size }); };
 
 test.describe('Level 6 · playthrough', () => {
   test('all three missions can be completed', async ({ page }) => {
@@ -42,7 +34,7 @@ test.describe('Level 6 · playthrough', () => {
     await expect(page.locator('#lvlChip')).toHaveText('Level 6 / 21');
 
     // Mission 1: sticky sessions on the active load balancer, through the inspector.
-    await select(page, 'l1');
+    await selectNode(page, 'l1');
     await page.locator('#insp').getByRole('button', { name: /^Sticky sessions/ }).click();
     await expect(page.locator('[data-node="l1"] .node-sub')).toHaveText('Active · sticky');
     await page.click('#playBtn');
@@ -70,7 +62,7 @@ test.describe('Level 6 · playthrough', () => {
     await page.fill('#estIn', '5');
     await page.click('#estBtn');
     for (const id of ['w1', 'w2']) {
-      await select(page, id);
+      await selectNode(page, id);
       await page.locator('#insp').getByRole('button', { name: /^Autoscale/ }).click();
       await page.locator('#insp [data-focus-key="size-M"]').click();
     }
@@ -104,7 +96,7 @@ test.describe('Level 6 · numbers', () => {
     expect(r.served).toBeCloseTo(100, 6);
     expect(r.latency).toBeCloseTo(82.2, 1);
     // A session store instead: one 3 ms lookup per page (20% busy: 2,000 of 10,000/s), $150 a month.
-    await set(page, 'l1', { algo: 'rr' }); await set(page, 'l2', { algo: 'rr' });
+    await setProps(page, 'l1', { algo: 'rr' }); await setProps(page, 'l2', { algo: 'rr' });
     await addStore(page);
     await calm(page);
     r = await measure(page);
@@ -117,7 +109,7 @@ test.describe('Level 6 · numbers', () => {
 
   test('an autoscaled group pays for the servers it runs each hour', async ({ page }) => {
     await freshPage(page, '#level-6/build');
-    await goTo(page, 2);
+    await openMission(page, 2, { estimate: true });
     await addStore(page);
     // M: 1,000 pages a second per group at the peak, 240 per server: 5 servers, 50% busy.
     await autoscale(page, 'M');
@@ -131,9 +123,9 @@ test.describe('Level 6 · numbers', () => {
       expect((await measure(page)).cost).toBe(cost);
     }
     // Fixed servers: two XL are over budget; L + XL with weighted routing too.
-    await set(page, 'w1', { scaling: 'fixed', size: 'XL' }); await set(page, 'w2', { scaling: 'fixed', size: 'XL' });
+    await setProps(page, 'w1', { scaling: 'fixed', size: 'XL' }); await setProps(page, 'w2', { scaling: 'fixed', size: 'XL' });
     expect((await measure(page)).cost).toBe(3192);
-    await set(page, 'w1', { size: 'L' }); await set(page, 'l1', { algo: 'wrr' });
+    await setProps(page, 'w1', { size: 'L' }); await setProps(page, 'l1', { algo: 'wrr' });
     expect((await measure(page)).cost).toBe(2942);
     await expect(page.locator('#goals')).toContainText('$2,942');
   });
@@ -153,7 +145,7 @@ test.describe('Level 6 · teaching feedback', () => {
     await page.click('#playBtn');
     await fastForward(page, 1);
     await expect(page.locator('#log')).toContainText('50% of pages reaching the web server fail');
-    await set(page, 'l1', { algo: 'wrr' }); // weighted routing doesn't help: the session is still on one server
+    await setProps(page, 'l1', { algo: 'wrr' }); // weighted routing doesn't help: the session is still on one server
     await calm(page);
     expect((await measure(page)).served).toBeCloseTo(75, 6);
     // One web server finds every session, but can't carry the traffic.
@@ -166,7 +158,7 @@ test.describe('Level 6 · teaching feedback', () => {
 
   test('the update loses half the carts with sticky sessions, none with a session store', async ({ page }) => {
     await freshPage(page, '#level-6/build');
-    await goTo(page, 1);
+    await openMission(page, 1, { estimate: true });
     await sticky(page);
     await page.click('#playBtn');
     await page.click('#exp-update-web');
@@ -190,7 +182,7 @@ test.describe('Level 6 · teaching feedback', () => {
 
   test('a day with sticky sessions logs shoppers out when the groups shrink', async ({ page }) => {
     await freshPage(page, '#level-6/build');
-    await goTo(page, 2);
+    await openMission(page, 2, { estimate: true });
     await sticky(page);
     await autoscale(page, 'M');
     expect((await measure(page)).cost).toBe(2608); // in budget, and fine at the peak
@@ -204,7 +196,7 @@ test.describe('Level 6 · teaching feedback', () => {
 
   test('during a day, traffic and each group follow the hour', async ({ page }) => {
     await freshPage(page, '#level-6/build');
-    await goTo(page, 2);
+    await openMission(page, 2, { estimate: true });
     await addStore(page);
     await autoscale(page, 'M');
     // Pause and set the day's clock directly, so real time passing in the browser can't move it.
@@ -223,7 +215,7 @@ test.describe('Level 6 · teaching feedback', () => {
 
   test('a fixed server cannot follow the day: the bill stays at the peak', async ({ page }) => {
     await freshPage(page, '#level-6/build');
-    await goTo(page, 2);
+    await openMission(page, 2, { estimate: true });
     await addStore(page);
     await page.click('#playBtn');
     await fastForward(page, 1);
@@ -255,18 +247,18 @@ test.describe('Level 6 · teaching feedback', () => {
 
   test('the inspector explains state, autoscaling and the store', async ({ page }) => {
     await freshPage(page, '#level-6/build');
-    await select(page, 'w1');
+    await selectNode(page, 'w1');
     await expect(page.locator('#insp')).toContainText('it is stateful');
     await page.click('#playBtn');
     await fastForward(page, 1);
     await expect(page.locator('#inspLive')).toContainText('land here without their session');
     await page.click('#playBtn');
     await addStore(page);
-    await set(page, 'w1', { scaling: 'auto', size: 'M' });
-    await select(page, 'w1');
+    await setProps(page, 'w1', { scaling: 'auto', size: 'M' });
+    await selectNode(page, 'w1');
     await expect(page.locator('#insp')).not.toContainText('it is stateful');
     await page.evaluate(() => { window.__sdl.run.everPlayed = false; });
-    await select(page, 'w1');
+    await selectNode(page, 'w1');
     await expect(page.locator('#inspLive')).toContainText('1 to 5');
     await expect(page.locator('#inspLive')).toContainText('servers over a day');
     await expect(page.locator('[data-node="w1"] .node-sub')).toHaveText('M · autoscaled');
@@ -278,7 +270,7 @@ test.describe('Level 6 · teaching feedback', () => {
   test('scaling and sticky settings survive a reload; bad saved settings load as the defaults', async ({ page }) => {
     await freshPage(page, '#level-6/build');
     await sticky(page);
-    await set(page, 'w1', { scaling: 'auto' });
+    await setProps(page, 'w1', { scaling: 'auto' });
     await reloadGame(page);
     const get = () => state(page, () => { const n = (id) => window.__sdl.S.nodes.find((x) => x.id === id); return [n('l1').algo, n('w1').scaling, n('w2').scaling]; });
     expect(await get()).toEqual(['sticky', 'auto', 'fixed']);
@@ -294,7 +286,7 @@ test.describe('Level 6 · teaching feedback', () => {
 
   test('the server estimate accepts "5" and gives specific hints', async ({ page }) => {
     await freshPage(page, '#level-6/build');
-    await goTo(page, 2);
+    await openMission(page, 2, { estimate: true });
     await page.evaluate(() => { window.__sdl.S.est = false; window.__sdl.afterChange(true); });
     for (const [v, hint] of [['2.5', '100% busy'], ['9', 'both groups'], ['4', 'Round up']]) {
       await page.fill('#estIn', v);
@@ -310,16 +302,15 @@ test.describe('Level 6 · teaching feedback', () => {
 test.describe('Level 6 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-6/build');
-    const enter = async (selector) => { await page.focus(selector); await page.keyboard.press('Enter'); };
-    await enter('.pal-item[data-type="session"]');
+    await pressEnterOn(page, '.pal-item[data-type="session"]');
     const id = await state(page, () => window.__sdl.S.nodes.find((n) => n.type === 'session').id);
-    await enter(`[data-node="${id}"]`);
+    await pressEnterOn(page, `[data-node="${id}"]`);
     while (await page.locator('#insp .conn').getByRole('button', { name: 'Connect', exact: true }).count()) {
       await page.locator('#insp .conn').getByRole('button', { name: 'Connect', exact: true }).first().focus();
       await page.keyboard.press('Enter');
     }
     expect((await measure(page)).cost).toBe(3192);
-    await enter('#playBtn');
+    await pressEnterOn(page, '#playBtn');
     await fastForward(page, 5);
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
   });
@@ -350,11 +341,11 @@ test.describe('Level 6 · layout and accessibility', () => {
         for (const tab of ['lesson', 'build', 'quiz']) {
           await page.click(`#tab-${tab}`);
           if (tab === 'build') {
-            await goTo(page, 2);
+            await openMission(page, 2, { estimate: true });
             await addStore(page);
-            await set(page, 'w1', { scaling: 'auto', size: 'M' });
+            await setProps(page, 'w1', { scaling: 'auto', size: 'M' });
             await page.click('#playBtn'); await playFor(page, 0.5);
-            await select(page, 'w1');
+            await selectNode(page, 'w1');
           }
           const results = await new AxeBuilder({ page }).setLegacyMode().analyze();
           expect(results.violations.map((v) => `${tab}: ${v.id} (${v.nodes.length})`)).toEqual([]);

@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, sampleRoutes } from '../helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, sampleRoutes, openMission, selectNode, calm, pressEnterOn } from '../helpers.js';
 
 // Level 4: cache tier.
 // The level starts with two load balancers, two XL web servers, an XL primary ('b') and two XL replicas ('r1', 'r2').
@@ -19,19 +19,12 @@ async function setup(page, { caches = [], dropReplica = true } = {}) {
     return ids;
   }, { caches, dropReplica });
 }
-const goTo = (page, i) => page.evaluate((k) => {
-  const S = window.__sdl.S;
-  for (let j = 0; j < k; j++) { S.done[j] = true; S.verified[j] = true; }
-  S.mission = k; S.est = true; window.__sdl.afterChange(true);
-}, i);
 const measure = (page) => page.evaluate(() => {
   const s = window.__sdl, m = s.model();
   const dbs = s.S.nodes.filter((n) => n.type === 'db').map((n) => ({ id: n.id, role: n.role, ...(m.node[n.id] || {}) }));
   return { served: m.servedPct, latency: m.latency, cost: m.cost, spof: m.spof, hitRate: m.hitRate, staleSecs: m.staleSecs, dbs };
 });
 // Pause and go back to t = 0, where traffic has no wobble, so numbers can be pinned exactly.
-const calm = (page) => page.evaluate(() => { const s = window.__sdl; s.run.playing = false; s.run.t = 0; });
-const select = async (page, id) => { await page.focus(`[data-node="${id}"]`); await page.keyboard.press('Enter'); };
 
 test.describe('Level 4 · playthrough', () => {
   test('all three missions can be completed', async ({ page }) => {
@@ -65,7 +58,7 @@ test.describe('Level 4 · playthrough', () => {
     const caches = await state(page, () => window.__sdl.S.nodes.filter((n) => n.type === 'cache').map((n) => n.id));
     expect(caches[0]).toBe(c1);
     for (const id of caches) {
-      await select(page, id);
+      await selectNode(page, id);
       await page.locator('#insp').getByRole('button', { name: /^Delete the cached copy/ }).click();
     }
     await page.click('#playBtn');
@@ -85,7 +78,7 @@ test.describe('Level 4 · playthrough', () => {
 test.describe('Level 4 · numbers', () => {
   test('pinned designs match the simulation model', async ({ page }) => {
     await freshPage(page, '#level-4/build');
-    await goTo(page, 0);
+    await openMission(page, 0, { estimate: true });
     await calm(page);
     // Start: two XL replicas, no cache. Each gets 800 reads + 400 copied writes: 75% busy.
     let r = await measure(page);
@@ -126,7 +119,7 @@ test.describe('Level 4 · numbers', () => {
 test.describe('Level 4 · teaching feedback', () => {
   test('dropping a replica without a cache overloads the one left', async ({ page }) => {
     await freshPage(page, '#level-4/build');
-    await goTo(page, 0);
+    await openMission(page, 0, { estimate: true });
     await setup(page);
     await calm(page);
     expect((await measure(page)).served).toBeCloseTo(84, 6); // 1,600 reads + 400 copied writes on a 1,600 replica
@@ -137,7 +130,7 @@ test.describe('Level 4 · teaching feedback', () => {
 
   test('a 4 GB cache holds the top 20% but misses the 80% goal once entries expire', async ({ page }) => {
     await freshPage(page, '#level-4/build');
-    await goTo(page, 0);
+    await openMission(page, 0, { estimate: true });
     await setup(page, { caches: [['M', '600']] });
     await page.click('#playBtn');
     await fastForward(page, 1);
@@ -146,13 +139,13 @@ test.describe('Level 4 · teaching feedback', () => {
 
   test('the inspector shows the cache settings and its hit rate; the canvas shows memory and TTL', async ({ page }) => {
     await freshPage(page, '#level-4/build');
-    await goTo(page, 0);
+    await openMission(page, 0, { estimate: true });
     const [id] = await setup(page, { caches: [['L', '600']] });
     await expect(page.locator(`[data-node="${id}"] .node-sub`)).toHaveText('8 GB · TTL 10 min');
     await expect(page.locator('.edge-label', { hasText: 'lookups' })).not.toHaveCount(0);
     await page.click('#playBtn');
     await fastForward(page, 1);
-    await select(page, id);
+    await selectNode(page, id);
     await expect(page.locator('#inspLive')).toContainText('87%');
     await expect(page.locator('#inspLive')).toContainText('misses/s sent to the database');
     await page.locator('#insp').getByRole('button', { name: /^1 hour/ }).click();
@@ -162,7 +155,7 @@ test.describe('Level 4 · teaching feedback', () => {
 
   test('crashing the only cache sends every read to the database', async ({ page }) => {
     await freshPage(page, '#level-4/build');
-    await goTo(page, 1);
+    await openMission(page, 1, { estimate: true });
     await setup(page, { caches: [['L', '600']] });
     await page.click('#playBtn');
     await page.click('#exp-crash-cache');
@@ -176,7 +169,7 @@ test.describe('Level 4 · teaching feedback', () => {
 
   test('with two caches, losing one halves the hit rate and the replica copes', async ({ page }) => {
     await freshPage(page, '#level-4/build');
-    await goTo(page, 1);
+    await openMission(page, 1, { estimate: true });
     await setup(page, { caches: [['L', '600'], ['L', '600']] });
     expect((await measure(page)).spof).toBe(0);
     await page.click('#playBtn');
@@ -189,7 +182,7 @@ test.describe('Level 4 · teaching feedback', () => {
 
   test('a long TTL serves old prices; deleting on write keeps them fresh', async ({ page }) => {
     await freshPage(page, '#level-4/build');
-    await goTo(page, 2);
+    await openMission(page, 2, { estimate: true });
     const [a, b] = await setup(page, { caches: [['L', '600'], ['L', '600']] });
     expect((await measure(page)).staleSecs).toBe(600);
     await page.click('#playBtn');
@@ -210,7 +203,7 @@ test.describe('Level 4 · teaching feedback', () => {
 
   test('request dots: hits end at the cache, misses and writes go to the database', async ({ page }) => {
     await freshPage(page, '#level-4/build');
-    await goTo(page, 0);
+    await openMission(page, 0, { estimate: true });
     const [c] = await setup(page, { caches: [['L', '600']] });
     const routes = (await sampleRoutes(page, 400)).map((x) => x.route);
     const atCache = routes.filter((r) => r.includes(c));
@@ -254,7 +247,7 @@ test.describe('Level 4 · teaching feedback', () => {
 test.describe('Level 4 · fixes from QA', () => {
   test('Mission 3: a 1-minute TTL with lots of memory falls short of 86%; delete-on-change passes', async ({ page }) => {
     await freshPage(page, '#level-4/build');
-    await goTo(page, 2);
+    await openMission(page, 2, { estimate: true });
     const ids = await setup(page, { caches: [['L', '60', 'ttl'], ['L', '60', 'ttl'], ['L', '60', 'ttl']] });
     await calm(page);
     const r = await measure(page);
@@ -280,22 +273,21 @@ test.describe('Level 4 · fixes from QA', () => {
 test.describe('Level 4 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-4/build');
-    const enter = async (selector) => { await page.focus(selector); await page.keyboard.press('Enter'); };
     await page.fill('#estIn', '4');
-    await enter('#estBtn');
-    await enter('[data-node="r2"]');
-    await enter('#insp [data-focus-key="remove"]');
-    await enter('.pal-item[data-type="cache"]');
+    await pressEnterOn(page, '#estBtn');
+    await pressEnterOn(page, '[data-node="r2"]');
+    await pressEnterOn(page, '#insp [data-focus-key="remove"]');
+    await pressEnterOn(page, '.pal-item[data-type="cache"]');
     const id = await state(page, () => window.__sdl.S.nodes.find((n) => n.type === 'cache').id);
-    await enter(`[data-node="${id}"]`);
-    await enter('#insp [data-focus-key="size-L"]');
-    await enter('#insp [data-focus-key="ttl-600"]');
+    await pressEnterOn(page, `[data-node="${id}"]`);
+    await pressEnterOn(page, '#insp [data-focus-key="size-L"]');
+    await pressEnterOn(page, '#insp [data-focus-key="ttl-600"]');
     while (await page.locator('#insp .conn').getByRole('button', { name: 'Connect', exact: true }).count()) {
       await page.locator('#insp .conn').getByRole('button', { name: 'Connect', exact: true }).first().focus();
       await page.keyboard.press('Enter');
     }
     expect((await measure(page)).cost).toBe(1925);
-    await enter('#playBtn');
+    await pressEnterOn(page, '#playBtn');
     await fastForward(page, 5);
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
   });
@@ -326,10 +318,10 @@ test.describe('Level 4 · layout and accessibility', () => {
         for (const tab of ['lesson', 'build', 'quiz']) {
           await page.click(`#tab-${tab}`);
           if (tab === 'build') {
-            await goTo(page, 0);
+            await openMission(page, 0, { estimate: true });
             const [id] = await setup(page, { caches: [['L', '600'], ['L', '600']] });
             await page.click('#playBtn'); await playFor(page, 0.5);
-            await select(page, id);
+            await selectNode(page, id);
           }
           const results = await new AxeBuilder({ page }).setLegacyMode().analyze();
           expect(results.violations.map((v) => `${tab}: ${v.id} (${v.nodes.length})`)).toEqual([]);

@@ -92,15 +92,37 @@ export async function dragBetween(page, fromSelector, toSelectorOrPoint) {
   await page.mouse.up();
 }
 
-/** Mark the first `count` missions done and open the next one. */
-export async function unlockMissions(page, count) {
-  await page.evaluate((c) => {
+/**
+ * Mark missions 0..i-1 done and verified, then open mission i.
+ * `estimate: true` also marks the level's estimate step as answered, so a gated mission shows its traffic.
+ */
+export async function openMission(page, i, { estimate = false } = {}) {
+  await page.evaluate(([k, est]) => {
     const S = window.__sdl.S;
-    for (let i = 0; i < c; i++) { S.done[i] = true; S.verified[i] = true; }
-    S.mission = c;
+    for (let j = 0; j < k; j++) { S.done[j] = true; S.verified[j] = true; }
+    S.mission = k;
+    if (est) S.est = true;
     window.__sdl.afterChange(true);
-  }, count);
+  }, [i, estimate]);
 }
+
+/** Press Enter on the element matching `selector`, as a keyboard player would. */
+export async function pressEnterOn(page, selector) {
+  await page.focus(selector);
+  await page.keyboard.press('Enter');
+}
+
+/** Select a node on the canvas with the keyboard. */
+export const selectNode = (page, id) => pressEnterOn(page, `[data-node="${id}"]`);
+
+/** Change a node's properties directly, then let the game react as it does to a design change. */
+export const setProps = (page, id, props) => page.evaluate(([nodeId, p]) => {
+  Object.assign(window.__sdl.S.nodes.find((n) => n.id === nodeId), p);
+  window.__sdl.afterDesignChange();
+}, [id, props]);
+
+/** Pause traffic and rewind the clock, so a reading is taken at the start of the run. */
+export const calm = (page) => page.evaluate(() => { const s = window.__sdl; s.run.playing = false; s.run.t = 0; });
 
 /** Build Users → DNS, Users → Web server (→ Database) through the API. */
 export async function buildBasic(page, { db = true } = {}) {

@@ -1,22 +1,15 @@
 import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from '../helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, openMission, selectNode, setProps, pressEnterOn } from '../helpers.js';
 
 // Level 20: Video platform.
 // Creators ('u') upload through the upload service ('p': through the API servers, whole files) to transcoding ('t':
 // 10 servers, no retry) and delivery ('v': every video from the CDN). 9.3 uploads a second at the peak.
 
-const goTo = (page, i) => page.evaluate((k) => {
-  const S = window.__sdl.S;
-  for (let j = 0; j < k; j++) { S.done[j] = true; S.verified[j] = true; }
-  S.mission = k; S.est = true; window.__sdl.afterChange(true);
-}, i);
 const measure = (page) => page.evaluate(() => {
   const m = window.__sdl.model({ peak: true });
   return { qps: m.qps, served: m.servedPct, cost: m.cost, o: m.video, spof: m.spof };
 });
-const select = async (page, id) => { await page.focus(`[data-node="${id}"]`); await page.keyboard.press('Enter'); };
-const set = (page, id, props) => page.evaluate(([x, p]) => { Object.assign(window.__sdl.S.nodes.find((n) => n.id === x), p); window.__sdl.afterDesignChange(); }, [id, props]);
 const during = (page, id) => page.evaluate((x) => { window.__sdl.run.on = x ? { [x]: {} } : {}; }, id);
 const click = (page, key) => page.locator(`#insp [data-focus-key="${key}"]`).click();
 const pause = (page) => page.evaluate(() => { if (window.__sdl.run.playing) window.__sdl.togglePlay(); });
@@ -31,7 +24,7 @@ test.describe('Level 20 · playthrough', () => {
     // Mission 1: estimate 100 TB, pre-signed URLs and resumable chunks; patchy networks.
     await page.fill('#estIn', '100');
     await page.click('#estBtn');
-    await select(page, 'p');
+    await selectNode(page, 'p');
     await click(page, 'url-presigned');
     await click(page, 'chunks-chunked');
     await expect(page.locator('[data-node="p"] .node-sub')).toHaveText('pre-signed URL · chunks');
@@ -44,7 +37,7 @@ test.describe('Level 20 · playthrough', () => {
 
     // Mission 2: 11 transcoding servers with retries; one dies.
     await page.click('#mission .complete button');
-    await select(page, 't');
+    await selectNode(page, 't');
     await click(page, 'workers-11');
     await click(page, 'retry-on');
     await expect(page.locator('[data-node="t"] .node-sub')).toHaveText('11 servers · retry');
@@ -57,7 +50,7 @@ test.describe('Level 20 · playthrough', () => {
 
     // Mission 3: only popular videos on the CDN; views grow.
     await page.click('#mission .complete button');
-    await select(page, 'v');
+    await selectNode(page, 'v');
     await click(page, 'deliver-popular');
     expect((await measure(page)).cost).toBe(800 + 11 * 500 + 2952000);
     await page.click('#playBtn');
@@ -81,25 +74,25 @@ test.describe('Level 20 · numbers', () => {
     expect(r.o.uploaded).toBeCloseTo(2 / 9.579 * 0.95, 9);
     expect(r.cost).toBe(800 + 10 * 500 + 3600000);
     expect(r.spof).toBe(0);
-    await set(page, 'p', { url: 'presigned' });
+    await setProps(page, 'p', { url: 'presigned' });
     expect((await measure(page)).o.uploaded).toBeCloseTo(0.95, 9);
     await during(page, 'patchy');
     expect((await measure(page)).o.uploaded).toBeCloseTo(0.6, 9);
-    await set(page, 'p', { chunks: 'chunked' });
+    await setProps(page, 'p', { chunks: 'chunked' });
     expect((await measure(page)).o.uploaded).toBe(1);
   });
 
   test('transcoding: 1 video a second per server; a dead server\'s videos are lost without retry', async ({ page }) => {
     await freshPage(page, '#level-20/build');
-    await set(page, 'p', { url: 'presigned', chunks: 'chunked' });
+    await setProps(page, 'p', { url: 'presigned', chunks: 'chunked' });
     let r = await measure(page);
     expect(r.served).toBe(100);
     await during(page, 'dies');
     r = await measure(page);
     expect(r.o.transcoded).toBeCloseTo(9 / 9.579 * 0.9, 9);
-    await set(page, 't', { retry: 'on' });
+    await setProps(page, 't', { retry: 'on' });
     expect((await measure(page)).o.transcoded).toBeCloseTo(9 / 9.579, 9);
-    await set(page, 't', { workers: '11' });
+    await setProps(page, 't', { workers: '11' });
     expect((await measure(page)).served).toBe(100);
   });
 
@@ -108,7 +101,7 @@ test.describe('Level 20 · numbers', () => {
     // 24 million views × 0.25 GB × 30 days = 180 million GB.
     let r = await measure(page);
     expect(r.o.bill).toBeCloseTo(180e6 * 0.02, 3);
-    await set(page, 'v', { deliver: 'popular' });
+    await setProps(page, 'v', { deliver: 'popular' });
     r = await measure(page);
     expect(r.o.bill).toBeCloseTo(180e6 * (0.8 * 0.02 + 0.2 * 0.002), 3);
     await during(page, 'growth');
@@ -124,7 +117,7 @@ test.describe('Level 20 · numbers', () => {
 test.describe('Level 20 · teaching feedback', () => {
   test('through the API servers: the log points to pre-signed URLs', async ({ page }) => {
     await freshPage(page, '#level-20/build');
-    await goTo(page, 0);
+    await openMission(page, 0, { estimate: true });
     await page.click('#playBtn');
     await page.click('#exp-patchy');
     await fastForward(page, 2);
@@ -134,9 +127,9 @@ test.describe('Level 20 · teaching feedback', () => {
 
   test('a dead server without retry: the log says its videos are lost', async ({ page }) => {
     await freshPage(page, '#level-20/build');
-    await goTo(page, 1);
-    await set(page, 'p', { url: 'presigned', chunks: 'chunked' });
-    await set(page, 't', { workers: '11' });
+    await openMission(page, 1, { estimate: true });
+    await setProps(page, 'p', { url: 'presigned', chunks: 'chunked' });
+    await setProps(page, 't', { workers: '11' });
     await page.click('#playBtn');
     await page.click('#exp-dies');
     await fastForward(page, 2);
@@ -145,8 +138,8 @@ test.describe('Level 20 · teaching feedback', () => {
 
   test('everything on the CDN: Mission 3\'s budget fails at $3.61M', async ({ page }) => {
     await freshPage(page, '#level-20/build');
-    await goTo(page, 2);
-    await set(page, 'p', { url: 'presigned', chunks: 'chunked' });
+    await openMission(page, 2, { estimate: true });
+    await setProps(page, 'p', { url: 'presigned', chunks: 'chunked' });
     await page.click('#playBtn');
     await fastForward(page, 1);
     await expect(page.locator('#goals li', { hasText: 'Spend at most $3.60M' })).toHaveClass(/fail/);
@@ -155,22 +148,22 @@ test.describe('Level 20 · teaching feedback', () => {
 
   test('the inspector shows uploads arriving and the transcoding setup', async ({ page }) => {
     await freshPage(page, '#level-20/build');
-    await goTo(page, 0);
+    await openMission(page, 0, { estimate: true });
     await page.click('#playBtn');
     await fastForward(page, 1);
     await pause(page);
-    await select(page, 'p');
+    await selectNode(page, 'p');
     await expect(page.locator('#inspLive')).toContainText('of uploads arrive: the API servers\' links are');
     await expect(page.locator('#inspLive')).toContainText('5% of whole files fail and are given up on');
-    await select(page, 't');
+    await selectNode(page, 't');
     await expect(page.locator('#inspLive')).toContainText('no retry: a dead worker\'s videos are lost');
   });
 
   test('settings survive a reload; bad saved settings load as the defaults', async ({ page }) => {
     await freshPage(page, '#level-20/build');
-    await set(page, 'p', { url: 'presigned', chunks: 'chunked' });
-    await set(page, 't', { workers: '12', retry: 'on' });
-    await set(page, 'v', { deliver: 'popular' });
+    await setProps(page, 'p', { url: 'presigned', chunks: 'chunked' });
+    await setProps(page, 't', { workers: '12', retry: 'on' });
+    await setProps(page, 'v', { deliver: 'popular' });
     await reloadGame(page);
     const get = () => state(page, () => { const n = (id) => window.__sdl.S.nodes.find((x) => x.id === id); return [n('p').url, n('p').chunks, n('t').workers, n('t').retry, n('v').deliver]; });
     expect(await get()).toEqual(['presigned', 'chunked', '12', 'on', 'popular']);
@@ -205,19 +198,18 @@ test.describe('Level 20 · teaching feedback', () => {
 test.describe('Level 20 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-20/build');
-    const enter = async (selector) => { await page.focus(selector); await page.keyboard.press('Enter'); };
     await page.focus('#estIn');
     await page.keyboard.type('100');
     await page.keyboard.press('Enter');
     expect(await state(page, () => window.__sdl.S.est)).toBe(true);
-    await enter('[data-node="p"]');
-    await enter('#insp [data-focus-key="url-presigned"]');
-    await enter('#insp [data-focus-key="chunks-chunked"]');
-    await enter('#playBtn');
+    await pressEnterOn(page, '[data-node="p"]');
+    await pressEnterOn(page, '#insp [data-focus-key="url-presigned"]');
+    await pressEnterOn(page, '#insp [data-focus-key="chunks-chunked"]');
+    await pressEnterOn(page, '#playBtn');
     await fastForward(page, 5);
-    await enter('#exp-patchy');
+    await pressEnterOn(page, '#exp-patchy');
     await fastForward(page, 2);
-    await enter('#exp-patchy');
+    await pressEnterOn(page, '#exp-patchy');
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
   });
 
@@ -226,7 +218,7 @@ test.describe('Level 20 · layout and accessibility', () => {
     await freshPage(page, '#level-20/build');
     const top = await page.locator('#cv').evaluate((e) => e.getBoundingClientRect().top);
     expect(top).toBeLessThan(844);
-    await select(page, 'p');
+    await selectNode(page, 'p');
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   });
 
@@ -249,7 +241,7 @@ test.describe('Level 20 · layout and accessibility', () => {
           if (tab === 'build') {
             await page.evaluate(() => { window.__sdl.S.est = true; window.__sdl.afterChange(true); });
             await page.click('#playBtn'); await playFor(page, 0.5);
-            await select(page, 'p');
+            await selectNode(page, 'p');
           }
           const results = await new AxeBuilder({ page }).setLegacyMode().analyze();
           expect(results.violations.map((v) => `${tab}: ${v.id} (${v.nodes.length})`)).toEqual([]);

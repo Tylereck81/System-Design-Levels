@@ -1,22 +1,15 @@
 import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from '../helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, openMission, selectNode, setProps, pressEnterOn } from '../helpers.js';
 
 // Level 15: Web crawler.
 // The level is a pipeline: the URL frontier ('u', one FIFO queue) hands 800 URLs a second to the downloaders ('h',
 // 4 machines, no DNS cache), which pass pages to the parser ('p') and on to content storage ('s').
 
-const goTo = (page, i) => page.evaluate((k) => {
-  const S = window.__sdl.S;
-  for (let j = 0; j < k; j++) { S.done[j] = true; S.verified[j] = true; }
-  S.mission = k; S.est = true; window.__sdl.afterChange(true);
-}, i);
 const measure = (page) => page.evaluate(() => {
   const m = window.__sdl.model({ peak: true }), at = (id) => m.node[id] || {};
   return { qps: m.qps, served: m.servedPct, cost: m.cost, crawl: m.crawl, cap: at('h').cap, store: at('s').load, spof: m.spof };
 });
-const select = async (page, id) => { await page.focus(`[data-node="${id}"]`); await page.keyboard.press('Enter'); };
-const set = (page, id, props) => page.evaluate(([x, p]) => { Object.assign(window.__sdl.S.nodes.find((n) => n.id === x), p); window.__sdl.afterDesignChange(); }, [id, props]);
 const during = (page, id) => page.evaluate((x) => { window.__sdl.run.on = x ? { [x]: {} } : {}; }, id);
 const click = (page, key) => page.locator(`#insp [data-focus-key="${key}"]`).click();
 const pause = (page) => page.evaluate(() => { if (window.__sdl.run.playing) window.__sdl.togglePlay(); });
@@ -31,7 +24,7 @@ test.describe('Level 15 · playthrough', () => {
     // Mission 1: estimate 600 TB, then 5 machines with a DNS cache, then DNS slows down.
     await page.fill('#estIn', '600');
     await page.click('#estBtn');
-    await select(page, 'h');
+    await selectNode(page, 'h');
     await click(page, 'count-5');
     await click(page, 'dns-cache');
     await expect(page.locator('[data-node="h"] .node-sub')).toHaveText('5 machines · DNS cache');
@@ -45,7 +38,7 @@ test.describe('Level 15 · playthrough', () => {
 
     // Mission 2: a queue per host; a site floods the frontier.
     await page.click('#mission .complete button');
-    await select(page, 'u');
+    await selectNode(page, 'u');
     await click(page, 'queues-host');
     await page.click('#playBtn');
     await fastForward(page, 5);
@@ -56,7 +49,7 @@ test.describe('Level 15 · playthrough', () => {
 
     // Mission 3: the duplicate check and the URL filter; the crawler finds a trap.
     await page.click('#mission .complete button');
-    await select(page, 'p');
+    await selectNode(page, 'p');
     await click(page, 'dedup-on');
     await click(page, 'filter-on');
     await expect(page.locator('[data-node="p"] .node-sub')).toHaveText('content seen? · URL filter');
@@ -82,48 +75,48 @@ test.describe('Level 15 · numbers', () => {
     expect(r.served).toBeCloseTo(100 * 400 / 824, 6);
     expect(r.cost).toBe(4 * 200 + 150 + 300);
     for (const [count, dns, cap, slow] of [['4', 'cache', 800, 800], ['5', 'cache', 1000, 1000], ['8', 'lookup', 800, 40]]) {
-      await set(page, 'h', { count, dns });
+      await setProps(page, 'h', { count, dns });
       await during(page, null);
       expect([count, dns, (await measure(page)).cap]).toEqual([count, dns, cap]);
       await during(page, 'dns'); // 200 ms lookups: 5 a second without a cache; a cache needs only 2% of them
       expect([count, dns, (await measure(page)).cap]).toEqual([count, dns, slow]);
     }
     await during(page, null);
-    await set(page, 'h', { count: '1' });
+    await setProps(page, 'h', { count: '1' });
     expect((await measure(page)).spof).toBe(2); // one machine, and the parser
   });
 
   test('politeness: FIFO hits the busiest host with its share; per-host queues send 1 a second', async ({ page }) => {
     await freshPage(page, '#level-15/build');
-    await set(page, 'h', { count: '5', dns: 'cache' });
+    await setProps(page, 'h', { count: '5', dns: 'cache' });
     let r = await measure(page);
     expect(r.crawl.hostRate).toBeCloseTo(824 * 0.02, 6);
     await during(page, 'flood');
     r = await measure(page);
     expect(r.crawl.hostRate).toBeCloseTo(824 * 0.3, 6);
     expect(r.served).toBeCloseTo(70, 6); // the flooded site refuses its 30%
-    await set(page, 'u', { queues: 'host' });
+    await setProps(page, 'u', { queues: 'host' });
     r = await measure(page);
     expect([r.crawl.hostRate, r.served]).toEqual([1, 100]);
   });
 
   test('duplicates and traps: storage, wasted downloads and trap URLs', async ({ page }) => {
     await freshPage(page, '#level-15/build');
-    await set(page, 'h', { count: '5', dns: 'cache' });
+    await setProps(page, 'h', { count: '5', dns: 'cache' });
     let r = await measure(page);
     expect(r.crawl.storageTB).toBeCloseTo(600, 9);
     expect(r.store).toBeCloseTo(824, 6);
-    await set(page, 'p', { dedup: 'on' });
+    await setProps(page, 'p', { dedup: 'on' });
     r = await measure(page);
     expect(r.crawl.storageTB).toBeCloseTo(426, 9);
     expect(r.store).toBeCloseTo(824 * 0.71, 6);
     await during(page, 'trap');
     r = await measure(page);
     expect([r.crawl.wasted, r.crawl.trapAdds]).toEqual([0.4, expect.closeTo(824 * 0.4 * 10, 6)]);
-    await set(page, 'u', { queues: 'host' });
+    await setProps(page, 'u', { queues: 'host' });
     r = await measure(page);
     expect([r.crawl.wasted, r.crawl.trapAdds]).toEqual([expect.closeTo(1 / 824, 9), 10]);
-    await set(page, 'p', { filter: 'on' });
+    await setProps(page, 'p', { filter: 'on' });
     r = await measure(page);
     expect([r.crawl.wasted, r.crawl.trapAdds]).toEqual([0, 0]);
   });
@@ -138,8 +131,8 @@ test.describe('Level 15 · numbers', () => {
 test.describe('Level 15 · teaching feedback', () => {
   test('slow DNS without a cache: the log says to keep one', async ({ page }) => {
     await freshPage(page, '#level-15/build');
-    await goTo(page, 0);
-    await set(page, 'h', { count: '8' });
+    await openMission(page, 0, { estimate: true });
+    await setProps(page, 'h', { count: '8' });
     await page.click('#playBtn');
     await page.click('#exp-dns');
     await fastForward(page, 2);
@@ -149,8 +142,8 @@ test.describe('Level 15 · teaching feedback', () => {
 
   test('FIFO: the polite goal fails, and a flood gets the crawler refused', async ({ page }) => {
     await freshPage(page, '#level-15/build');
-    await goTo(page, 1);
-    await set(page, 'h', { count: '5', dns: 'cache' });
+    await openMission(page, 1, { estimate: true });
+    await setProps(page, 'h', { count: '5', dns: 'cache' });
     await page.click('#playBtn');
     await fastForward(page, 1);
     await expect(page.locator('#goals li', { hasText: 'At most 1 request a second' })).toHaveClass(/fail/);
@@ -161,10 +154,10 @@ test.describe('Level 15 · teaching feedback', () => {
 
   test('a trap without a URL filter: the log counts the URLs it adds', async ({ page }) => {
     await freshPage(page, '#level-15/build');
-    await goTo(page, 2);
-    await set(page, 'h', { count: '5', dns: 'cache' });
-    await set(page, 'u', { queues: 'host' });
-    await set(page, 'p', { dedup: 'on' });
+    await openMission(page, 2, { estimate: true });
+    await setProps(page, 'h', { count: '5', dns: 'cache' });
+    await setProps(page, 'u', { queues: 'host' });
+    await setProps(page, 'p', { dedup: 'on' });
     await page.click('#playBtn');
     await page.click('#exp-trap');
     await fastForward(page, 2);
@@ -174,20 +167,20 @@ test.describe('Level 15 · teaching feedback', () => {
 
   test('the inspector shows machines, pages a second and DNS', async ({ page }) => {
     await freshPage(page, '#level-15/build');
-    await goTo(page, 0);
+    await openMission(page, 0, { estimate: true });
     await page.click('#playBtn');
     await fastForward(page, 1);
     await pause(page);
-    await select(page, 'h');
+    await selectNode(page, 'h');
     await expect(page.locator('#inspLive')).toContainText('machines × pages/s each: DNS lookups one at a time');
     await expect(page.locator('#inspLive')).toContainText('4 × 100');
   });
 
   test('crawler settings survive a reload; bad saved settings load as the defaults', async ({ page }) => {
     await freshPage(page, '#level-15/build');
-    await set(page, 'h', { count: '6', dns: 'cache' });
-    await set(page, 'u', { queues: 'host' });
-    await set(page, 'p', { dedup: 'on', filter: 'on' });
+    await setProps(page, 'h', { count: '6', dns: 'cache' });
+    await setProps(page, 'u', { queues: 'host' });
+    await setProps(page, 'p', { dedup: 'on', filter: 'on' });
     await reloadGame(page);
     const get = () => state(page, () => { const n = (id) => window.__sdl.S.nodes.find((x) => x.id === id); return [n('h').count, n('h').dns, n('u').queues, n('p').dedup, n('p').filter]; });
     expect(await get()).toEqual(['6', 'cache', 'host', 'on', 'on']);
@@ -223,19 +216,18 @@ test.describe('Level 15 · teaching feedback', () => {
 test.describe('Level 15 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-15/build');
-    const enter = async (selector) => { await page.focus(selector); await page.keyboard.press('Enter'); };
     await page.focus('#estIn');
     await page.keyboard.type('600');
     await page.keyboard.press('Enter');
     expect(await state(page, () => window.__sdl.S.est)).toBe(true);
-    await enter('[data-node="h"]');
-    await enter('#insp [data-focus-key="count-5"]');
-    await enter('#insp [data-focus-key="dns-cache"]');
-    await enter('#playBtn');
+    await pressEnterOn(page, '[data-node="h"]');
+    await pressEnterOn(page, '#insp [data-focus-key="count-5"]');
+    await pressEnterOn(page, '#insp [data-focus-key="dns-cache"]');
+    await pressEnterOn(page, '#playBtn');
     await fastForward(page, 5);
-    await enter('#exp-dns');
+    await pressEnterOn(page, '#exp-dns');
     await fastForward(page, 2);
-    await enter('#exp-dns');
+    await pressEnterOn(page, '#exp-dns');
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
   });
 
@@ -244,7 +236,7 @@ test.describe('Level 15 · layout and accessibility', () => {
     await freshPage(page, '#level-15/build');
     const top = await page.locator('#cv').evaluate((e) => e.getBoundingClientRect().top);
     expect(top).toBeLessThan(844);
-    await select(page, 'h');
+    await selectNode(page, 'h');
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   });
 
@@ -267,7 +259,7 @@ test.describe('Level 15 · layout and accessibility', () => {
           if (tab === 'build') {
             await page.evaluate(() => { window.__sdl.S.est = true; window.__sdl.afterChange(true); });
             await page.click('#playBtn'); await playFor(page, 0.5);
-            await select(page, 'h');
+            await selectNode(page, 'h');
           }
           const results = await new AxeBuilder({ page }).setLegacyMode().analyze();
           expect(results.violations.map((v) => `${tab}: ${v.id} (${v.nodes.length})`)).toEqual([]);

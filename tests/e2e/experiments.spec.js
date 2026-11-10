@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures.js';
-import { freshPage, unlockMissions, buildBasic, fastForward, logText, state } from '../helpers.js';
+import { freshPage, openMission, buildBasic, fastForward, logText, state } from '../helpers.js';
 
 // Engine features for Break-it experiments that later levels rely on. Level 1's own experiments
 // don't use them, so these tests add them to the loaded level the way a level file would.
@@ -7,7 +7,7 @@ import { freshPage, unlockMissions, buildBasic, fastForward, logText, state } fr
 /** Mission 3 with the estimate accepted and both tiers at L, ready to run experiments. */
 async function mission3(page) {
   await freshPage(page, '#build');
-  await unlockMissions(page, 2);
+  await openMission(page, 2);
   await buildBasic(page);
   await page.fill('#estIn', '463');
   await page.click('#estBtn');
