@@ -116,10 +116,9 @@ export function monthlyFileGB() {
   return M.qps * (M.files || 0) / 2 * (WORKLOAD.fileKB || 0) * 30 * 86400 / 1e6;
 }
 
-/** True when a server lacks the dependency it normally hands work to, so it does that work itself. */
+/** True when a server that can run alone (catalog `alone`) sends to nothing that holds the data, so it keeps the data itself. */
 export function runsAlone(n) {
-  const a = componentOf(n).alone;
-  return !!a && !S.edges.some(e => e.from === n.id && [].concat(a.missing).includes(byId(e.to)?.type));
+  return !!componentOf(n).alone && !S.edges.some(e => e.from === n.id && hasFlag('holdsData')(byId(e.to)));
 }
 
 /** Capacity and work per request for a server, given its size, kind and dependencies. */

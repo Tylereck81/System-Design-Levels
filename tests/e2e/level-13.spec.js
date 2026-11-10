@@ -31,7 +31,7 @@ test.describe('Level 13 · playthrough', () => {
     await click(page, 'method-step');
     await click(page, 'servers-4');
     await expect(page.locator('[data-node="i"] .node-sub')).toHaveText('Multi-primary · 4 servers');
-    expect((await measure(page)).cost).toBe(1875);
+    expect((await measure(page)).cost).toBe(1875); // DNS $5 + LB $20 + 2 L web groups × $725 (half capacity: no data store) + 4 ID servers × $100
     await page.click('#playBtn');
     await fastForward(page, 5);
     await breakIt(page, 'lose');
@@ -72,11 +72,13 @@ test.describe('Level 13 · numbers', () => {
   test('each method: bits, numbers, order, rate and cost', async ({ page }) => {
     await freshPage(page, '#level-13/build');
     // 3,000 requests a second at the top of the wobble (×1.03), 4 IDs each.
+    // No data store, so each web server also runs the database: an L server takes 400 (half), filled to 60% = 240.
+    // 1,500 req/s per group: ceil(1,500 × day share ÷ 240) servers an hour, 87 h a day → $200 × 87 ÷ 24 = $725 a group.
     let r = await measure(page);
     expect(r.want).toBeCloseTo(3000 * 1.03 * 4, 6);
-    expect(r).toMatchObject({ cost: 1475, dup: 0, bits: 128, numeric: false, ordered: false, idSpof: false, served: 100, ms: 0 });
+    expect(r).toMatchObject({ cost: 1475, dup: 0, bits: 128, numeric: false, ordered: false, idSpof: false, served: 100, ms: 0 }); // DNS $5 + LB $20 + 2 web groups × $725; UUIDs need no ID server
     expect(r.cap).toBe(Infinity); // no limit: the web servers make them
-    for (const [method, servers, cost, cap, ordered, ms] of [['ticket', '1', 1575, 5000, true, 2], ['step', '1', 1575, 5000, true, 2], ['step', '3', 1775, 15000, false, 2], ['snow', '2', 1675, 8192000, true, 1]]) {
+    for (const [method, servers, cost, cap, ordered, ms] of [['ticket', '1', 1575, 5000, true, 2], ['step', '1', 1575, 5000, true, 2], ['step', '3', 1775, 15000, false, 2], ['snow', '2', 1675, 8192000, true, 1]]) { // $1,475 + $100 per ID server: 1, 1, 3, 2 servers
       await setProps(page, 'i', { method, servers });
       r = await measure(page);
       expect([method, servers, r.cost, r.cap, r.ordered, r.ms, r.bits, r.numeric, r.dup]).toEqual([method, servers, cost, cap, ordered, ms, 64, true, 0]);
@@ -137,7 +139,7 @@ test.describe('Level 13 · numbers', () => {
     const r = await page.evaluate(() => { const m = window.__sdl.model(); return { dup: m.idDupPct, bits: m.idBits, cost: m.cost }; });
     expect(r.dup).toBeNull();
     expect(r.bits).toBeNull();
-    expect(r.cost).toBe(1509);
+    expect(r.cost).toBe(1141); // Level 12 start: DNS $5 + LB $20 + 3 copies × $150 + 2 L web groups × $333
   });
 });
 

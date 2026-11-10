@@ -29,7 +29,7 @@ test.describe('Level 12 · playthrough', () => {
     await click(page, 'w-2');
     await click(page, 'r-2');
     await expect(page.locator('[data-node="k"] .node-sub')).toHaveText('N 3 · W 2 · R 2 · strict');
-    expect((await measure(page)).cost).toBe(1509);
+    expect((await measure(page)).cost).toBe(1141); // DNS $5 + LB $20 + 3 copies × $150 + 2 L web groups × $333
     await page.click('#playBtn');
     await fastForward(page, 5);
     await page.click('#exp-partition');
@@ -76,8 +76,9 @@ test.describe('Level 12 · numbers', () => {
   test('quorums: waits, stale reads and W + R > N', async ({ page }) => {
     await freshPage(page, '#level-12/build');
     // N = 3, W = R = 1: 20% of reads come while a write spreads; one replica of three has it, so 2 in 3 of those miss.
+    // Web groups: 1,000 req/s each at the peak on L servers (800, filled to 60%): 40 server-hours a day → $200 × 40 ÷ 24 = $333.
     let r = await measure(page);
-    expect(r.cost).toBe(1509);
+    expect(r.cost).toBe(1141); // DNS $5 + LB $20 + 3 copies × $150 + 2 web groups × $333
     expect(r.readMs).toBe(2);
     expect(r.stale).toBeCloseTo(20 * 2 / 3, 9);
     expect(r.spof).toBe(1); // the load balancer; a store with three replicas is not one
@@ -94,7 +95,7 @@ test.describe('Level 12 · numbers', () => {
     expect(r.quorum).toEqual({ N: 1, W: 1, R: 1, sloppy: false });
     expect(r.stale).toBe(0);
     expect(r.spof).toBe(2);
-    expect(r.cost).toBe(1209);
+    expect(r.cost).toBe(841); // DNS $5 + LB $20 + 1 copy × $150 + 2 web groups × $333
   });
 
   test('the partition: a strict quorum fails the cut-off side, a sloppy one answers with old data', async ({ page }) => {

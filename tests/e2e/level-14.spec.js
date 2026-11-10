@@ -126,7 +126,7 @@ test.describe('Level 14 · numbers', () => {
     await freshPage(page, '#level-13/build');
     const r = await page.evaluate(() => { const m = window.__sdl.model(); return { link: m.link, cost: m.cost }; });
     expect(r.link).toBeNull();
-    expect(r.cost).toBe(1475);
+    expect(r.cost).toBe(1475); // Level 13 start: DNS $5 + LB $20 + 2 L web groups × $725
   });
 });
 
