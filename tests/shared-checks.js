@@ -1,25 +1,29 @@
 import { test, expect } from './fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
 import { routeHash } from '../js/route.js';
-import { freshPage } from './helpers.js';
+import { freshPage, selectNode } from './helpers.js';
 
 /**
  * The layout and accessibility checks every level must pass. Call it inside the level's layout describe block.
  *
  * - `level`: the level number.
- * - `phone`: `{ title, setup(page) }` adds "phone: canvas on the first screen and no sideways scroll <title>" after
- *   `setup` builds the design to check. Leave it out when the level checks the phone layout in its own way.
+ * - `phone`: `{ title, setup(page), select }` adds "phone: canvas on the first screen and no sideways scroll <title>".
+ *   `setup` builds the design to check. `select` is a node id opened in the inspector after the canvas check, so the
+ *   scroll check covers the inspector too. Each is optional. Leave `phone` out when the level checks the phone layout
+ *   in its own way.
  * - `onTab`: `{ build(page), quiz(page) }` runs before axe checks that tab, so the check covers a running design and
  *   the inspector. Each is optional.
  */
 export function registerCommonTests({ level, phone, onTab = {} }) {
   if (phone) {
-    test(`phone: canvas on the first screen and no sideways scroll ${phone.title}`, async ({ page }) => {
+    const title = ['phone: canvas on the first screen and no sideways scroll', phone.title].filter(Boolean).join(' ');
+    test(title, async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 });
       await freshPage(page, routeHash(level, 'build'));
-      await phone.setup(page);
+      await phone.setup?.(page);
       const top = await page.locator('#cv').evaluate((e) => e.getBoundingClientRect().top);
       expect(top).toBeLessThan(844);
+      if (phone.select) await selectNode(page, phone.select);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
     });
   }
