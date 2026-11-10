@@ -12,10 +12,12 @@ concurrency:
 permissions:
   contents: read
 
+# Three jobs: the fast checks and Node tests, the browser tests split across four machines, and a coverage job that
+# merges what both recorded. Each test job uploads its raw coverage; the coverage job reports on all of it at once.
 jobs:
-  test:
+  checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -24,16 +26,12 @@ jobs:
           cache: npm
       - id: deps
         run: npm ci
-      - id: browsers
-        run: npx playwright install --with-deps chromium
-      # Each check runs whenever what it needs installed, so one failing check never hides another's results,
-      # and nothing runs after a failed install (its errors would bury the real one).
+      # Each check runs whenever its install worked, so one failing check never hides another's results.
       - run: npm run lint
         if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
       # The level files' shape against js/types.js (files opt in with // @ts-check).
       - run: npm run typecheck
         if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
-      # The test steps record code coverage as they run (tests/coverage/); the coverage step below reports on it.
       - id: unit
         run: npm run test:unit
         if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
@@ -44,17 +42,76 @@ jobs:
         if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         env:
           NODE_V8_COVERAGE: ${{ github.workspace }}/coverage/node-v8
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() && steps.unit.outcome == 'success' && steps.integration.outcome == 'success' }}
+        with:
+          name: coverage-node
+          path: coverage/node-v8/
+          retention-days: 1
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false # every shard finishes, so one failure never hides another's
+      matrix:
+        shard: [1, 2, 3, 4]
+    name: e2e (${{ matrix.shard }}/4)
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
       # A test that only passed on its retry is flaky: it fails the job instead of hiding behind the retry.
       - id: e2e
-        run: npm run test:e2e -- --fail-on-flaky-tests
-        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        run: npm run test:e2e -- --shard=${{ matrix.shard }}/4 --fail-on-flaky-tests
         env:
           COVERAGE: '1'
-      # Fails if a folder's coverage falls below its minimum. Only after every test step passed: a failed test
-      # leaves its lines unrun, and the coverage failure would bury the real one.
+      # tests/fixtures.js writes each test's coverage to this folder; the coverage job merges all four shards'.
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() && steps.e2e.outcome == 'success' }}
+        with:
+          name: coverage-e2e-${{ matrix.shard }}
+          path: coverage/report/.cache/
+          include-hidden-files: true
+          retention-days: 1
+      # The browser tests' traces and screenshots, when they are what failed.
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() && steps.e2e.outcome == 'failure' }}
+        with:
+          name: playwright-report-${{ matrix.shard }}
+          path: test-results/
+          retention-days: 7
+
+  # Fails if a folder's coverage falls below its minimum. Only after every test passed: a failed test leaves its lines
+  # unrun, and the coverage failure would bury the real one.
+  coverage:
+    needs: [checks, e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v8
+        with:
+          name: coverage-node
+          path: coverage/node-v8/
+      # The four shards' folders merge into one: coverage files have random names, and a source file shared by two
+      # shards has the same name and the same contents in both.
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: coverage-e2e-*
+          merge-multiple: true
+          path: coverage/report/.cache/
       - id: coverage
         run: npm run coverage:report
-        if: ${{ !cancelled() && steps.unit.outcome == 'success' && steps.integration.outcome == 'success' && steps.e2e.outcome == 'success' }}
       - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() && (steps.coverage.outcome == 'success' || steps.coverage.outcome == 'failure') }}
         with:
@@ -62,11 +119,4 @@ jobs:
           path: |
             coverage/report/
             !coverage/report/.cache/
-          retention-days: 7
-      # The browser tests' traces and screenshots, when they are what failed.
-      - uses: actions/upload-artifact@v7
-        if: ${{ !cancelled() && steps.e2e.outcome == 'failure' }}
-        with:
-          name: playwright-report
-          path: test-results/
           retention-days: 7
