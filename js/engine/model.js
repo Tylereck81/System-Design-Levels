@@ -1,18 +1,18 @@
 // Simulation model: load, latency, failures and cost, for any graph of components.
 import { MISSIONS, TXT, PALETTE, S, run, byId, WORKLOAD } from '../state.js';
-import { COMPONENTS, T, qmul, componentOf, hasFlag } from './catalog.js';
+import { COMPONENTS, T, qmul, componentOf } from './catalog.js';
 import { workloadsAt, trafficShape } from './workloads.js';
 import { kindOf, RESULT_DEFAULTS, COMBINE } from './kinds/index.js';
 import { clusterLayout } from './kinds/cluster.js';
 import { botsOf } from './kinds/limiter.js';
-import { roleOf, isServer, isReplica, isCache, isEdge, isStore, isSticky, scales, sessionsOn, holdsSessions, copiesFor, isLocated, isFar, isGeo, replicates, isQueue, isOffload, createQueries, isClustered, clusterHit, hitRate, edgeHit, fallsBack, staleSecs, costOf, serverSpec, splitRule } from './components.js';
+import { roleOf, isServer, isReplica, isCache, isEdge, isStore, isSticky, scales, sessionsOn, holdsSessions, copiesFor, isLocated, isFar, isGeo, replicates, isQueue, isOffload, createQueries, isClustered, isReplicated, isSyncing, isStateful, clusterHit, hitRate, edgeHit, fallsBack, staleSecs, costOf, serverSpec, splitRule } from './components.js';
 import { activeExps, downIds, trafficFactor, uploadFactor, dayShift, resizeBy, expTotal, expFlag, textOf, PEAK, WOBBLE } from './experiments.js';
 
 const outs = (id) => S.edges.filter(e => e.from === id).map(e => byId(e.to)).filter(Boolean);
 /** The components that connect to `id`. */
 const ins = (id) => S.edges.filter(e => e.to === id).map(e => byId(e.from)).filter(Boolean);
 /** Servers `n` sends requests to. A connection that copies data between servers of a type that syncs carries none. */
-const sendsTo = (n) => outs(n.id).filter(c => isServer(c) && !(c.type === n.type && hasFlag('syncs')(n)));
+const sendsTo = (n) => outs(n.id).filter(c => isServer(c) && !(c.type === n.type && isSyncing(n)));
 
 /** Downstream servers of a node, grouped by type (peers of the same type share the load). */
 export function childGroups(n) {
@@ -77,7 +77,7 @@ export function graph() {
 
 /** Replicas that copy `n`'s writes: every replica of its type, when `n` is a primary. */
 function replicasOf(n) {
-  if (!hasFlag('replicated')(n) || isReplica(n) || !n.role) return [];
+  if (!isReplicated(n) || isReplica(n) || !n.role) return [];
   return S.nodes.filter(c => c.type === n.type && isReplica(c));
 }
 /** Servers that come after `n`: the ones it sends to, and the replicas that copy its writes. */
@@ -237,7 +237,7 @@ function loadPhase(g, qps, sizing, down, r, day, backlog, U, traffic) {
   // Sessions: the share of a pool's pages each server receives, the share landing where sessions are shared, and
   // whether the sender keeps each user on one server. A down server that held sessions in memory loses its users' sessions.
   const notePool = (grp, sender, parts, flow, fileFrac) => {
-    if (!sessionsOn() || !flow || !hasFlag('stateful')(grp[0])) return;
+    if (!sessionsOn() || !flow || !isStateful(grp[0])) return;
     const shared = parts.filter(([c]) => !holdsSessions(c)).reduce((a, [, f]) => a + f, 0) / flow;
     for (const [c, f] of parts) pool.set(c.id, { p: f / flow, shared, sticky: isSticky(sender) });
     for (const [c, f] of split(grp, flow, new Set(), sender)) if (down.has(c.id) && holdsSessions(c)) lost += f * (1 - fileFrac);

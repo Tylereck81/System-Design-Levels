@@ -7,7 +7,8 @@ import { kindOf } from './kinds/index.js';
 
 export const roleOf = (n) => componentOf(n).role;
 export const isServer = (n) => roleOf(n) === 'server';
-export const isReplica = (n) => hasFlag('replicated')(n) && n.role === 'replica';
+export const isReplicated = hasFlag('replicated');
+export const isReplica = (n) => isReplicated(n) && n.role === 'replica';
 export const isCache = hasFlag('aside');
 export const isEdge = hasFlag('edge');
 export const isStore = hasFlag('store');
@@ -15,6 +16,9 @@ export const isLocated = hasFlag('located');
 export const isQueue = hasFlag('queue');
 export const isOffload = hasFlag('offload');
 export const isClustered = hasFlag('clustered');
+/** True for a type whose servers copy their data to each other when connected (see replicates). */
+export const isSyncing = hasFlag('syncs');
+export const isStateful = hasFlag('stateful');
 /**
  * Share of reads a cache cluster answers. Each server holds its share of the keys and keeps as many of them as its
  * memory fits, the most read first (the 80/20 rule, as in hitRate), so a server holding more than its share keeps
@@ -29,11 +33,10 @@ export const isFar = (n) => choiceOf(n, 'region') === 'far';
 /** True when DNS answers by the user's location (GeoDNS), with health checks. */
 export const isGeo = (dns) => !!componentOf(dns).choices?.routing && optionOf(dns, 'routing').geo === true;
 /** True when `a` copies its data to `b` (a connection between two servers of a type that syncs). */
-export const replicates = (a, b) => a.type === b.type && hasFlag('syncs')(a) && S.edges.some(e => e.from === a.id && e.to === b.id);
+export const replicates = (a, b) => a.type === b.type && isSyncing(a) && S.edges.some(e => e.from === a.id && e.to === b.id);
 /** The balancing algorithm node `n` runs (its type's default when none is picked); undefined for a type with none. */
 const algoOf = (n) => { const c = componentOf(n); return c.algos && (c.algos[n.algo] ?? c.algos[c.defaultAlgo]); };
 export const isSticky = (n) => !!algoOf(n)?.sticky;
-/** True when the server runs as an autoscaled group. */
 /** A URL shortener's settings on its web server: 301 redirects, a per-account limit on new links, how codes are made. */
 export function linkSettingsOf(n) {
   const ch = COMPONENTS[n.type].choices;
@@ -41,12 +44,13 @@ export function linkSettingsOf(n) {
 }
 /** Database queries one new link costs the server's database (1 except for a URL shortener's hashed codes). */
 export const createQueries = (n) => componentOf(n).choices?.code ? CREATE_QUERIES[choiceOf(n, 'code')] : 1;
+/** True when the server runs as an autoscaled group. */
 export const scales = (n) => !!componentOf(n).choices?.scaling?.options[choiceOf(n, 'scaling')].auto;
 /** True when the mission's pages carry a session (a login and a cart). */
 export const sessionsOn = () => !!MISSIONS[S.mission].sessions;
 /** True when the server keeps sessions in its own memory: a stateful server with no session store to share them. */
 export function holdsSessions(n) {
-  return sessionsOn() && hasFlag('stateful')(n) && !S.edges.some(e => e.from === n.id && isStore(byId(e.to)));
+  return sessionsOn() && isStateful(n) && !S.edges.some(e => e.from === n.id && isStore(byId(e.to)));
 }
 
 /**
