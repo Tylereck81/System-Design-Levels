@@ -1,5 +1,6 @@
 // A rate limiter: what its algorithm lets through per API key, the mission's bots, and its load rule.
 import { T, COMPONENTS, choiceOf, optionOf, qmul } from '../catalog.js';
+import { fmt } from '../../format.js';
 
 /** A mission's bots: `keys` API keys sending `rate` requests a second in all (none when the mission has no `bot`). */
 export function botsOf(mission) {
@@ -37,6 +38,11 @@ export function limiterRule(n, edge) {
 export const rateLimiter = {
   id: 'rate-limiter',
   matches: (c) => !!c.limits,
+  liveRows: (st) => !st.limiter ? [] : [
+    { value: `${fmt(st.bots)} → ${fmt(st.botPass)}`, label: 'bot requests/s arriving → let through', wide: true },
+    st.falseBlock > 0 && { value: `${Math.round(st.falseBlock * 100)}%`, label: "of real users' requests rejected: their bursts don't fit", tone: 'bad', wide: true },
+    st.waitMs > 0 && { value: `${(st.waitMs / 1000).toFixed(1)} s`, label: 'a real request waits in the queue, on average', wide: true },
+  ],
   resultDefaults: { keyQuota: null, botThrough: 0 }, // limitShared has no default: it is set once a limiter runs
   step(n, L, ctx) {
     const sp = ctx.spec(n), Lb = ctx.botLoad(n.id), Lr = L - Lb, u = L / sp.cap, d = Math.max(0, 1 - sp.cap / L);

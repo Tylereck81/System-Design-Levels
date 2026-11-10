@@ -118,3 +118,23 @@ test('a kind is redundant when one of its machines can fail', async () => {
   assert.equal(redundant({ type: 'shards', size: 'M' }), false); // one box: its shards do not stand in for each other
   assert.equal(redundant({ type: 'limiter' }), false);
 });
+
+test('a kind adds no inspector rows when its step did not run (its stat lacks its fields)', async () => {
+  const { KINDS } = await kinds();
+  for (const k of KINDS.filter((x) => x.liveRows && !x.liveRowsOnly)) assert.deepEqual(k.liveRows({ load: 1, cap: 1 }, {}), [], k.id);
+  // A kind whose rows replace the generic ones always runs its own step, so it has no outcome to switch it off.
+  for (const k of KINDS.filter((x) => x.liveRowsOnly)) assert.equal(k.outcome, undefined, k.id);
+});
+
+test('notification workers: a row for each problem only while it happens', async () => {
+  const { KINDS } = await kinds();
+  const rows = (o) => KINDS.find((k) => k.id === 'notify-worker').liveRows({ notify: o }).filter(Boolean);
+  const calm = { workers: 4, perChannel: true, retry: true, lost: 0, dup: 0, waiting: 0 };
+  assert.deepEqual(rows(calm), [{ value: '4 workers', label: 'split over a queue per channel, with a notification log', wide: true }]);
+  // 0.05 → 5%, 0.124 → 12%, 0.006 → 1% (toFixed(0) rounds)
+  assert.deepEqual(rows({ ...calm, lost: 0.05, dup: 0.124, waiting: 0.006 }).slice(1), [
+    { value: '5%', label: 'of notifications lost', tone: 'bad', wide: true },
+    { value: '12%', label: 'sent twice', tone: 'warn', wide: true },
+    { value: '1%', label: 'waiting in the SMS queue for a retry', wide: true },
+  ]);
+});

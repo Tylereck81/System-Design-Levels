@@ -1,5 +1,6 @@
 // A sharded database: one box whose shards each hold part of the data, by a shard key.
 import { T, choiceOf, optionOf, sizesOf, qmul } from '../catalog.js';
+import { fmt } from '../../format.js';
 
 /** Shards the shard key spreads data over (N in key % N). */
 const keyedShards = (n) => optionOf(n, 'count').count;
@@ -32,6 +33,9 @@ export function shardShares(n, H) {
 export const shardedDb = {
   id: 'sharded-db',
   matches: (c) => !!c.sharded,
+  liveRows: ({ shards }) => !shards ? [] : [
+    { value: shards.map(x => fmt(x.load)).join(' · '), label: 'queries/s on each shard; the busiest sets the % busy', wide: true },
+  ],
   resultDefaults: { maxShardUtil: null, shardCount: 0 },
   step(n, L, ctx) {
     const sp = ctx.spec(n), shares = shardShares(n, ctx.mission.hot || 0);

@@ -1,7 +1,8 @@
 // Component kinds: what a component type with its own rules does, in one place, so a new type adds a file here instead
 // of a branch in loadPhase, costOf and countSpofs. A type with no kind follows the generic rules.
 //
-// A kind: { id, matches(c), outcome?, step?(n, L, ctx), cost?(n, work, nodes), redundant?(n), resultDefaults? }
+// A kind: { id, matches(c), outcome?, step?(n, L, ctx), cost?(n, work, nodes), redundant?(n), resultDefaults?,
+//   liveRows?(st, n), liveRowsOnly? }
 //   matches    true for the catalog entry `c` (COMPONENTS[type]) of the types it describes, by catalog flag
 //   outcome    the workload field (workloads.js) its step reads; while that outcome is null the type takes the generic
 //              server step instead
@@ -10,6 +11,10 @@
 //   redundant  true when it keeps working with one machine down, so it is not a single point of failure on its own
 //   resultDefaults  the model result fields its step reports, with their value when no such component runs; model()
 //              starts its result with every kind's defaults
+//   liveRows   the inspector's rows for its stat `st` (r.node[n.id]) while the game plays: [{ value, label, tone, wide }]
+//              as plain text, tone 'bad' | 'warn' | 'ok' | null colouring the value, a wide row spanning the panel; a
+//              false entry is skipped. Shown after the generic rows (load, capacity, busy, time), or instead of them
+//              with `liveRowsOnly`. It returns [] when its step did not run (its outcome off) and the stat lacks its fields
 //
 // ctx, what a step may read and do (model.js loadPhase builds it once per load pass; nothing else is in it):
 //   mission, workload, flag(key), total(key), nodes   the workload environment (workloads.js): the mission, the level's

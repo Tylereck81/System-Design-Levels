@@ -1,5 +1,6 @@
 // Cloud file sync (sync.js): its settings, the block and notification servers, and cloud storage's monthly bill.
 import { COMPONENTS, optionOf, isOn } from '../catalog.js';
+import { fmt } from '../../format.js';
 import { ONLINE, storageBill } from '../sync.js';
 
 /** Cloud file sync's settings, from its block servers, notification servers and cloud storage (any may be missing). */
@@ -29,6 +30,9 @@ const pollsOf = (n) => syncSettingsOf(null, n, null).polls;
 export const syncBlock = {
   id: 'sync-block',
   matches: (c) => c.sync === 'block',
+  liveRows: ({ sync }) => !sync ? [] : [
+    { value: `${sync.mbPerUpload.toFixed(2)} MB`, label: `sent per upload${sync.delta ? ', changed blocks only' : ', whole files'}${sync.compress ? ', compressed' : ''}`, wide: true },
+  ],
   outcome: 'sync',
   step,
   cost: (n) => COMPONENTS[n.type].cost * blocksOf(n),
@@ -39,6 +43,9 @@ export const syncBlock = {
 export const syncPoll = {
   id: 'sync-poll',
   matches: (c) => c.sync === 'poll',
+  liveRows: ({ sync }) => !sync ? [] : [
+    { value: fmt(sync.connsPerServer), label: 'long-poll connections per server (1 million max)', wide: true },
+  ],
   outcome: 'sync',
   step,
   cost: (n) => COMPONENTS[n.type].cost * pollsOf(n),

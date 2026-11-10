@@ -16,6 +16,11 @@ export function quorumOf(n) {
 export const kvStore = {
   id: 'kv-store',
   matches: (c) => !!c.quorum,
+  liveRows: ({ kv }) => !kv ? [] : [
+    { value: `${kv.readMs} ms · ${kv.writeMs} ms`, label: `a read waits for ${kv.R} of ${kv.N} replicas, a write for ${kv.W}`, wide: true },
+    { value: `${(100 * kv.stale).toFixed(1)}%`, label: 'of reads return an old value', tone: kv.stale > 0 ? 'warn' : null, wide: true },
+    kv.failed > 0 && { value: `${(100 * kv.failed).toFixed(0)}%`, label: 'of requests fail: no quorum on their side of the partition', tone: 'bad', wide: true },
+  ],
   resultDefaults: { kvStalePct: null, kvReadMs: null, kvFailPct: null, kvQuorum: null },
   step(n, L, ctx) {
     const q = quorumOf(n), w = ctx.writes, c = COMPONENTS[n.type]; // w: the share of its requests that write

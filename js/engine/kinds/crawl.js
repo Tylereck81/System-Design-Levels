@@ -1,5 +1,6 @@
 // A web crawler (crawl.js): its settings, the downloaders and the parser.
 import { COMPONENTS, choiceOf, optionOf, isOn, qmul } from '../catalog.js';
+import { fmt } from '../../format.js';
 import { downloaderRate, DUP_SHARE } from '../crawl.js';
 
 /** A crawler downloader's machines and pages a second each, given whether the DNS provider is slow. */
@@ -20,6 +21,10 @@ export function crawlSettingsOf(users, parser) {
 export const downloader = {
   id: 'crawl-download',
   matches: (c) => c.crawl === 'download',
+  liveRows: ({ crawl }) => !crawl ? [] : [
+    { value: `${crawl.count} × ${fmt(crawl.per)}`, label: `machines × pages/s each${crawl.dnsCache ? ', with a DNS cache' : ': DNS lookups one at a time'}`, wide: true },
+    crawl.refused > 0 && { value: `${Math.round(100 * crawl.refused)}%`, label: 'of downloads refused by a flooded host', tone: 'bad', wide: true },
+  ],
   step(n, L, ctx) {
     const c = COMPONENTS[n.type], d = downloaderOf(n, ctx.flag('slowDns')), cap = d.per * d.count;
     const refused = ctx.outcomes.crawl ? ctx.outcomes.crawl.refused : 0, s = Math.min(L, cap) * (1 - refused);

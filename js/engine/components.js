@@ -96,6 +96,14 @@ export function costOf(n, work = 0) {
   if (c.perGB) return Math.round(monthlyFileGB() * c.perGB);
   return c.cost || 0;
 }
+/**
+ * The inspector rows node `n`'s kind adds for its stat `st` (kinds/index.js, liveRows), and whether they replace the
+ * generic rows. A type with no kind adds none.
+ */
+export function kindRows(n, st) {
+  const kind = kindOf(n);
+  return { rows: kind?.liveRows?.(st, n) ?? [], only: !!kind?.liveRowsOnly };
+}
 /** GB of files sent in a 30-day month. Traffic averages half its peak over a day. */
 export function monthlyFileGB() {
   const M = MISSIONS[S.mission];

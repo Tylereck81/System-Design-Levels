@@ -28,6 +28,10 @@ const workersOf = (n) => videoSettingsOf(null, n, null).workers;
 export const videoUpload = {
   id: 'video-upload',
   matches: (c) => c.video === 'upload',
+  liveRows: ({ video }) => !video ? [] : [{
+    value: `${(100 * video.uploaded).toFixed(1)}%`, wide: true,
+    label: `of uploads arrive${video.apiLoad > 1 ? `: the API servers' links are ${Math.round(100 * video.apiLoad)}% loaded` : ''}${video.failed ? `; ${Math.round(100 * video.failed)}% of whole files fail and are given up on` : ''}`,
+  }],
   outcome: 'video',
   step,
   redundant: () => API_SERVERS > 1,
@@ -37,6 +41,9 @@ export const videoUpload = {
 export const videoTranscode = {
   id: 'video-transcode',
   matches: (c) => c.video === 'transcode',
+  liveRows: ({ video }) => !video ? [] : [
+    { value: `${video.workers} servers`, label: video.retry ? 'retry a dead worker\'s tasks' : 'no retry: a dead worker\'s videos are lost', wide: true },
+  ],
   outcome: 'video',
   step,
   cost: (n) => COMPONENTS[n.type].cost * workersOf(n),
