@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from '../helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, sampleRoutes } from '../helpers.js';
 
 // Level 5: CDN for static content.
 // The level starts with Level 4's design: two load balancers ('l1', 'l2'), two XL web servers ('w1', 'w2'),
@@ -247,7 +247,7 @@ test.describe('Level 5 · teaching feedback', () => {
   test('request dots: hits end at the CDN, misses go on to a web server', async ({ page }) => {
     await freshPage(page, '#level-5/build');
     const id = await addCdn(page, { ttl: '60' });
-    const routes = await page.evaluate(() => { const s = window.__sdl, m = s.model(); return Array.from({ length: 600 }, () => s.sampleRoute(m).route); });
+    const routes = (await sampleRoutes(page, 600)).map((x) => x.route);
     const viaCdn = routes.filter((r) => r[1] === id);
     expect(viaCdn.length).toBeGreaterThan(220);
     const hits = viaCdn.filter((r) => r.length === 3), misses = viaCdn.filter((r) => r.length > 3);

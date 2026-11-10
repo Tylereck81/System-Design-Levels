@@ -55,6 +55,21 @@ export const model = (page) => page.evaluate(() => {
   const m = window.__sdl.model();
   return { served: +m.servedPct.toFixed(2), latency: m.latency && +m.latency.toFixed(1), cost: m.cost };
 });
+/**
+ * `count` request dots ({ route, failAt }) for the current model. A seeded generator (mulberry32) replaces
+ * Math.random, so the same design gives the same routes every run and proportion checks are not left to chance.
+ */
+export const sampleRoutes = (page, count, seed = 1) => page.evaluate(([n, s0]) => {
+  let s = s0 >>> 0;
+  const rand = () => {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(s ^ (s >>> 15), s | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const m = window.__sdl.model();
+  return Array.from({ length: n }, () => window.__sdl.sampleRoute(m, rand));
+}, [count, seed]);
 export const logText = (page) => page.locator('#log').innerText();
 
 export async function center(page, selector) {

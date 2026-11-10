@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from '../helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, sampleRoutes } from '../helpers.js';
 
 // Level 7: Multiple data centers.
 // The level starts with one data center in Frankfurt ('f', size L, standing for Level 6's whole design), DNS ('d',
@@ -179,7 +179,7 @@ test.describe('Level 7 · teaching feedback', () => {
     await freshPage(page, '#level-7/build');
     const v = await addVirginia(page);
     await set(page, 'd', { routing: 'geo' });
-    const routes = await page.evaluate(() => { const s = window.__sdl, m = s.model(); return Array.from({ length: 1000 }, () => s.sampleRoute(m)); });
+    const routes = await sampleRoutes(page, 1000);
     const toV = routes.filter((r) => r.route[1] === v), toF = routes.filter((r) => r.route[1] === 'f');
     expect(toV.length).toBeGreaterThan(80);
     expect(toF.length).toBeGreaterThan(toV.length);

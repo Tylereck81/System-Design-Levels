@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from '../helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, sampleRoutes } from '../helpers.js';
 
 // Level 4: cache tier.
 // The level starts with two load balancers, two XL web servers, an XL primary ('b') and two XL replicas ('r1', 'r2').
@@ -212,7 +212,7 @@ test.describe('Level 4 · teaching feedback', () => {
     await freshPage(page, '#level-4/build');
     await goTo(page, 0);
     const [c] = await setup(page, { caches: [['L', '600']] });
-    const routes = await page.evaluate(() => { const s = window.__sdl, m = s.model(); return Array.from({ length: 400 }, () => s.sampleRoute(m).route); });
+    const routes = (await sampleRoutes(page, 400)).map((x) => x.route);
     const atCache = routes.filter((r) => r.includes(c));
     expect(atCache.length).toBeGreaterThan(200);
     expect(atCache.every((r) => !r.some((id) => ['b', 'r1'].includes(id)))).toBe(true);

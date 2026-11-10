@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures.js';
-import { freshPage } from '../helpers.js';
+import { freshPage, sampleRoutes } from '../helpers.js';
 
 // The model works on any graph: peers of the same type share load, a crashed peer's share
 // moves to the others, SPOFs come from the graph, and request dots follow real paths.
@@ -96,11 +96,11 @@ test.describe('Simulation model · any graph', () => {
 
   test('request dots follow a real path and avoid a crashed peer', async ({ page }) => {
     await design(page, { mission: 1, webs: { w1: 'S', w2: 'S' }, dbs: { b: 'M' }, links: [['w1', 'b'], ['w2', 'b']] });
-    let routes = await page.evaluate(() => { const m = window.__sdl.model(); return Array.from({ length: 200 }, () => window.__sdl.sampleRoute(m)); });
+    let routes = await sampleRoutes(page, 200);
     expect(new Set(routes.map((r) => r.route.join('>')))).toEqual(new Set(['u>w1>b>w1>u', 'u>w2>b>w2>u']));
     expect(routes.every((r) => r.failAt === -1)).toBe(true); // nobody is over capacity
     await design(page, { mission: 1, webs: { w1: 'S', w2: 'S' }, dbs: { b: 'M' }, links: [['w1', 'b'], ['w2', 'b']], crash: 'w1' });
-    routes = await page.evaluate(() => { const m = window.__sdl.model(); return Array.from({ length: 50 }, () => window.__sdl.sampleRoute(m)); });
+    routes = await sampleRoutes(page, 50);
     expect(routes.every((r) => r.route.join('>') === 'u>w2>b>w2>u')).toBe(true);
   });
 

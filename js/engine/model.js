@@ -6,7 +6,7 @@ import { kindOf, RESULT_DEFAULTS, COMBINE } from './kinds/index.js';
 import { clusterLayout } from './kinds/cluster.js';
 import { botsOf } from './kinds/limiter.js';
 import { roleOf, isServer, isReplica, isCache, isEdge, isStore, isSticky, scales, sessionsOn, holdsSessions, copiesFor, isLocated, isFar, isGeo, replicates, isQueue, isOffload, createQueries, isClustered, clusterHit, hitRate, edgeHit, fallsBack, staleSecs, costOf, serverSpec, splitRule } from './components.js';
-import { activeExps, downIds, trafficFactor, uploadFactor, dayShift, resizeBy, expTotal, expFlag, textOf, PEAK } from './experiments.js';
+import { activeExps, downIds, trafficFactor, uploadFactor, dayShift, resizeBy, expTotal, expFlag, textOf, PEAK, WOBBLE } from './experiments.js';
 
 const outs = (id) => S.edges.filter(e => e.from === id).map(e => byId(e.to)).filter(Boolean);
 /** The components that connect to `id`. */
@@ -361,7 +361,7 @@ export function model({ peak = false } = {}) {
   const g = graph();
   const M = MISSIONS[S.mission];
   let base = M.qps * trafficFactor();
-  let qps = peak ? base * PEAK : base * (1 + 0.02 * Math.sin(run.t * 1.7) + 0.01 * Math.sin(run.t * 4.1));
+  let qps = peak ? base * PEAK : base * WOBBLE.reduce((f, w) => f + w.amp * Math.sin(run.t * w.rate), 1);
   // The level's workload: its outcome, and the traffic that reaches the servers after it (e.g. the keystrokes
   // browsers do not answer themselves).
   const env = workloadEnv(), out = workloadsAt(qps, base, env);
@@ -523,27 +523,28 @@ function countSpofs(g) {
   return spof.size;
 }
 
-/** One request's route for the animation: Users → the servers it passes through → back, and where it fails. */
-export function sampleRoute(m) {
+/** One request's route for the animation: Users → the servers it passes through → back, and where it fails.
+ *  `rand` gives numbers in [0, 1); tests pass a seeded one so the same routes come out every run. */
+export function sampleRoute(m, rand = Math.random) {
   const W = writeShareOf(trafficShape(m)), split = splitterFor(W);
   const fwd = [m.g.users.id], seen = new Set();
-  const F = fileShare(), file = F > 0 && Math.random() < F; // a file goes to the CDN, or ends at a web server
+  const F = fileShare(), file = F > 0 && rand() < F; // a file goes to the CDN, or ends at a web server
   // Uploads are rare, so dots show them more often than they happen (one dot in 6) to make the queue visible.
-  const job = !file && uploadShare() > 0 && Math.random() < 1 / 6;
+  const job = !file && uploadShare() > 0 && rand() < 1 / 6;
   // Bot requests show as their share of the traffic, at most half of the dots so real ones stay visible.
-  const bot = !file && botRate() > 0 && Math.random() < Math.min(0.5, botRate() / (botRate() + m.qps));
+  const bot = !file && botRate() > 0 && rand() < Math.min(0.5, botRate() / (botRate() + m.qps));
   let group = file ? fileEntry(m.g, m.down).group : m.g.entry, sender = m.g.users, lost = -1, w;
   if (group === m.g.entry && located(m.g)) {
     // A data center is one box: the dot goes there and back, and fails there if it is down, full, or lacks the data.
-    let pick = Math.random();
-    const parts = regionEntry(m.g, m.down, Math.random() < farShare()), [n, , , noData] = parts.find(([, f]) => (pick -= f) < 0) || parts[parts.length - 1];
+    let pick = rand();
+    const parts = regionEntry(m.g, m.down, rand() < farShare()), [n, , , noData] = parts.find(([, f]) => (pick -= f) < 0) || parts[parts.length - 1];
     const st = m.node[n.id];
-    return { route: [m.g.users.id, n.id, m.g.users.id], failAt: !st || st.down || (!file && noData) || Math.random() < st.drop ? 1 : -1 };
+    return { route: [m.g.users.id, n.id, m.g.users.id], failAt: !st || st.down || (!file && noData) || rand() < st.drop ? 1 : -1 };
   }
   while (group && group.length) {
     const down = new Set(group.filter(c => m.node[c.id] && m.node[c.id].down).map(c => c.id));
     const shares = split(group, 1, down, sender, w), total = shares.reduce((a, [, f]) => a + f, 0);
-    let pick = Math.random(), n = total > 1 - 1e-9 ? shares[shares.length - 1][0] : null;
+    let pick = rand(), n = total > 1 - 1e-9 ? shares[shares.length - 1][0] : null;
     for (const [c, f] of shares) { if (pick < f) { n = c; break; } pick -= f; }
     if (!n) { lost = fwd.length - 1; break; } // e.g. a write with no primary to take it
     if (seen.has(n.id)) break;
@@ -556,25 +557,25 @@ export function sampleRoute(m) {
     }
     // A page reads its session and then its data; the dot shows one of the two.
     const sg = !file && storeGroup(n);
-    if (sg && Math.random() < 0.5) { group = sg; continue; }
+    if (sg && rand() < 0.5) { group = sg; continue; }
     if (file) {
       const st = m.node[n.id];
       if (st && st.fileMs != null) break; // the web server sends the file
-      if (isEdge(n) && (!st || st.down || st.drop || Math.random() < st.hit)) break; // a hit ends at the edge
+      if (isEdge(n) && (!st || st.down || st.drop || rand() < st.hit)) break; // a hit ends at the edge
       group = childGroups(n)[0]; continue; // a miss goes on to the origin
     }
     const cs = cacheSplit(n);
     if (!cs) { group = depGroups(n)[0]; continue; }
-    w = Math.random() < W ? 1 : 0;
-    const c = cs.caches[Math.floor(Math.random() * cs.caches.length)], st = m.node[c.id];
-    if (!w && st && !st.down && Math.random() < (st.hit || 0)) { fwd.push(c.id); break; } // a hit ends at the cache
+    w = rand() < W ? 1 : 0;
+    const c = cs.caches[Math.floor(rand() * cs.caches.length)], st = m.node[c.id];
+    if (!w && st && !st.down && rand() < (st.hit || 0)) { fwd.push(c.id); break; } // a hit ends at the cache
     group = cs.others[0]; // a miss or a write goes on to the database (the dot skips the cache)
   }
   let failAt = lost;
   for (let i = 1; i < fwd.length && failAt < 0; i++) {
     const st = m.node[fwd[i]];
     const drop = st && st.realPass != null ? (bot ? 1 - st.botPass / Math.max(st.bots, 1e-9) : 1 - st.realPass) : st ? st.drop + (!file && st.sessionMiss || 0) : 1;
-    if (!st || st.down || Math.random() < drop) { failAt = i; break; }
+    if (!st || st.down || rand() < drop) { failAt = i; break; }
   }
   return { route: fwd.concat(fwd.slice(0, -1).reverse()), failAt };
 }

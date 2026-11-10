@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from '../helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, sampleRoutes } from '../helpers.js';
 
 // Level 6: Stateless web tier and autoscaling.
 // The level starts with Level 5's design: a CDN ('k'), two load balancers ('l1', 'l2') using round robin, two XL web
@@ -241,12 +241,12 @@ test.describe('Level 6 · teaching feedback', () => {
 
   test('request dots: some pages read the store; without it, some fail at a web server', async ({ page }) => {
     await freshPage(page, '#level-6/build');
-    let routes = await page.evaluate(() => { const s = window.__sdl, m = s.model(); return Array.from({ length: 600 }, () => s.sampleRoute(m)); });
+    let routes = await sampleRoutes(page, 600);
     const pages = routes.filter((r) => r.route[1] === 'l1');
     const atWeb = pages.filter((r) => ['w1', 'w2'].includes(r.route[r.failAt]));
     expect(atWeb.length).toBeGreaterThan(pages.length * 0.35);
     const id = await addStore(page);
-    routes = await page.evaluate(() => { const s = window.__sdl, m = s.model(); return Array.from({ length: 600 }, () => s.sampleRoute(m)); });
+    routes = await sampleRoutes(page, 600);
     const viaStore = routes.filter((r) => r.route.includes(id));
     expect(viaStore.length).toBeGreaterThan(80);
     expect(viaStore.every((r) => r.failAt < 0 && !r.route.some((x) => ['b', 'r1', 'c1', 'c2'].includes(x)))).toBe(true);

@@ -78,8 +78,11 @@ export const spikeHud = () => { const e = activeExps().find(x => x.hud); return 
 /** A message can be fixed text or a function of the model's result, so it can describe what actually happened. */
 export const textOf = (msg, m) => (typeof msg === 'function' ? msg(m) : msg);
 
-/** Traffic at the top of its wobble: a required outcome is checked here, so a lucky moment can't pass it. */
-export const PEAK = 1.03;
+/** Live traffic wobbles around its level: 1 + Σ amp·sin(t·rate), with t the simulated seconds. */
+export const WOBBLE = [{ amp: 0.02, rate: 1.7 }, { amp: 0.01, rate: 4.1 }];
+
+/** Traffic at the top of its wobble (1.03): a required outcome is checked here, so a lucky moment can't pass it. */
+export const PEAK = WOBBLE.reduce((f, w) => f + w.amp, 1);
 
 /** True when the experiment has no required outcome, or the outcome holds in model result `m`. */
 export const expectMet = (exp, m) => !exp.expect || !!exp.expect(m);
