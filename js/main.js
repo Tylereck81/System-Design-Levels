@@ -4,7 +4,7 @@ import { MISSIONS, QUIZ, PASS, fresh, S, connectFrom, run, load, save, byId, set
 import { model, sampleRoute } from './engine/model.js';
 import { renderCanvas } from './view/canvas.js';
 import { renderPalette, addNode, tryConnect } from './view/interaction.js';
-import { step, frame } from './engine/sim.js';
+import { step, frame } from './view/loop.js';
 import { relogNotMet } from './engine/experiments.js';
 import { renderHUD, setBanner } from './ui/hud.js';
 import { renderInspector } from './ui/inspector.js';

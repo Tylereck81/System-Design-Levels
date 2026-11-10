@@ -3,7 +3,7 @@ import { fmt } from '../format.js';
 import { $, el, keepFocus } from '../dom.js';
 import { TARGET_MS, MISSIONS, HOLD, S, run, expPassed, trafficHidden } from '../state.js';
 import { model } from '../engine/model.js';
-import { stopRun } from '../engine/sim.js';
+import { stopRun } from '../view/loop.js';
 import { paintControls } from './controls.js';
 import { log } from './log.js';
 import { hooks } from '../hooks.js';
