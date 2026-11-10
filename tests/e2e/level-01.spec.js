@@ -36,7 +36,7 @@ test.describe('Level 1 · full playthrough', () => {
     await page.click('#insp .seg:not(.two) button:nth-child(2)'); // web → M
     const m2 = await model(page);
     expect(m2.latency).toBeLessThan(150);
-    expect(m2.cost).toBeLessThanOrEqual(150);
+    expect(m2.cost).toBeLessThanOrEqual(150); // budget: DNS $5 + M web $90 + S database $40 = $135
     await page.click('#playBtn');
     await fastForward(page, 5);
     expect(await state(page, () => window.__sdl.S.done[1])).toBe(true);
@@ -55,7 +55,7 @@ test.describe('Level 1 · full playthrough', () => {
     }
     const m3 = await model(page);
     expect(m3.latency).toBeCloseTo(111.7, 0);
-    expect(m3.cost).toBe(405);
+    expect(m3.cost).toBe(405); // DNS $5 + L web $200 + L database $200
     await page.click('#playBtn');
     await fastForward(page, 5);
     await page.click('#exp-crash');

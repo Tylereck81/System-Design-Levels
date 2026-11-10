@@ -35,7 +35,7 @@ test.describe('Level 8 · playthrough', () => {
     await page.locator('#insp').getByRole('button', { name: /^8 workers/ }).click();
     await page.locator('#insp [data-focus-key="size-M"]').click();
     await expect(page.locator(`[data-node="${k}"] .node-sub`)).toHaveText('8 × M · 1.6/s');
-    expect((await measure(page)).cost).toBe(2145);
+    expect((await measure(page)).cost).toBe(2145); // DNS $5 + LB $20 + 2 XL web × $450 + XL database $450 + queue $50 + 8 M workers × $90
     await page.click('#playBtn');
     await fastForward(page, 5);
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
@@ -57,7 +57,7 @@ test.describe('Level 8 · playthrough', () => {
     await selectNode(page, k);
     await page.locator('#insp').getByRole('button', { name: /^Autoscale/ }).click();
     await page.locator('#insp [data-focus-key="size-L"]').click();
-    expect((await measure(page)).cost).toBe(1972);
+    expect((await measure(page)).cost).toBe(1972); // $1,425 without workers + monitor $30 + autoscaled L workers $517 (62 worker-hours × $200 ÷ 24)
     await page.click('#playBtn');
     await fastForward(page, 5);
     await page.click('#exp-upload-rush');
@@ -81,7 +81,7 @@ test.describe('Level 8 · numbers', () => {
     expect(r.web).toBeCloseTo((499.5 + 0.5 * 2000) / 1600, 6);
     expect(r.uploadMs).toBeGreaterThan(300000); // 20 s, times 16 for a server 94% busy
     expect(r.latency).toBeGreaterThan(150);
-    expect(r.cost).toBe(1375);
+    expect(r.cost).toBe(1375); // DNS $5 + LB $20 + 2 XL web × $450 + XL database $450
     // With a queue: an upload is an ordinary request plus a 2 ms publish; 8 M workers take 1.6 jobs a second.
     await addQueue(page);
     await calm(page);
@@ -91,12 +91,15 @@ test.describe('Level 8 · numbers', () => {
     expect(r.latency).toBeCloseTo(97.9, 1);
     expect(r.jobsIn).toBeCloseTo(1, 6);
     expect(r.jobsOut).toBeCloseTo(1, 6);
-    expect(r.cost).toBe(2145); // + $50 queue + 8 × $90
+    expect(r.cost).toBe(2145); // $1,375 + $50 queue + 8 M workers × $90
   });
 
   test('worker choices: capacity and cost', async ({ page }) => {
     await freshPage(page, '#level-8/build');
     const { k } = await addQueue(page);
+    // Each is $1,375 + queue $50 = $1,425, plus workers: 4 × L $200; 2 × XL $450; 4 × M $90; 8 × S $40.
+    // Autoscaled: a worker takes 20 s of one vCPU per job, so S/M/L/XL take 0.1/0.2/0.4/0.8 jobs a second; each hour runs
+    // ceil(1 job/s × day share ÷ (60% × that)) workers: M 113 h × $90 ÷ 24 = $424; L 62 h → $517; XL 40 h → $750.
     for (const [scaling, size, cost, keepsUp] of [['4', 'L', 2225, true], ['2', 'XL', 2325, true], ['4', 'M', 1785, false], ['8', 'S', 1745, false], ['auto', 'M', 1849, true], ['auto', 'L', 1942, true], ['auto', 'XL', 2175, true]]) {
       await setProps(page, k, { scaling, size });
       await calm(page);
@@ -111,7 +114,7 @@ test.describe('Level 8 · numbers', () => {
     const r = await measure(page);
     expect(r.uploadMs).toBeNull();
     expect(r.jobsIn).toBe(0);
-    expect(r.cost).toBe(2742);
+    expect(r.cost).toBe(2742); // Level 7 start: DNS $5 + CDN $1,037 + L data center $1,700
   });
 });
 
@@ -179,7 +182,7 @@ test.describe('Level 8 · teaching feedback', () => {
     await calm(page);
     r = await measure(page);
     expect(r.jobsOut).toBeGreaterThanOrEqual(r.jobsIn); // and faster while it clears the backlog
-    expect(r.cost).toBe(1942); // the bill follows normal days, not the rush
+    expect(r.cost).toBe(1942); // $1,425 + autoscaled L workers $517 (62 worker-hours × $200 ÷ 24); the bill follows normal days, not the rush
   });
 
   test('the queue connects from web servers to workers only', async ({ page }) => {
@@ -268,7 +271,7 @@ test.describe('Level 8 · layout and accessibility', () => {
     await pressEnterOn(page, '#insp [data-focus-key="size-M"]');
     await page.locator('#insp .conn').getByRole('button', { name: 'Connect', exact: true }).first().focus();
     await page.keyboard.press('Enter');
-    expect((await measure(page)).cost).toBe(2145);
+    expect((await measure(page)).cost).toBe(2145); // DNS $5 + LB $20 + 2 XL web × $450 + XL database $450 + queue $50 + 8 M workers × $90
     await pressEnterOn(page, '#playBtn');
     await fastForward(page, 5);
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);

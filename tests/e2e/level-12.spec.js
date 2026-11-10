@@ -125,7 +125,7 @@ test.describe('Level 12 · numbers', () => {
     const r = await page.evaluate(() => { const m = window.__sdl.model(); return { stale: m.kvStalePct, fail: m.kvFailPct, cost: m.cost }; });
     expect(r.stale).toBeNull();
     expect(r.fail).toBeNull();
-    expect(r.cost).toBe(1291);
+    expect(r.cost).toBe(1291); // Level 11 start: DNS $5 + LB $20 + 5 L cache servers × $80 + L database $200 + 2 L web groups × $333
   });
 });
 

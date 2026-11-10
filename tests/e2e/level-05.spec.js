@@ -38,7 +38,7 @@ test.describe('Level 5 · playthrough', () => {
     await page.fill('#estIn', '52 TB');
     await page.click('#estBtn');
     const id = await addCdn(page);
-    expect((await measure(page)).cost).toBe(3042);
+    expect((await measure(page)).cost).toBe(3042); // start $2,005 + CDN 51,840 GB × $0.02 = $1,037
     await page.click('#playBtn');
     await fastForward(page, 5);
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
@@ -80,7 +80,7 @@ test.describe('Level 5 · numbers', () => {
     await calm(page);
     // Start: every file comes from Frankfurt. America: 120 + 5 (load balancer, 80% busy) + 0.5 + 2 × 3.2 = 131.9 ms.
     let r = await measure(page);
-    expect(r.cost).toBe(2005);
+    expect(r.cost).toBe(2005); // DNS $5 + 2 LB × $20 + 2 XL web × $450 + 2 L caches × $80 + XL primary and replica 2 × $450
     expect(r.farFileMs).toBeCloseTo(131.9, 1);
     expect(r.lb).toBeCloseTo(0.8, 6); // 2,000 pages + 2,000 files on the active load balancer
     expect(r.web).toBeCloseTo(0.6875, 6); // (1,000 pages + 1,000 files × 0.1) of 1,600
@@ -112,7 +112,7 @@ test.describe('Level 5 · numbers', () => {
     const r = await measure(page);
     expect(r.farFileMs).toBeNull();
     expect(r.fileStaleSecs).toBe(0);
-    expect(r.cost).toBe(2295);
+    expect(r.cost).toBe(2295); // Level 4 start: DNS $5 + 2 LB × $20 + 2 XL web × $450 + 3 XL databases × $450
   });
 });
 
@@ -148,7 +148,7 @@ test.describe('Level 5 · teaching feedback', () => {
     await calm(page);
     const r = await measure(page);
     expect(r.farFileMs).toBeCloseTo(131.9, 1);
-    expect(r.cost).toBe(3042);
+    expect(r.cost).toBe(3042); // $2,005 + CDN $1,037: billed even with no traffic through it
   });
 
   test('the CDN connects to the load balancers, not to the web servers', async ({ page }) => {
@@ -340,7 +340,7 @@ test.describe('Level 5 · layout and accessibility', () => {
       await page.locator('#insp .conn').getByRole('button', { name: 'Connect', exact: true }).first().focus();
       await page.keyboard.press('Enter');
     }
-    expect((await measure(page)).cost).toBe(3042);
+    expect((await measure(page)).cost).toBe(3042); // start $2,005 + CDN 51,840 GB × $0.02 = $1,037
     await pressEnterOn(page, '#playBtn');
     await fastForward(page, 5);
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);

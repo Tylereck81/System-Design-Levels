@@ -60,7 +60,7 @@ test.describe('Level 14 · playthrough', () => {
     await selectNode(page, 'w');
     await click(page, 'code-bloom');
     await expect(page.locator('[data-node="w"] .node-sub')).toContainText('hash + bloom');
-    expect((await measure(page)).cost).toBe(1255);
+    expect((await measure(page)).cost).toBe(1255); // 302s: all 2,800 req/s reach the L web group, 84 h → $700; DNS $5 + LB $20 + XL database $450 + L cache $80 + $700
     expect(c).toBeTruthy();
     await page.click('#playBtn');
     await fastForward(page, 5);

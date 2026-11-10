@@ -33,7 +33,7 @@ test.describe('Level 2 · playthrough', () => {
 
     // Mission 1: load balancer + four S servers (N + 1), then crash one.
     await build(page, { webs: ['S', 'S', 'S', 'S'] });
-    expect((await measure(page)).cost).toBe(385);
+    expect((await measure(page)).cost).toBe(385); // DNS $5 + LB $20 + 4 × S web $40 + L database $200
     await page.click('#playBtn');
     await fastForward(page, 5);
     expect(await state(page, () => window.__sdl.S.verified[0])).toBe(true);
@@ -55,7 +55,7 @@ test.describe('Level 2 · playthrough', () => {
       S.nodes.forEach((n) => { if (n.type === 'web') n.size = 'M'; if (n.type === 'db') n.size = 'XL'; });
       s.afterDesignChange();
     });
-    expect((await measure(page)).cost).toBe(925);
+    expect((await measure(page)).cost).toBe(925); // DNS $5 + LB $20 + 5 × M web $90 + XL database $450
     await page.click('#playBtn');
     await fastForward(page, 5);
     await page.click('#exp-crash-web');
@@ -74,7 +74,7 @@ test.describe('Level 2 · playthrough', () => {
     });
     await expect(page.locator('[data-node] .node-sub', { hasText: 'Standby · round robin' })).toHaveCount(1);
     const m3 = await measure(page);
-    expect(m3.cost).toBe(945);
+    expect(m3.cost).toBe(945); // $925 + a second LB $20
     expect(m3.spof).toBe(1); // only the database is left
     await page.click('#playBtn');
     await fastForward(page, 5);
@@ -123,7 +123,7 @@ test.describe('Level 2 · numbers', () => {
     });
     r = await measure(page);
     expect(r.latency).toBeCloseTo(132.97, 1);
-    expect(r.cost).toBe(925);
+    expect(r.cost).toBe(925); // DNS $5 + LB $20 + 5 × M web $90 + XL database $450
   });
 });
 

@@ -60,7 +60,7 @@ test.describe('Level 1 · simulation numbers', () => {
     expect(r.db.ms).toBeCloseTo(40, 6);
     expect(r.latency).toBeCloseTo(160.5, 6);
     expect(r.served).toBeCloseTo(100, 6);
-    expect(r.cost).toBe(85);
+    expect(r.cost).toBe(85); // DNS $5 + S web $40 + S database $40
     expect(r.spof).toBe(2);
   });
 
@@ -68,7 +68,7 @@ test.describe('Level 1 · simulation numbers', () => {
     // Web M at 37.5% → 1.6 × 20 = 32 ms; DB S still 40 ms → 112.5 ms.
     const r = await measure(page, { mission: 1, web: 'M', db: 'S' });
     expect(r.latency).toBeCloseTo(112.5, 6);
-    expect(r.cost).toBe(135);
+    expect(r.cost).toBe(135); // DNS $5 + M web $90 + S database $40
   });
 
   test('NoSQL for relational data costs 3 lookups per request', async ({ page }) => {
@@ -94,7 +94,7 @@ test.describe('Level 1 · simulation numbers', () => {
     const r = await measure(page, { mission: 2, web: 'L', db: 'L' });
     expect(r.served).toBeCloseTo(100, 6);
     expect(r.latency).toBeCloseTo(111.7166, 3);
-    expect(r.cost).toBe(405);
+    expect(r.cost).toBe(405); // DNS $5 + L web $200 + L database $200
   });
 
   test('10× spike overwhelms even XL servers', async ({ page }) => {

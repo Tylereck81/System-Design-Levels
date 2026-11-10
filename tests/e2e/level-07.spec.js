@@ -38,7 +38,7 @@ test.describe('Level 7 · playthrough', () => {
     await page.locator('#insp').getByRole('button', { name: /^GeoDNS/ }).click();
     await selectNode(page, 'f');
     await page.locator('#insp [data-focus-key="size-M"]').click();
-    expect((await measure(page)).cost).toBe(2942);
+    expect((await measure(page)).cost).toBe(2942); // DNS $5 + CDN $1,037 + M Frankfurt $1,200 + S Virginia $700
     await page.click('#playBtn');
     await fastForward(page, 5);
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
@@ -72,7 +72,7 @@ test.describe('Level 7 · numbers', () => {
     await calm(page);
     // Start: one data center in Frankfurt. A page for America: 120 ms there and back + 50 ms inside.
     let r = await measure(page);
-    expect(r.cost).toBe(2742);
+    expect(r.cost).toBe(2742); // DNS $5 + CDN $1,037 + L data center $1,700
     expect(r.farPageMs).toBeCloseTo(170, 6);
     expect(r.f).toBeCloseTo(2000 / 2400, 3);
     expect(r.spof).toBe(1);
@@ -85,7 +85,7 @@ test.describe('Level 7 · numbers', () => {
     expect(r.v).toBeCloseTo(600 / 800, 3);
     expect(r.f).toBeCloseTo(1400 / 2400, 3);
     expect(r.served).toBeCloseTo(100, 6);
-    expect(r.cost).toBe(3442);
+    expect(r.cost).toBe(3442); // $2,742 + S data center $700
     expect(r.spof).toBe(0);
   });
 
@@ -94,7 +94,7 @@ test.describe('Level 7 · numbers', () => {
     const r = await measure(page);
     expect(r.farPageMs).toBeNull();
     expect(r.noData).toBe(0);
-    expect(r.cost).toBe(3042);
+    expect(r.cost).toBe(3042); // Level 6 start: DNS $5 + CDN $1,037 + 2 LB × $20 + 2 XL web × $450 + 2 L caches × $80 + 2 XL databases × $450
   });
 });
 
@@ -237,7 +237,7 @@ test.describe('Level 7 · layout and accessibility', () => {
     await pressEnterOn(page, '#insp [data-focus-key="routing-geo"]');
     await pressEnterOn(page, '[data-node="f"]');
     await pressEnterOn(page, '#insp [data-focus-key="size-M"]');
-    expect((await measure(page)).cost).toBe(2942);
+    expect((await measure(page)).cost).toBe(2942); // DNS $5 + CDN $1,037 + M Frankfurt $1,200 + S Virginia $700
     await pressEnterOn(page, '#playBtn');
     await fastForward(page, 5);
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);

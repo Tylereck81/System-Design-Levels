@@ -29,7 +29,7 @@ test.describe('Level 19 · playthrough', () => {
     await selectNode(page, 'a');
     await click(page, 'browser-on');
     await expect(page.locator('[data-node="a"] .node-sub')).toHaveText('4 servers · browser cache');
-    expect((await measure(page)).cost).toBe(1800);
+    expect((await measure(page)).cost).toBe(1800); // 4 API servers × $200 + trie 3 shards × $300 + weekly rebuild $100
     await page.click('#playBtn');
     await fastForward(page, 5);
     await breakIt(page, 'rush');

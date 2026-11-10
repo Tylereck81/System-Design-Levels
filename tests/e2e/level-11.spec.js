@@ -30,7 +30,7 @@ test.describe('Level 11 · playthrough', () => {
     await selectNode(page, 'k');
     await page.locator('#insp [data-focus-key="hashing-ring"]').click();
     await expect(page.locator('[data-node="k"] .node-sub')).toHaveText('5 × 8 GB · ring');
-    expect((await measure(page)).cost).toBe(1291);
+    expect((await measure(page)).cost).toBe(1291); // DNS $5 + LB $20 + 5 L cache servers × $80 + L database $200 + 2 L web groups × $333
     await page.click('#playBtn');
     await fastForward(page, 5);
     await page.click('#exp-lose-c');
@@ -56,7 +56,7 @@ test.describe('Level 11 · playthrough', () => {
     await selectNode(page, 'k');
     await page.locator('#insp [data-focus-key="count-10"]').click();
     await page.locator('#insp [data-focus-key="size-M"]').click();
-    expect((await measure(page)).cost).toBe(1659);
+    expect((await measure(page)).cost).toBe(1659); // 4,000 req/s: DNS $5 + LB $20 + 10 M cache servers × $40 + L database $200 + 2 L web groups × $517
     await page.click('#playBtn');
     await fastForward(page, 5);
     await page.click('#exp-lose-c');
@@ -74,9 +74,11 @@ test.describe('Level 11 · playthrough', () => {
 test.describe('Level 11 · numbers', () => {
   test('hash % N: even, all keys held; losing C moves 80%, adding a server 5/6', async ({ page }) => {
     await freshPage(page, '#level-11/build');
+    // Web groups: L servers at most 60% of 800 busy; hours = ceil(per-group peak × day share ÷ 480), a group pays 200 × hours ÷ 24.
+    // 1,000 req/s per group → 40 h → $333; at 4,000 req/s, 2,000 per group → 62 h → $517.
     await calm(page);
     let r = await measure(page);
-    expect(r.cost).toBe(1291);
+    expect(r.cost).toBe(1291); // DNS $5 + LB $20 + 5 L cache servers × $80 + L database $200 + 2 web groups × $333
     expect(r.spread).toBeCloseTo(0, 9);
     expect(r.moved).toBe(0);
     expect(r.hit).toBeCloseTo(FRESH, 9); // 5 × 8 GB holds the whole 40 GB catalog
@@ -139,7 +141,7 @@ test.describe('Level 11 · numbers', () => {
     await setProps(page, 'k', { count: '10', size: 'M' });
     await page.evaluate(() => { window.__sdl.run.on = {}; });
     r = await measure(page);
-    expect(r.cost).toBe(1659);
+    expect(r.cost).toBe(1659); // DNS $5 + LB $20 + 10 M cache servers × $40 + L database $200 + 2 web groups × $517
     expect(r.spread).toBeLessThan(0.1);
     await during(page, 'lose-c');
     r = await measure(page);
@@ -148,7 +150,7 @@ test.describe('Level 11 · numbers', () => {
     // Eight L servers survive too, but cost more than the sale's budget.
     await setProps(page, 'k', { count: '8', size: 'L' });
     await page.evaluate(() => { window.__sdl.run.on = {}; });
-    expect((await measure(page)).cost).toBeGreaterThan(1700);
+    expect((await measure(page)).cost).toBeGreaterThan(1700); // 8 L cache servers: $1,659 − $400 + 8 × $80 = $1,899
   });
 
   test('levels without a cache cluster ignore the new rules', async ({ page }) => {
@@ -156,7 +158,7 @@ test.describe('Level 11 · numbers', () => {
     const r = await page.evaluate(() => { const m = window.__sdl.model(); return { moved: m.ringMoved, spread: m.ringSpread, cost: m.cost }; });
     expect(r.moved).toBeNull();
     expect(r.spread).toBeNull();
-    expect(r.cost).toBe(2283);
+    expect(r.cost).toBe(2283); // Level 10 start: DNS $5 + LB $20 + 3 XL shards × $450 + 2 M web groups × $454
   });
 });
 

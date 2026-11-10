@@ -39,7 +39,7 @@ test.describe('Simulation model · any graph', () => {
     expect(r.node.b.ms).toBeCloseTo(16, 6);
     expect(r.latency).toBeCloseTo(88.5, 6);
     expect(r.served).toBeCloseTo(100, 6);
-    expect(r.cost).toBe(175);
+    expect(r.cost).toBe(175); // DNS $5 + 2 S web × $40 + M database $90
   });
 
   test('a crashed web server\'s share moves to its healthy peer', async ({ page }) => {
