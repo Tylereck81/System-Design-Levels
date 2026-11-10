@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures.js';
-import AxeBuilder from '@axe-core/playwright';
+import { registerCommonTests } from '../shared-checks.js';
 import {
   QUIZ_KEY_L1, freshPage, fastForward, playFor, state, nodeIds, model, logText,
   tap, dragBetween, openMission, buildBasic, trackErrors, reloadGame,
@@ -318,15 +318,6 @@ test.describe('Level 1 · layout', () => {
     expect(box.y + box.height).toBeLessThanOrEqual(900);
   });
 
-  for (const [w, h] of [[1024, 768], [1280, 720]]) {
-    test(`${w}×${h}: Play button above the fold`, async ({ page }) => {
-      await page.setViewportSize({ width: w, height: h });
-      await freshPage(page, '#build');
-      const box = await page.locator('#playBtn').boundingBox();
-      expect(box.y + box.height).toBeLessThanOrEqual(h);
-    });
-  }
-
   test.describe('phone', () => {
     test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
     test('canvas on first screen, readable labels, touch targets, no sideways scroll', async ({ page }) => {
@@ -438,27 +429,19 @@ test.describe('Level 1 · accessibility', () => {
     await press('#mtabs button:first-child', 'mtab-0');
   });
 
-  for (const colorScheme of ['light', 'dark']) {
-    test.describe(`axe (${colorScheme})`, () => {
-      test.use({ colorScheme });
-      test('no violations on lesson, build and quiz', async ({ page }) => {
-        await freshPage(page);
-        for (const tab of ['lesson', 'build', 'quiz']) {
-          await page.click(`#tab-${tab}`);
-          if (tab === 'build') {
-            await buildBasic(page);
-            await page.click('#playBtn');
-            await playFor(page, 0.5);
-          }
-          if (tab === 'quiz') {
-            const q = page.locator('.q').nth(0);
-            await q.locator('.opts button').nth(1).click();
-            await q.locator('.qcheck button').click();
-          }
-          const results = await new AxeBuilder({ page }).setLegacyMode().analyze();
-          expect(results.violations.map((v) => `${tab}: ${v.id} (${v.nodes.length})`)).toEqual([]);
-        }
-      });
-    });
-  }
+  registerCommonTests({
+    level: 1,
+    onTab: {
+      build: async (page) => {
+        await buildBasic(page);
+        await page.click('#playBtn');
+        await playFor(page, 0.5);
+      },
+      quiz: async (page) => {
+        const q = page.locator('.q').nth(0);
+        await q.locator('.opts button').nth(1).click();
+        await q.locator('.qcheck button').click();
+      },
+    },
+  });
 });

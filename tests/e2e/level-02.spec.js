@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures.js';
-import AxeBuilder from '@axe-core/playwright';
+import { registerCommonTests } from '../shared-checks.js';
 import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, openMission, pressEnterOn } from '../helpers.js';
 
 // Level 2: load balancer and horizontal scaling.
@@ -448,37 +448,17 @@ test.describe('Level 2 · layout and accessibility', () => {
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
   });
 
-  test('phone: canvas on the first screen and no sideways scroll on Mission 3', async ({ page }) => {
-    await page.setViewportSize({ width: 390, height: 844 });
-    await freshPage(page, '#level-2/build');
-    await openMission(page, 2);
-    await build(page, { webs: ['M', 'M', 'M', 'M', 'M'], db: 'XL', lbs: 2 });
-    const top = await page.locator('#cv').evaluate((e) => e.getBoundingClientRect().top);
-    expect(top).toBeLessThan(844);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  registerCommonTests({
+    level: 2,
+    phone: {
+      title: 'on Mission 3',
+      setup: async (page) => {
+        await openMission(page, 2);
+        await build(page, { webs: ['M', 'M', 'M', 'M', 'M'], db: 'XL', lbs: 2 });
+      },
+    },
+    onTab: {
+      build: async (page) => { await build(page, { webs: ['S', 'S', 'S', 'S'], lbs: 2 }); await page.click('#playBtn'); await playFor(page, 0.5); },
+    },
   });
-
-  for (const [w, h] of [[1024, 768], [1280, 720]]) {
-    test(`${w}×${h}: Play button above the fold`, async ({ page }) => {
-      await page.setViewportSize({ width: w, height: h });
-      await freshPage(page, '#level-2/build');
-      const box = await page.locator('#playBtn').boundingBox();
-      expect(box.y + box.height).toBeLessThanOrEqual(h);
-    });
-  }
-
-  for (const colorScheme of ['light', 'dark']) {
-    test.describe(`axe (${colorScheme})`, () => {
-      test.use({ colorScheme });
-      test('no violations on lesson, build and quiz', async ({ page }) => {
-        await freshPage(page, '#level-2/lesson');
-        for (const tab of ['lesson', 'build', 'quiz']) {
-          await page.click(`#tab-${tab}`);
-          if (tab === 'build') { await build(page, { webs: ['S', 'S', 'S', 'S'], lbs: 2 }); await page.click('#playBtn'); await playFor(page, 0.5); }
-          const results = await new AxeBuilder({ page }).setLegacyMode().analyze();
-          expect(results.violations.map((v) => `${tab}: ${v.id} (${v.nodes.length})`)).toEqual([]);
-        }
-      });
-    });
-  }
 });
