@@ -2,13 +2,13 @@
 import { $ } from '../dom.js';
 import { MISSIONS, EXPERIMENTS, fresh, S, run, setS, setSel, setConnectFrom, expPassed } from '../state.js';
 import { graph, model } from '../engine/model.js';
-import { paintLive } from '../engine/canvas.js';
+import { paintLive } from '../view/canvas.js';
 import { stopRun } from '../engine/sim.js';
 import { renderHUD, setBanner } from './hud.js';
 import { renderInspector } from './inspector.js';
 import { paintGoals } from './mission.js';
 import { log } from './log.js';
-import { afterChange, afterDesignChange } from '../main.js';
+import { hooks } from '../hooks.js';
 import { isOn, activeExps, startExp, stopExp, crashCandidates } from '../engine/experiments.js';
 
 export function paintControls() {
@@ -72,10 +72,10 @@ export function armButton(btn, label, armedLabel, action) {
 }
 armButton($('resetBtn'), 'Clear canvas', 'Click again to clear', () => {
   S.nodes = S.nodes.filter(n => n.type === 'users'); S.edges = []; setSel(null); setConnectFrom(null);
-  stopRun(true); afterDesignChange(); log('Canvas cleared.');
+  stopRun(true); hooks.afterDesignChange(); log('Canvas cleared.');
 });
 armButton($('resetLevel'), 'Reset level progress', 'Click again: this clears your missions and canvas', () => {
   const keepQuiz = S.quiz, keepTab = S.tab;
   setS(fresh()); S.quiz = keepQuiz; S.tab = keepTab; setSel(null); setConnectFrom(null);
-  stopRun(true); afterChange(true); log('Level progress reset. Mission 1 is waiting.');
+  stopRun(true); hooks.afterChange(true); log('Level progress reset. Mission 1 is waiting.');
 });

@@ -2,7 +2,7 @@
 import { level } from '../level.js';
 import { $, el } from '../dom.js';
 import { QUIZ, PASS, S, qsel, save } from '../state.js';
-import { renderTabs, setTab } from '../main.js';
+import { hooks } from '../hooks.js';
 
 export function quizScore() {
   let answered = 0, correct = 0;
@@ -34,7 +34,7 @@ export function renderQuiz() {
       const row = el('div', 'qcheck');
       const cb = el('button', 'btn primary sm', 'Check answer'); cb.type = 'button';
       cb.disabled = qsel[i] == null;
-      cb.onclick = () => { S.quiz[i] = qsel[i]; delete qsel[i]; save(); renderQuiz(); renderTabs(); const nc = $('q' + i).querySelector('.expl'); if (nc) nc.focus(); };
+      cb.onclick = () => { S.quiz[i] = qsel[i]; delete qsel[i]; save(); renderQuiz(); hooks.renderTabs(); const nc = $('q' + i).querySelector('.expl'); if (nc) nc.focus(); };
       row.appendChild(cb);
       row.appendChild(el('span', null, qsel[i] == null ? 'Choose an answer first.' : 'You can change your choice until you check it.'));
       card.appendChild(row);
@@ -58,9 +58,9 @@ export function renderQuiz() {
     box.appendChild(el('p', null, pass ? level.quiz.passText : level.quiz.failText(PASS)));
     const row = el('div', 'row');
     const retry = el('button', 'btn', 'Retake the quiz'); retry.type = 'button';
-    retry.onclick = () => { S.quiz = {}; for (const k in qsel) delete qsel[k]; save(); renderQuiz(); renderTabs(); window.scrollTo({ top: 0 }); };
+    retry.onclick = () => { S.quiz = {}; for (const k in qsel) delete qsel[k]; save(); renderQuiz(); hooks.renderTabs(); window.scrollTo({ top: 0 }); };
     const back = el('button', 'btn', 'Back to the lesson'); back.type = 'button';
-    back.onclick = () => setTab('lesson');
+    back.onclick = () => hooks.setTab('lesson');
     row.append(retry, back); box.appendChild(row); res.appendChild(box);
   }
 }

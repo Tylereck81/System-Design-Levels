@@ -5,9 +5,9 @@ import { TYPES, OK_PAIRS, pairKey, nameOf, lowerName, edgeInfo, MISSIONS, S, sel
 import { T, COMPONENTS, choiceOf, sizesOf } from '../engine/catalog.js';
 import { roleOf, runsAlone, holdsSessions, scales, dayCopies, serverSpec, isEdge, isClustered, costOf, monthlyFileGB } from '../engine/components.js';
 import { ringBox, paintRing } from './ring-view.js';
-import { tryConnect, disconnect, removeSel, promote } from '../engine/interaction.js';
+import { tryConnect, disconnect, removeSel, promote } from '../view/interaction.js';
 import { log } from './log.js';
-import { afterDesignChange } from '../main.js';
+import { hooks } from '../hooks.js';
 import { trafficFactor, downIds } from '../engine/experiments.js';
 import { graph, isStandby } from '../engine/model.js';
 
@@ -50,7 +50,7 @@ function buildInspector() {
     for (const kind of TYPES[n.type].kinds) {
       const b = el('button'); b.type = 'button'; b.dataset.focusKey = 'kind-' + kind.id; b.setAttribute('aria-pressed', n.kind === kind.id ? 'true' : 'false');
       b.innerHTML = `<b>${kind.name}</b><span>${kind.sub}</span>`;
-      b.onclick = () => { n.kind = kind.id; afterDesignChange(); log(kind.log, kind.tone); };
+      b.onclick = () => { n.kind = kind.id; hooks.afterDesignChange(); log(kind.log, kind.tone); };
       seg.appendChild(b);
     }
     box.appendChild(seg);
@@ -64,7 +64,7 @@ function buildInspector() {
     for (const algo of TYPES[n.type].algos) {
       const b = el('button'); b.type = 'button'; b.dataset.focusKey = 'algo-' + algo.id; b.setAttribute('aria-pressed', current === algo.id ? 'true' : 'false');
       b.innerHTML = `<b>${algo.name}</b><span>${algo.sub}</span>`;
-      b.onclick = () => { n.algo = algo.id; afterDesignChange(); log(algo.log); };
+      b.onclick = () => { n.algo = algo.id; hooks.afterDesignChange(); log(algo.log); };
       seg.appendChild(b);
     }
     box.appendChild(seg);
@@ -79,7 +79,7 @@ function buildInspector() {
     for (const opt of ch.options) {
       const b = el('button'); b.type = 'button'; b.dataset.focusKey = ch.key + '-' + opt.id; b.setAttribute('aria-pressed', current === opt.id ? 'true' : 'false');
       b.innerHTML = `<b>${opt.name}</b><span>${opt.sub}</span>`;
-      b.onclick = () => { n[ch.key] = opt.id; afterDesignChange(); log(opt.log); };
+      b.onclick = () => { n[ch.key] = opt.id; hooks.afterDesignChange(); log(opt.log); };
       seg.appendChild(b);
     }
     box.appendChild(seg);
@@ -95,7 +95,7 @@ function buildInspector() {
       b.innerHTML = `<b>${k}</b> <span>${what}</span><br><span>$${fmt(SIZES[k].cost)}</span>`;
       b.title = TYPES[n.type].sizeWhat ? `${what} · $${fmt(SIZES[k].cost)}/month` : mem(k) ? `${mem(k)} GB memory · $${fmt(SIZES[k].cost)}/month` : SIZES[k].cpu ? `${SIZES[k].cpu} vCPU · ${fmt(SIZES[k].cap)} requests/s · $${fmt(SIZES[k].cost)}/month` : `${fmt(SIZES[k].cap)}/s · $${fmt(SIZES[k].cost)}/month`;
       b.setAttribute('aria-label', `${k} ${what}, $${fmt(SIZES[k].cost)} a month`);
-      b.onclick = () => { n.size = k; afterDesignChange(); };
+      b.onclick = () => { n.size = k; hooks.afterDesignChange(); };
       seg.appendChild(b);
     }
     box.appendChild(seg);

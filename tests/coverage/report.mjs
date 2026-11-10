@@ -14,10 +14,11 @@ import { coverageOptions, NODE_RAW_DIR } from './options.mjs';
  * A file counts under the longest folder its path starts with, so `js/` holds only the files no longer entry claims.
  */
 const MINIMUMS = {
-  'js/engine/': { lines: 93, branches: 90 }, // 2026-11-08: 93.09%, 90.71%
-  'js/ui/': { lines: 91, branches: 93 }, // 91.81%, 93.01%
-  'js/': { lines: 90, branches: 90 }, // 90.73%, 90.59%
-  'levels/': { lines: 97, branches: 80 }, // 97.83%, 80.64%
+  'js/engine/': { lines: 95, branches: 92 }, // 2026-11-10, after the drawing code moved to js/view/: 95.18%, 92.94%
+  'js/ui/': { lines: 91, branches: 93 }, // 2026-11-08: 91.81%, 93.01%
+  'js/view/': { lines: 87, branches: 85 }, // 2026-11-10: 87.15%, 85.58%
+  'js/': { lines: 93, branches: 92 }, // 2026-11-10: 93.08%, 92.73%
+  'levels/': { lines: 97, branches: 80 }, // 2026-11-08: 97.83%, 80.64%
 };
 const METRICS = ['lines', 'branches'];
 const UNTESTED_SHOWN = 10;

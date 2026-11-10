@@ -3,14 +3,14 @@ import { MISSIONS, TXT, HOLD, EXPERIMENTS, S, run, save } from '../state.js';
 import { level } from '../level.js';
 import { model, sampleRoute } from './model.js';
 import { anyOn, crashing, expectMet, textOf, activeExps, dayHour, stopExp } from './experiments.js';
-import { tagsG, paintLive } from './canvas.js';
-import { dots, spawn, showIpTag, moveDots, setDots } from './dots.js';
+import { tagsG, paintLive } from '../view/canvas.js';
+import { dots, spawn, showIpTag, moveDots, setDots } from '../view/dots.js';
 import { renderHUD, setBanner } from '../ui/hud.js';
 import { paintInspectorLive } from '../ui/inspector.js';
 import { renderMission, paintGoals } from '../ui/mission.js';
 import { paintControls } from '../ui/controls.js';
 import { log, observe } from '../ui/log.js';
-import { renderTabs } from '../main.js';
+import { hooks } from '../hooks.js';
 
 const OBSERVE_SECS = 1.5; // an experiment counts once it has run this long
 
@@ -100,7 +100,7 @@ export function checkDone() {
   if (S.verified[i] && expsOk && (!M.gate || S.est)) {
     S.done[i] = true;
     log(i === MISSIONS.length - 1 ? TXT.levelComplete : `Mission ${i + 1} complete.`, 'ok');
-    renderTabs();
+    hooks.renderTabs();
   }
 }
 

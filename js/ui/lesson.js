@@ -1,7 +1,7 @@
 // Lesson diagram helpers.
 import { level } from '../level.js';
 import { $, svgEl } from '../dom.js';
-import { drawIcon } from '../engine/icons.js';
+import { drawIcon } from '../view/icons.js';
 
 export function figNode(svg, type, x, y, name, sub) {
   const w = 188, h = 60;

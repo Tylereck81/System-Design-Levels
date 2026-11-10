@@ -2,8 +2,8 @@
 import { $ } from './dom.js';
 import { MISSIONS, QUIZ, PASS, fresh, S, connectFrom, run, load, save, byId, setS, setConnectFrom, clearOpenResults } from './state.js';
 import { model, sampleRoute } from './engine/model.js';
-import { renderCanvas } from './engine/canvas.js';
-import { renderPalette, addNode, tryConnect } from './engine/interaction.js';
+import { renderCanvas } from './view/canvas.js';
+import { renderPalette, addNode, tryConnect } from './view/interaction.js';
 import { step, frame } from './engine/sim.js';
 import { relogNotMet } from './engine/experiments.js';
 import { renderHUD, setBanner } from './ui/hud.js';
@@ -16,13 +16,14 @@ import { quizScore, renderQuiz } from './ui/quiz.js';
 import { renderShell } from './ui/shell.js';
 import { entry, level } from './level.js';
 import { parseRoute, routeHash } from './route.js';
+import { registerHooks } from './hooks.js';
 import { LEVELS, MOCK } from '../levels/index.js';
 
 document.documentElement.lang = 'en';
 
 // A mock interview has no quiz: a self-check list ends it instead.
-export const TABS = level.interview ? ['lesson', 'build'] : ['lesson', 'build', 'quiz'];
-export function renderTabs() {
+const TABS = level.interview ? ['lesson', 'build'] : ['lesson', 'build', 'quiz'];
+function renderTabs() {
   for (const t of TABS) {
     const b = $('tab-' + t);
     b.setAttribute('aria-selected', S.tab === t ? 'true' : 'false');
@@ -37,7 +38,7 @@ export function renderTabs() {
   if (qa.answered < QUIZ.length) { qm.textContent = qa.answered + '/' + QUIZ.length; qm.title = 'Questions answered'; qm.classList.remove('done'); }
   else { const pass = qa.correct >= PASS; qm.textContent = (pass ? '✓ ' : '') + qa.correct + '/' + QUIZ.length; qm.title = `Score: ${qa.correct} correct${pass ? ', passed' : ''}`; qm.classList.toggle('done', pass); }
 }
-export function setTab(t, focusTab) {
+function setTab(t, focusTab) {
   if (!TABS.includes(t)) return;
   S.tab = t;
   if (t !== 'build' && run.playing) { run.playing = false; paintControls(); }
@@ -69,13 +70,13 @@ function fixAddress(tab) {
   if (location.hash && location.hash !== routeHash(entry.id, tab)) { try { history.replaceState(null, '', routeHash(entry.id, tab)); } catch { /* ignore */ } }
 }
 
-export function afterChange(forceFit) {
+function afterChange(forceFit) {
   if (connectFrom && !byId(connectFrom)) setConnectFrom(null);
   run.mdl = model();
   renderPalette(); renderCanvas(forceFit); renderInspector(); renderHUD(); renderMission(); renderTabs(); setBanner();
   save();
 }
-export function afterDesignChange({ keepResults = false } = {}) {
+function afterDesignChange({ keepResults = false } = {}) {
   // The design is shared by every mission, so a change invalidates every unfinished mission's check.
   const i = S.mission;
   if (!S.done[i] && S.verified[i]) log('Design changed. Run it again to check the targets.', '');
@@ -101,5 +102,6 @@ function start(data) {
   else log(S.done.every(Boolean) ? 'Welcome back. All missions done: replay any mission, or take the quiz.' : `Mission ${S.mission + 1}: ${MISSIONS[S.mission].title}.`);
   requestAnimationFrame(frame);
 }
+registerHooks({ afterChange, afterDesignChange, renderTabs, setTab });
 start({});
 window.__sdl = { get S() { return S; }, run, model, sampleRoute, addNode, tryConnect, setTab, switchMission, togglePlay, step, afterChange, afterDesignChange };

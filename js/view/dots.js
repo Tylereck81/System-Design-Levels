@@ -2,7 +2,7 @@
 import { svgEl } from '../dom.js';
 import { TXT, run, byId } from '../state.js';
 import { NW, NH, dotsG, tagsG, edgePoint } from './canvas.js';
-import { roleOf } from './components.js';
+import { roleOf } from '../engine/components.js';
 
 export let dots = [];
 
