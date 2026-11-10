@@ -153,6 +153,8 @@ test.describe('Level 8 · teaching feedback', () => {
     await expect(page.locator('#log')).toContainText('nothing alerts anyone');
     await addMonitor(page, q);
     expect((await measure(page)).alert).toBe(true);
+    // The queue was already growing: the log now says monitoring alerts on it (the game is playing, so frames log it).
+    await expect(page.locator('#log')).toContainText('Monitoring alert: the queue grows by');
     await page.click('#exp-crash-workers');
     // 8 M workers take 1.6 a second, 1 arrives: the backlog drains at 0.6 a second. It is larger than 3 when
     // the clicks above were slow, as the game runs in real time between them.
