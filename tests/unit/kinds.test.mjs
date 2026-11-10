@@ -138,3 +138,16 @@ test('notification workers: a row for each problem only while it happens', async
     { value: '1%', label: 'waiting in the SMS queue for a retry', wide: true },
   ]);
 });
+
+test('ID generator: capacity turns red only past 0.5% over; worker: no "servers now" row without copies', async () => {
+  const { KINDS } = await kinds();
+  const ids = KINDS.find((k) => k.id === 'id-generator'), worker = KINDS.find((k) => k.id === 'worker');
+  const x = { method: 'snowflake', healthy: 2, bits: 64, numeric: true, ordered: true, dup: 0 };
+  // the line is 1000 × 1.005 = 1005: 1004 is under it (green), 1006 over it (red)
+  assert.equal(ids.liveRows({ load: 1004, cap: 1000, ids: x })[1].tone, 'ok');
+  assert.equal(ids.liveRows({ load: 1006, cap: 1000, ids: x })[1].tone, 'bad');
+  assert.equal(ids.liveRows({ load: 1, cap: 1000, ids: x }).filter(Boolean).length, 3); // no repeats row while dup is 0
+  const st = { load: 2, cap: 4, util: 0.5, backlog: 0 };
+  assert.equal(worker.liveRows({ ...st, copies: 0 }, { size: 'M' }).filter(Boolean).length, 4);
+  assert.deepEqual(worker.liveRows({ ...st, copies: 3 }, { size: 'M' }).at(-1), { value: '3 servers now', label: 'of size M', wide: true });
+});
