@@ -3,8 +3,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadLevel, missionTests } from './harness.mjs';
+import { propertyTests } from './properties.mjs';
 
 const L = await loadLevel(5);
+
+propertyTests(L);
 
 missionTests(L, [
   {
