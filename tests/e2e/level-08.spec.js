@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures.js';
-import AxeBuilder from '@axe-core/playwright';
+import { registerCommonTests } from '../shared-checks.js';
 import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, sampleRoutes, openMission, selectNode, setProps, calm, pressEnterOn } from '../helpers.js';
 
 // Level 8: Message queue, workers and monitoring.
@@ -274,43 +274,22 @@ test.describe('Level 8 · layout and accessibility', () => {
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
   });
 
-  test('phone: canvas on the first screen and no sideways scroll', async ({ page }) => {
-    await page.setViewportSize({ width: 390, height: 844 });
-    await freshPage(page, '#level-8/build');
-    const { q } = await addQueue(page);
-    await addMonitor(page, q);
-    const top = await page.locator('#cv').evaluate((e) => e.getBoundingClientRect().top);
-    expect(top).toBeLessThan(844);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  registerCommonTests({
+    level: 8,
+    phone: {
+      setup: async (page) => {
+        const { q } = await addQueue(page);
+        await addMonitor(page, q);
+      },
+    },
+    onTab: {
+      build: async (page) => {
+        await openMission(page, 1, { estimate: true });
+        const { q, k } = await addQueue(page);
+        await addMonitor(page, q);
+        await page.click('#playBtn'); await playFor(page, 0.5);
+        await selectNode(page, k);
+      },
+    },
   });
-
-  for (const [w, h] of [[1024, 768], [1280, 720]]) {
-    test(`${w}×${h}: Play button above the fold`, async ({ page }) => {
-      await page.setViewportSize({ width: w, height: h });
-      await freshPage(page, '#level-8/build');
-      const box = await page.locator('#playBtn').boundingBox();
-      expect(box.y + box.height).toBeLessThanOrEqual(h);
-    });
-  }
-
-  for (const colorScheme of ['light', 'dark']) {
-    test.describe(`axe (${colorScheme})`, () => {
-      test.use({ colorScheme });
-      test('no violations on lesson, build and quiz', async ({ page }) => {
-        await freshPage(page, '#level-8/lesson');
-        for (const tab of ['lesson', 'build', 'quiz']) {
-          await page.click(`#tab-${tab}`);
-          if (tab === 'build') {
-            await openMission(page, 1, { estimate: true });
-            const { q, k } = await addQueue(page);
-            await addMonitor(page, q);
-            await page.click('#playBtn'); await playFor(page, 0.5);
-            await selectNode(page, k);
-          }
-          const results = await new AxeBuilder({ page }).setLegacyMode().analyze();
-          expect(results.violations.map((v) => `${tab}: ${v.id} (${v.nodes.length})`)).toEqual([]);
-        }
-      });
-    });
-  }
 });
