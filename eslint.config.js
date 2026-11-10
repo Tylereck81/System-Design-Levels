@@ -53,6 +53,20 @@ export default [
     },
   },
   {
+    // The engine knows nothing about the page: it reports through callbacks it is given (see js/engine/sim.js).
+    // This block replaces the main.js rule above for js/engine/, so it repeats it.
+    files: ['js/engine/**/*.js'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [
+          { regex: '(^|/)main\\.js$', message: "Import { hooks } from js/hooks.js instead of importing main.js." },
+          { regex: '^(\\.\\./)+(ui|view)/', message: 'The engine does not draw: report through callbacks; js/view/loop.js draws.' },
+          { regex: '^(\\.\\./)+(dom|hooks)\\.js$', message: 'The engine does not touch the page: report through callbacks instead.' },
+        ],
+      }],
+    },
+  },
+  {
     files: ['js/hooks.js'],
     rules: {
       'no-restricted-syntax': ['error', {

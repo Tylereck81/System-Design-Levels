@@ -3,7 +3,7 @@ import { $ } from '../dom.js';
 import { MISSIONS, EXPERIMENTS, fresh, S, run, setS, setSel, setConnectFrom, expPassed } from '../state.js';
 import { graph, model } from '../engine/model.js';
 import { paintLive } from '../view/canvas.js';
-import { stopRun } from '../engine/sim.js';
+import { stopRun } from '../view/loop.js';
 import { renderHUD, setBanner } from './hud.js';
 import { renderInspector } from './inspector.js';
 import { paintGoals } from './mission.js';
@@ -40,9 +40,8 @@ export const designReady = () => graph().ready;
 function servedWithout(exp, id) {
   const was = run.on[exp.id];
   run.on[exp.id] = { node: id };
-  const s = model({ peak: true }).servedPct;
-  if (was) run.on[exp.id] = was; else delete run.on[exp.id];
-  return s;
+  try { return model({ peak: true }).servedPct; }
+  finally { if (was) run.on[exp.id] = was; else delete run.on[exp.id]; } // a throw must not leave the crash switched on
 }
 // One toggle button per experiment, in the Break it group.
 for (const exp of EXPERIMENTS) {
