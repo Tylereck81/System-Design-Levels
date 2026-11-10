@@ -61,7 +61,8 @@ export function observe(m) {
     keys.set('slow' + sig, [`Response time ${fmt(m.latency)} ms misses the ${TARGET_MS} ms goal: ${parts.join(' + ')}. Busy servers make requests wait; give the slowest one more capacity.`, 'warn']);
   }
   if (m.keyQuota > 1.0001 && TXT.overQuota) keys.set('quota' + m.keyQuota.toFixed(2), [TXT.overQuota(m.keyQuota, m.limitShared), 'warn']);
-  for (const [id, q] of Object.entries(m.queues || {})) if (q.in - q.out > 1e-6 && TXT.queueGrowing) keys.set('queue' + id, [TXT.queueGrowing(q, m.alert, run.queues[id]), m.alert ? 'warn' : 'bad']);
+  // The key changes with the alert, so adding monitoring to a growing queue logs the alert instead of staying quiet.
+  for (const [id, q] of Object.entries(m.queues || {})) if (q.in - q.out > 1e-6 && TXT.queueGrowing) keys.set('queue' + id + (m.alert ? '-alert' : ''), [TXT.queueGrowing(q, m.alert, run.queues[id]), m.alert ? 'warn' : 'bad']);
   for (const exp of activeExps()) if (exp.note && m.g.entry.length && !crashing()) keys.set('note-' + exp.id, [exp.note(m.base), 'bad']);
   const mx = m.atPeak || m; // outcomes are judged at peak traffic (see sim.js)
   for (const exp of activeExps()) if (exp.notMet && !expectMet(exp, mx)) keys.set(notMetKey(exp.id), [textOf(exp.notMet, mx), 'warn']);
