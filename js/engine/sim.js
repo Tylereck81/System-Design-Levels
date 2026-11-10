@@ -84,10 +84,10 @@ function stepDay(exp, m, counts, report) {
   if (counts && !d.fail && !expectMet(exp, m)) d.fail = { at: dayHour(), msg: textOf(exp.notMet, m) };
   if (d.t < exp.secs) return;
   stopExp(exp);
-  if (counts && !d.fail) { S.exp[S.mission][exp.id] = true; report.log(textOf(exp.observed, m), 'ok'); checkDone(report); save(); }
-  else if (d.fail) report.log(`The day is over, but it does not count. At ${clock(d.fail.at)}: ${d.fail.msg}`, 'warn');
+  if (counts && !d.fail) { S.exp[S.mission][exp.id] = true; report.log(textOf(exp.observed, m), 'ok'); progressMade(report); return; }
+  if (d.fail) report.log(`The day is over, but it does not count. At ${clock(d.fail.at)}: ${d.fail.msg}`, 'warn');
   else report.log(exp.off, 'ok');
-  report.progress(); // the day's experiment button is off now
+  report.progress(); // nothing counted, but the day's experiment button is off now
 }
 
 /** A target held or an experiment counted: the mission may be complete; save, and tell the page. */
