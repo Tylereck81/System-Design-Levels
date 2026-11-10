@@ -118,7 +118,7 @@ export function monthlyFileGB() {
 
 /** True when a server that can run alone (catalog `alone`) sends to nothing that holds the data, so it keeps the data itself. */
 export function runsAlone(n) {
-  return !!componentOf(n).alone && !S.edges.some(e => e.from === n.id && componentOf(byId(e.to)).holdsData);
+  return !!componentOf(n).alone && !S.edges.some(e => e.from === n.id && hasFlag('holdsData')(byId(e.to)));
 }
 
 /** Capacity and work per request for a server, given its size, kind and dependencies. */

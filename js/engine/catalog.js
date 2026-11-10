@@ -48,8 +48,10 @@ export const qmul = (u) => (u >= 0.96 ? 25 : 1 / (1 - u));
 //       'server' sits on the request path and has a capacity.
 // sized: capacity and cost come from the server size (S–XL); `sizes` replaces the default table (e.g. memory sizes).
 // kinds: variants that change the work per request (per = operations per request, base = ms per request).
-// alone: what happens when the server sends to nothing that holdsData (it keeps the data and does that work itself).
-// holdsData: the component keeps the application's data (a database, shards, a NoSQL store, a key-value store, a feed service).
+// alone: what happens when the server sends to nothing that holdsData: it keeps the data and does that work
+//   itself.
+// holdsData: the component keeps the application's data (a database, shards, a NoSQL store, a key-value store,
+//   a feed service).
 // cap, cost: fixed capacity (req/s) and monthly cost for servers that have no sizes.
 // routing 'standby': peers of this type don't share traffic; the first healthy one takes it all
 //   and the others wait as standbys (default: healthy peers split traffic evenly).
