@@ -10,10 +10,15 @@ export const QUIZ_KEY_L1 = [2, 0, 3, 1, 2, 0, 1, 3, 2, 0];
 /** Open the game with empty saved progress. */
 export async function freshPage(page, hash = '') {
   await installCapture(page);
-  await page.goto('/');
-  await page.evaluate(() => localStorage.clear());
-  // Leave the page first: changing only the hash to another level would make the game reload itself.
-  await page.goto('about:blank');
+  // Each test gets a new browser context, so a page that has not opened anything yet has no saved data and the game
+  // loads once. Otherwise clear it on the game's own page first.
+  const { origins } = await page.context().storageState();
+  if (page.url() !== 'about:blank' || origins.some((o) => o.localStorage.length > 0)) {
+    await page.goto('/');
+    await page.evaluate(() => localStorage.clear());
+    // Leave the page first: changing only the hash to another level would make the game reload itself.
+    await page.goto('about:blank');
+  }
   await page.goto('/' + hash);
   await page.waitForFunction(() => !!window.__sdl);
 }
