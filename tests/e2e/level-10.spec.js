@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from '../helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, sampleRoutes } from '../helpers.js';
 
 // Level 10: Rate limiter.
 // The level starts inside one data center: Users ('u'), DNS ('d'), one load balancer ('l'), two autoscaled groups of
@@ -193,7 +193,7 @@ test.describe('Level 10 · teaching feedback', () => {
   test('request dots: bots are stopped at the limiter, real requests go on', async ({ page }) => {
     await freshPage(page, '#level-10/build');
     const id = await addLimiter(page, { bucket: '12' });
-    const routes = await page.evaluate(() => { const s = window.__sdl, m = s.model(); return Array.from({ length: 800 }, () => s.sampleRoute(m)); });
+    const routes = await sampleRoutes(page, 800);
     const stopped = routes.filter((r) => r.route[r.failAt] === id);
     expect(stopped.length).toBeGreaterThan(200);
     expect(routes.filter((r) => r.failAt < 0 && r.route.includes('z')).length).toBeGreaterThan(200);

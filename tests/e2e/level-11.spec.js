@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from '../helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, sampleRoutes } from '../helpers.js';
 
 // Level 11: Consistent hashing.
 // The level starts inside one data center: Users ('u'), DNS ('d'), one load balancer ('l'), two autoscaled groups of
@@ -229,7 +229,7 @@ test.describe('Level 11 · teaching feedback', () => {
 
   test('request dots: hits end at the cache cluster, misses go on to the database', async ({ page }) => {
     await freshPage(page, '#level-11/build');
-    const routes = await page.evaluate(() => { const s = window.__sdl, m = s.model(); return Array.from({ length: 600 }, () => s.sampleRoute(m).route); });
+    const routes = (await sampleRoutes(page, 600)).map((x) => x.route);
     const viaCache = routes.filter((r) => r.includes('k'));
     expect(viaCache.length).toBeGreaterThan(400);
     expect(routes.filter((r) => r.includes('b')).length).toBeGreaterThan(0);

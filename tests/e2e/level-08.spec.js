@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from '../helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, sampleRoutes } from '../helpers.js';
 
 // Level 8: Message queue, workers and monitoring.
 // The level starts inside one data center: Users ('u'), DNS ('d'), one load balancer ('l'), two XL web servers
@@ -204,7 +204,7 @@ test.describe('Level 8 · teaching feedback', () => {
   test('request dots: uploads end at the queue; pages go to the database', async ({ page }) => {
     await freshPage(page, '#level-8/build');
     const { q, k } = await addQueue(page);
-    const routes = await page.evaluate(() => { const s = window.__sdl, m = s.model(); return Array.from({ length: 900 }, () => s.sampleRoute(m).route); });
+    const routes = (await sampleRoutes(page, 900)).map((x) => x.route);
     const toQueue = routes.filter((r) => r.includes(q));
     expect(toQueue.length).toBeGreaterThan(80);
     expect(toQueue.every((r) => !r.includes('b') && !r.includes(k))).toBe(true);
