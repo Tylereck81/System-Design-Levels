@@ -76,6 +76,22 @@ test.describe('App shell · level picker, routing, saved progress', () => {
     expect(await page.evaluate(() => window.__sdl.S.quiz[0])).toBe(2);
   });
 
+  test('a save that passes the checks but fails to load starts fresh and says so in the console', async ({ page }) => {
+    const errors = trackErrors(page);
+    const warnings = [];
+    page.on('console', (m) => { if (m.type() === 'warning') warnings.push(m.text()); });
+    await freshPage(page);
+    // The save checks don't look at connection ids; one that can't be turned into text makes loading throw.
+    await page.evaluate(() => localStorage.setItem('sdl-level1-v1', JSON.stringify({
+      nodes: [{ id: 'u', type: 'users', x: 380, y: 76 }], edges: [{ id: { toString: 0 }, from: 'u', to: 'u' }], mission: 1,
+    })));
+    await reloadGame(page);
+    await expect.poll(() => warnings.filter((w) => w.startsWith('Saved progress could not be loaded; starting fresh.')).length).toBe(1);
+    expect(await page.evaluate(() => window.__sdl.S.mission)).toBe(0);
+    await expect(page.locator('#tab-lesson')).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
   for (const colorScheme of ['light', 'dark']) {
     test(`open picker has no accessibility violations (${colorScheme})`, async ({ page }) => {
       await page.emulateMedia({ colorScheme });

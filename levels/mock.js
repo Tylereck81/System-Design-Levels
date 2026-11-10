@@ -6,14 +6,14 @@
 import { MOCK_LEVELS } from './index.js';
 import { STEPS, PROBLEM_KEY } from './mock-steps.js';
 import { stepsGrid } from './shared/lesson.js';
+import { readStorage, writeStorage } from '../js/storage.js';
 
 function chosenProblem() {
-  let id = null;
-  try { id = Number(localStorage.getItem(PROBLEM_KEY)); } catch { /* storage unavailable */ }
+  const id = Number(readStorage(PROBLEM_KEY));
   if (MOCK_LEVELS.includes(id)) return id;
-  id = MOCK_LEVELS[Math.floor(Math.random() * MOCK_LEVELS.length)];
-  try { localStorage.setItem(PROBLEM_KEY, String(id)); } catch { /* storage unavailable */ }
-  return id;
+  const pick = MOCK_LEVELS[Math.floor(Math.random() * MOCK_LEVELS.length)];
+  writeStorage(PROBLEM_KEY, String(pick));
+  return pick;
 }
 
 /**

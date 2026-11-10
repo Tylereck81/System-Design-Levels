@@ -15,6 +15,13 @@ const { state } = await loadLevel(3);
 const { fresh, load, save, setS, validState, LS_KEY } = state;
 const S = () => state.S; // S is reassigned by load(), so read it through the module each time
 const plain = (x) => JSON.parse(JSON.stringify(x));
+/** Runs `fn` and returns the first argument of each console.warn it made. */
+const warningsOf = (fn) => {
+  const seen = [], kept = console.warn;
+  console.warn = (msg) => seen.push(msg);
+  try { fn(); } finally { console.warn = kept; }
+  return seen;
+};
 
 /** Saves `data` as the game's saved text (a string is stored as is), then starts the game from it. */
 const startFrom = (data) => {
@@ -90,14 +97,16 @@ const broken = {
 };
 for (const [what, data] of Object.entries(broken)) {
   test(`a save with ${what} is ignored: the game starts fresh`, () => {
-    startFrom(data);
+    const expected = { 'text that is not JSON': ['Saved progress is not valid JSON; starting fresh.'], null: [] }[what]
+      ?? ['Saved progress does not fit this level; starting fresh.'];
+    assert.deepEqual(warningsOf(() => startFrom(data)), expected); // a discarded save leaves a trace in the console
     assert.deepEqual(plain(S()), plain(fresh()));
     assert.ok(validState(S()));
   });
 }
 
 test('with no save, or no storage at all, the game starts fresh', () => {
-  startFrom('');
+  assert.deepEqual(warningsOf(() => startFrom('')), []);
   assert.deepEqual(plain(S()), plain(fresh()));
   const kept = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
   Object.defineProperty(globalThis, 'localStorage', { configurable: true, get() { throw new Error('blocked'); } });
@@ -134,4 +143,15 @@ test('a loadable save with bad fields is repaired into a valid state', () => {
   // The next id is above the highest one in use (r12, s9, e…): 13.
   assert.equal(s.seq, 13);
   assert.ok(validState(s));
+});
+
+test('when storage is full, saving warns once and the game goes on', () => {
+  const kept = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: () => null, setItem() { throw new Error('QuotaExceededError'); } } });
+  try {
+    setS(fresh());
+    assert.deepEqual(warningsOf(() => { save(); save(); }), ['Progress could not be saved: browser storage is unavailable or full.']);
+  } finally {
+    Object.defineProperty(globalThis, 'localStorage', kept);
+  }
 });

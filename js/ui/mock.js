@@ -5,6 +5,7 @@ import { S, save } from '../state.js';
 import { STEPS, PROBLEM_KEY } from '../../levels/mock-steps.js';
 import { LEVELS, MOCK_LEVELS } from '../../levels/index.js';
 import { log } from './log.js';
+import { writeStorage } from '../storage.js';
 import { hooks } from '../hooks.js';
 
 let since = null; // ms when the current step's clock started; null while paused (a reload pauses the clock)
@@ -92,7 +93,7 @@ export function renderMock(box, redraw) {
   go.onclick = () => {
     const others = MOCK_LEVELS.filter((id) => id !== level.interview.problem);
     const id = pick.value === 'random' ? others[Math.floor(Math.random() * others.length)] : Number(pick.value);
-    try { localStorage.setItem(PROBLEM_KEY, String(id)); } catch { /* storage unavailable */ }
+    writeStorage(PROBLEM_KEY, String(id));
     location.reload();
   };
   again.append(restart, pick, go);
