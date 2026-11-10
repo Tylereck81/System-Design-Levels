@@ -3,7 +3,7 @@ import { fmt } from '../format.js';
 import { $, el, keepFocus, html, setHtml, setHtmlIfChanged } from '../dom.js';
 import { TYPES, OK_PAIRS, pairKey, nameOf, lowerName, edgeInfo, MISSIONS, S, sel, run, byId, setSel, trafficHidden } from '../state.js';
 import { T, COMPONENTS, choiceOf, sizesOf } from '../engine/catalog.js';
-import { roleOf, runsAlone, holdsSessions, scales, dayCopies, serverSpec, isEdge, isClustered, costOf, monthlyFileGB } from '../engine/components.js';
+import { roleOf, runsAlone, holdsSessions, scales, dayCopies, serverSpec, isEdge, isClustered, costOf, monthlyFileGB, kindRows } from '../engine/components.js';
 import { ringBox, paintRing } from './ring-view.js';
 import { tryConnect, disconnect, removeSel, promote } from '../view/interaction.js';
 import { log } from './log.js';
@@ -45,44 +45,20 @@ function buildInspector() {
     box.appendChild(el('p', 'kind-note', down ? TYPES[n.type].downNote : TYPES[n.type].promoteNote));
   }
   if (COMPONENTS[n.type].kinds && TYPES[n.type].kinds) {
-    box.appendChild(el('p', 'label', TYPES[n.type].kindsLabel));
-    const seg = el('div', 'seg two');
-    for (const kind of TYPES[n.type].kinds) {
-      const b = el('button'); b.type = 'button'; b.dataset.focusKey = 'kind-' + kind.id; b.setAttribute('aria-pressed', n.kind === kind.id ? 'true' : 'false');
-      setHtml(b, html`<b>${kind.name}</b><span>${kind.sub}</span>`);
-      b.onclick = () => { n.kind = kind.id; hooks.afterDesignChange(); log(kind.log, kind.tone); };
-      seg.appendChild(b);
-    }
-    box.appendChild(seg);
+    segmented(box, n, { field: 'kind', label: TYPES[n.type].kindsLabel, layout: 'two', options: TYPES[n.type].kinds, current: n.kind });
     const chosen = TYPES[n.type].kinds.find(k => k.id === n.kind);
     box.appendChild(el('p', 'kind-note', chosen ? chosen.note : TYPES[n.type].unsetNote));
   }
   if (COMPONENTS[n.type].algos && TYPES[n.type].algos) {
-    box.appendChild(el('p', 'label', TYPES[n.type].algosLabel));
-    const seg = el('div', 'seg stack');
     const current = n.algo || COMPONENTS[n.type].defaultAlgo;
-    for (const algo of TYPES[n.type].algos) {
-      const b = el('button'); b.type = 'button'; b.dataset.focusKey = 'algo-' + algo.id; b.setAttribute('aria-pressed', current === algo.id ? 'true' : 'false');
-      setHtml(b, html`<b>${algo.name}</b><span>${algo.sub}</span>`);
-      b.onclick = () => { n.algo = algo.id; hooks.afterDesignChange(); log(algo.log); };
-      seg.appendChild(b);
-    }
-    box.appendChild(seg);
+    segmented(box, n, { field: 'algo', label: TYPES[n.type].algosLabel, layout: 'stack', options: TYPES[n.type].algos, current });
     box.appendChild(el('p', 'kind-note', TYPES[n.type].algos.find(a => a.id === current).note));
     if (isStandby(n) && TYPES[n.type].standbyNote) box.appendChild(el('p', 'kind-note', TYPES[n.type].standbyNote));
   }
   // Settings the level offers for this component (e.g. a cache's TTL), in the order the level lists them.
   for (const ch of (COMPONENTS[n.type].choices && TYPES[n.type].choices) || []) {
-    box.appendChild(el('p', 'label', ch.label));
-    const seg = el('div', 'seg stack');
     const current = choiceOf(n, ch.key);
-    for (const opt of ch.options) {
-      const b = el('button'); b.type = 'button'; b.dataset.focusKey = ch.key + '-' + opt.id; b.setAttribute('aria-pressed', current === opt.id ? 'true' : 'false');
-      setHtml(b, html`<b>${opt.name}</b><span>${opt.sub}</span>`);
-      b.onclick = () => { n[ch.key] = opt.id; hooks.afterDesignChange(); log(opt.log); };
-      seg.appendChild(b);
-    }
-    box.appendChild(seg);
+    segmented(box, n, { field: ch.key, label: ch.label, layout: 'stack', options: ch.options, current });
     box.appendChild(el('p', 'kind-note', ch.options.find(o => o.id === current).note));
   }
   if (COMPONENTS[n.type].sized) {
@@ -138,80 +114,73 @@ function buildInspector() {
     box.appendChild(rm);
   }
 }
+/**
+ * A label and one button per option for setting `n[field]`, the `current` one pressed. Picking one sets the field,
+ * reruns the design and logs the option's line.
+ */
+function segmented(box, n, { field, label, layout, options, current }) {
+  box.appendChild(el('p', 'label', label));
+  const seg = el('div', 'seg ' + layout);
+  for (const opt of options) {
+    const b = el('button'); b.type = 'button'; b.dataset.focusKey = field + '-' + opt.id; b.setAttribute('aria-pressed', current === opt.id ? 'true' : 'false');
+    setHtml(b, html`<b>${opt.name}</b><span>${opt.sub}</span>`);
+    b.onclick = () => { n[field] = opt.id; hooks.afterDesignChange(); log(opt.log, opt.tone); };
+    seg.appendChild(b);
+  }
+  box.appendChild(seg);
+}
+
 export function paintInspectorLive() {
   const live = $('inspLive'); if (!live || !sel || sel.kind !== 'node') return;
   const n = byId(sel.id); if (!n || roleOf(n) !== 'server') return;
   if (isClustered(n)) paintRing(n); // it changes while an experiment adds or removes a server
   const st = run.mdl && run.everPlayed ? run.mdl.node[n.id] : null;
-  if (!st && scales(n)) {
-    // An autoscaled group: what it costs, and how many servers it runs over a day, from its load at the peak.
-    const w = graph().peak.get(n.id) || 0, k = dayCopies(w, serverSpec(n).cap);
-    setHtmlIfChanged(live, html`<div><b>$${fmt(costOf(n, w))}</b><span>a month, paid by the hour</span></div><div><b>${Math.min(...k)} to ${Math.max(...k)}</b><span>servers over a day</span></div>`);
-    return;
-  }
-  if (!st && isEdge(n)) { setHtmlIfChanged(live, html`<div><b>$${fmt(costOf(n))}</b><span>a month, for ${fmt(monthlyFileGB() / 1000)} TB sent</span></div><div><b>—</b><span>press Play for load</span></div>`); return; }
-  if (!st) { setHtmlIfChanged(live, html`<div><b>${fmt(serverSpec(n).cap)}</b><span>capacity, per second</span></div><div><b>—</b><span>press Play for load</span></div>`); return; }
-  if (st.standby) { setHtmlIfChanged(live, html`<div><b>standby</b><span>takes no traffic</span></div><div><b>${fmt(st.cap)}</b><span>capacity, ready to take over</span></div>`); return; }
-  if (st.down) { setHtmlIfChanged(live, html`<div><b style="color:var(--bad)">down</b><span>serving nothing</span></div><div><b>0</b><span>req/s served</span></div>`); return; }
-  if (st.consumer) {
-    // A worker group: jobs in and out, and what waits in its queue.
-    setHtmlIfChanged(live, [
-      html`<div><b>${st.load.toFixed(2)}</b><span>jobs/s arriving</span></div><div><b>${st.cap.toFixed(2)}</b><span>jobs/s it can take</span></div>`,
-      html`<div><b>${Math.round(st.util * 100)}%</b><span>busy</span></div><div><b>${fmt(st.backlog)}</b><span>jobs waiting in the queue</span></div>`,
-      st.copies ? html`<div class="wide"><b>${st.copies} ${st.copies === 1 ? 'server' : 'servers'} now</b><span>of size ${n.size}</span></div>` : '',
-    ]);
-    return;
-  }
-  if (st.ids) {
-    // An ID generator: IDs asked for and what it can make, what its IDs look like, and repeats.
-    const x = st.ids, col = st.load > st.cap * 1.005 ? 'var(--bad)' : 'var(--ok)';
-    setHtmlIfChanged(live, [
-      html`<div><b>${fmt(st.load)}</b><span>IDs/s asked for</span></div>`,
-      x.method === 'uuid' ? html`<div><b>no limit</b><span>made in each web server</span></div>` : html`<div><b style="color:${col}">${fmt(st.cap)}</b><span>IDs/s on ${x.healthy} ${x.healthy === 1 ? 'server' : 'servers'}</span></div>`,
-      html`<div class="wide"><b>${x.bits} bits</b><span>${x.numeric ? 'a number' : 'written as hex digits and dashes'}, ${x.ordered ? 'in time order' : 'not in time order'}</span></div>`,
-      x.dup > 0 ? html`<div class="wide"><b style="color:var(--bad)">${(100 * x.dup).toFixed(0)}%</b><span>of IDs repeat one already made</span></div>` : '',
-    ]);
-    return;
-  }
+  setHtmlIfChanged(live, liveRows(n, st).filter(Boolean).map(rowHtml));
+}
+
+/** One number and what it means: `tone` colours the number, a `wide` row spans the panel. */
+function rowHtml({ value, label, tone, wide }) {
+  const b = tone ? html`<b style="color:var(--${tone})">${value}</b>` : html`<b>${value}</b>`;
+  return wide ? html`<div class="wide">${b}<span>${label}</span></div>` : html`<div>${b}<span>${label}</span></div>`;
+}
+
+const PRESS_PLAY = { value: '—', label: 'press Play for load' };
+
+/** Server `n`'s live rows, from its stat `st` (null before Play). A false entry is skipped. */
+function liveRows(n, st) {
+  if (!st) return idleRows(n);
+  if (st.standby) return [{ value: 'standby', label: 'takes no traffic' }, { value: fmt(st.cap), label: 'capacity, ready to take over' }];
+  if (st.down) return [{ value: 'down', label: 'serving nothing', tone: 'bad' }, { value: '0', label: 'req/s served' }];
+  const kind = kindRows(n, st);
+  if (kind.only) return kind.rows;
   if (st.hit != null) {
     // A cache's words by default; a level can word them for another type (e.g. a CDN's files and origin).
     const w = { arriving: 'reads arriving, per second', misses: 'misses/s sent to the database', per: 'per lookup', ...TYPES[n.type].live };
-    setHtmlIfChanged(live, [
-      html`<div><b>${fmt(st.load)}</b><span>${w.arriving}</span></div><div><b>${Math.round(st.hit * 100)}%</b><span>hit rate</span></div>`,
-      html`<div><b>${fmt(st.misses)}</b><span>${w.misses}</span></div><div><b>${st.ms.toFixed(1)} ms</b><span>${w.per}</span></div>`,
-    ]);
-    return;
+    return [{ value: fmt(st.load), label: w.arriving }, { value: `${Math.round(st.hit * 100)}%`, label: 'hit rate' },
+      { value: fmt(st.misses), label: w.misses }, { value: `${st.ms.toFixed(1)} ms`, label: w.per }];
   }
-  const pct = Math.round(st.util * 100);
-  const col = st.load > st.cap * 1.005 ? 'var(--bad)' : st.util >= 0.8 ? 'var(--warn)' : 'var(--ok)';
-  // A value coloured only when it is bad (or a warning); otherwise the style attribute is empty.
-  const tone = (on, c) => on ? `color:var(--${c})` : '';
-  setHtmlIfChanged(live, [
-    html`<div><b>${fmt(st.load)}</b><span>${st.files ? `${st.unit} of work` : `${st.unit} arriving`}</span></div><div><b>${fmt(st.cap)}</b><span>capacity${st.combined ? ' (code + data)' : ''}</span></div><div><b style="color:${col}">${pct}%</b><span>busy</span></div><div><b>${st.ms.toFixed(st.ms < 10 ? 1 : 0)} ms</b><span>per request (${st.mult.toFixed(1)}× base)</span></div>`,
-    st.copied ? html`<div class="wide"><b>${fmt(st.load - st.copied)} + ${fmt(st.copied)}</b><span>reads + writes copied from the primary</span></div>` : '',
-    st.files ? html`<div class="wide"><b>${fmt(st.pages)} + ${fmt(st.files)}</b><span>pages + files arriving per second. A file takes ${fmt(100 * serverSpec(n).filePer)}% of a page's work.</span></div>` : '',
-    st.copies ? html`<div class="wide"><b>${st.copies} ${st.copies === 1 ? 'server' : 'servers'} now</b><span>of size ${n.size}, each at most ${Math.round(100 * T.scaleAt)}% busy</span></div>` : '',
-    st.limiter ? html`<div class="wide"><b>${fmt(st.bots)} → ${fmt(st.botPass)}</b><span>bot requests/s arriving → let through</span></div>` : '',
-    st.limiter && st.falseBlock > 0 ? html`<div class="wide"><b style="color:var(--bad)">${Math.round(st.falseBlock * 100)}%</b><span>of real users' requests rejected: their bursts don't fit</span></div>` : '',
-    st.limiter && st.waitMs > 0 ? html`<div class="wide"><b>${(st.waitMs / 1000).toFixed(1)} s</b><span>a real request waits in the queue, on average</span></div>` : '',
-    st.kv ? html`<div class="wide"><b>${st.kv.readMs} ms · ${st.kv.writeMs} ms</b><span>a read waits for ${st.kv.R} of ${st.kv.N} replicas, a write for ${st.kv.W}</span></div><div class="wide"><b style="${tone(st.kv.stale > 0, 'warn')}">${(100 * st.kv.stale).toFixed(1)}%</b><span>of reads return an old value</span></div>` : '',
-    st.kv && st.kv.failed > 0 ? html`<div class="wide"><b style="color:var(--bad)">${(100 * st.kv.failed).toFixed(0)}%</b><span>of requests fail: no quorum on their side of the partition</span></div>` : '',
-    st.sync && COMPONENTS[n.type].sync === 'block' ? html`<div class="wide"><b>${st.sync.mbPerUpload.toFixed(2)} MB</b><span>sent per upload${st.sync.delta ? ', changed blocks only' : ', whole files'}${st.sync.compress ? ', compressed' : ''}</span></div>` : '',
-    st.sync && COMPONENTS[n.type].sync === 'poll' ? html`<div class="wide"><b>${fmt(st.sync.connsPerServer)}</b><span>long-poll connections per server (1 million max)</span></div>` : '',
-    st.video && COMPONENTS[n.type].video === 'upload' ? html`<div class="wide"><b>${(100 * st.video.uploaded).toFixed(1)}%</b><span>of uploads arrive${st.video.apiLoad > 1 ? `: the API servers' links are ${Math.round(100 * st.video.apiLoad)}% loaded` : ''}${st.video.failed ? `; ${Math.round(100 * st.video.failed)}% of whole files fail and are given up on` : ''}</span></div>` : '',
-    st.video && COMPONENTS[n.type].video === 'transcode' ? html`<div class="wide"><b>${st.video.workers} servers</b><span>${st.video.retry ? 'retry a dead worker\'s tasks' : 'no retry: a dead worker\'s videos are lost'}</span></div>` : '',
-    st.typeahead && st.typeahead.shards && COMPONENTS[n.type].typeahead === 'trie' ? html`<div class="wide"><b>${Math.round(100 * st.typeahead.topShare)}%</b><span>of lookups on the busiest of ${st.typeahead.shards} ${st.typeahead.shards === 1 ? 'shard' : 'shards'}: ${fmt(st.typeahead.shardLoad)} a second</span></div><div class="wide"><b>${st.typeahead.staleH} h</b><span>until a new trending search can show up</span></div>` : '',
-    st.chat ? html`<div class="wide"><b>${st.chat.delay < 1 ? fmt(st.chat.delay * 1000) + ' ms' : st.chat.delay.toFixed(1) + ' s'}</b><span>for a message to arrive, by ${{ poll: 'polling', long: 'long polling', ws: 'WebSocket' }[st.chat.protocol]}</span></div><div class="wide"><b>${st.chat.memoryGB.toFixed(1)} GB</b><span>of connections on each chat server (8 GB each)</span></div>` : '',
-    st.feed ? html`<div class="wide"><b>${fmt(st.feed.writes)}</b><span>feed cache writes a second (fanout), ${fmt(st.feed.cacheGB)} GB cached</span></div><div class="wide"><b style="${tone(st.feed.lag > 5, 'bad')}">${st.feed.lag === Infinity ? 'never' : fmt(st.feed.lag) + ' s'}</b><span>for a post to reach friends' feeds</span></div>` : '',
-    st.notify ? html`<div class="wide"><b>${st.notify.workers} workers</b><span>${st.notify.perChannel ? 'split over a queue per channel' : 'all on one shared queue'}${st.notify.retry ? ', with a notification log' : ''}</span></div>` : '',
-    st.notify && st.notify.lost > 0 ? html`<div class="wide"><b style="color:var(--bad)">${(100 * st.notify.lost).toFixed(0)}%</b><span>of notifications lost</span></div>` : '',
-    st.notify && st.notify.dup > 0 ? html`<div class="wide"><b style="color:var(--warn)">${(100 * st.notify.dup).toFixed(0)}%</b><span>sent twice</span></div>` : '',
-    st.notify && st.notify.waiting > 0 ? html`<div class="wide"><b>${(100 * st.notify.waiting).toFixed(0)}%</b><span>waiting in the SMS queue for a retry</span></div>` : '',
-    st.crawl ? html`<div class="wide"><b>${st.crawl.count} × ${fmt(st.crawl.per)}</b><span>machines × pages/s each${st.crawl.dnsCache ? ', with a DNS cache' : ': DNS lookups one at a time'}</span></div>` : '',
-    st.crawl && st.crawl.refused > 0 ? html`<div class="wide"><b style="color:var(--bad)">${Math.round(100 * st.crawl.refused)}%</b><span>of downloads refused by a flooded host</span></div>` : '',
-    st.shards ? html`<div class="wide"><b>${st.shards.map(x => fmt(x.load)).join(' · ')}</b><span>queries/s on each shard; the busiest sets the % busy</span></div>` : '',
-    run.queues[n.id] != null ? html`<div class="wide"><b>${fmt(run.queues[n.id])} jobs</b><span>waiting for a worker</span></div>` : '',
-    st.uploads ? html`<div class="wide"><b>${st.jobMs != null ? (st.jobMs / 1000).toFixed(0) + ' s' : 'published'}</b><span>per upload${st.jobMs != null ? ', processed here before it answers' : ' to the queue, then answered'}</span></div>` : '',
-    st.sessionMiss ? html`<div class="wide"><b style="color:var(--bad)">${Math.round(100 * st.sessionMiss)}% of pages</b><span>land here without their session and fail: the cart is on another server</span></div>` : '',
-  ]);
+  const tone = st.load > st.cap * 1.005 ? 'bad' : st.util >= 0.8 ? 'warn' : 'ok';
+  return [
+    { value: fmt(st.load), label: st.files ? `${st.unit} of work` : `${st.unit} arriving` },
+    { value: fmt(st.cap), label: `capacity${st.combined ? ' (code + data)' : ''}` },
+    { value: `${Math.round(st.util * 100)}%`, label: 'busy', tone },
+    { value: `${st.ms.toFixed(st.ms < 10 ? 1 : 0)} ms`, label: `per request (${st.mult.toFixed(1)}× base)` },
+    st.copied && { value: `${fmt(st.load - st.copied)} + ${fmt(st.copied)}`, label: 'reads + writes copied from the primary', wide: true },
+    st.files && { value: `${fmt(st.pages)} + ${fmt(st.files)}`, label: `pages + files arriving per second. A file takes ${fmt(100 * serverSpec(n).filePer)}% of a page's work.`, wide: true },
+    st.copies && { value: `${st.copies} ${st.copies === 1 ? 'server' : 'servers'} now`, label: `of size ${n.size}, each at most ${Math.round(100 * T.scaleAt)}% busy`, wide: true },
+    ...kind.rows,
+    run.queues[n.id] != null && { value: `${fmt(run.queues[n.id])} jobs`, label: 'waiting for a worker', wide: true },
+    st.uploads && { value: st.jobMs != null ? (st.jobMs / 1000).toFixed(0) + ' s' : 'published', label: `per upload${st.jobMs != null ? ', processed here before it answers' : ' to the queue, then answered'}`, wide: true },
+    st.sessionMiss && { value: `${Math.round(100 * st.sessionMiss)}% of pages`, label: 'land here without their session and fail: the cart is on another server', tone: 'bad', wide: true },
+  ];
+}
+
+/** Before Play: an autoscaled group's cost and servers over a day, a CDN's cost, else the server's capacity. */
+function idleRows(n) {
+  if (scales(n)) {
+    const w = graph().peak.get(n.id) || 0, k = dayCopies(w, serverSpec(n).cap);
+    return [{ value: `$${fmt(costOf(n, w))}`, label: 'a month, paid by the hour' }, { value: `${Math.min(...k)} to ${Math.max(...k)}`, label: 'servers over a day' }];
+  }
+  if (isEdge(n)) return [{ value: `$${fmt(costOf(n))}`, label: `a month, for ${fmt(monthlyFileGB() / 1000)} TB sent` }, PRESS_PLAY];
+  return [{ value: fmt(serverSpec(n).cap), label: 'capacity, per second' }, PRESS_PLAY];
 }

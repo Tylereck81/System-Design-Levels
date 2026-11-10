@@ -118,3 +118,36 @@ test('a kind is redundant when one of its machines can fail', async () => {
   assert.equal(redundant({ type: 'shards', size: 'M' }), false); // one box: its shards do not stand in for each other
   assert.equal(redundant({ type: 'limiter' }), false);
 });
+
+test('a kind adds no inspector rows when its step did not run (its stat lacks its fields)', async () => {
+  const { KINDS } = await kinds();
+  for (const k of KINDS.filter((x) => x.liveRows && !x.liveRowsOnly)) assert.deepEqual(k.liveRows({ load: 1, cap: 1 }, {}), [], k.id);
+  // A kind whose rows replace the generic ones always runs its own step, so it has no outcome to switch it off.
+  for (const k of KINDS.filter((x) => x.liveRowsOnly)) assert.equal(k.outcome, undefined, k.id);
+});
+
+test('notification workers: a row for each problem only while it happens', async () => {
+  const { KINDS } = await kinds();
+  const rows = (o) => KINDS.find((k) => k.id === 'notify-worker').liveRows({ notify: o }).filter(Boolean);
+  const calm = { workers: 4, perChannel: true, retry: true, lost: 0, dup: 0, waiting: 0 };
+  assert.deepEqual(rows(calm), [{ value: '4 workers', label: 'split over a queue per channel, with a notification log', wide: true }]);
+  // 0.05 → 5%, 0.124 → 12%, 0.006 → 1% (toFixed(0) rounds)
+  assert.deepEqual(rows({ ...calm, lost: 0.05, dup: 0.124, waiting: 0.006 }).slice(1), [
+    { value: '5%', label: 'of notifications lost', tone: 'bad', wide: true },
+    { value: '12%', label: 'sent twice', tone: 'warn', wide: true },
+    { value: '1%', label: 'waiting in the SMS queue for a retry', wide: true },
+  ]);
+});
+
+test('ID generator: capacity turns red only past 0.5% over; worker: no "servers now" row without copies', async () => {
+  const { KINDS } = await kinds();
+  const ids = KINDS.find((k) => k.id === 'id-generator'), worker = KINDS.find((k) => k.id === 'worker');
+  const x = { method: 'snowflake', healthy: 2, bits: 64, numeric: true, ordered: true, dup: 0 };
+  // the line is 1000 × 1.005 = 1005: 1004 is under it (green), 1006 over it (red)
+  assert.equal(ids.liveRows({ load: 1004, cap: 1000, ids: x })[1].tone, 'ok');
+  assert.equal(ids.liveRows({ load: 1006, cap: 1000, ids: x })[1].tone, 'bad');
+  assert.equal(ids.liveRows({ load: 1, cap: 1000, ids: x }).filter(Boolean).length, 3); // no repeats row while dup is 0
+  const st = { load: 2, cap: 4, util: 0.5, backlog: 0 };
+  assert.equal(worker.liveRows({ ...st, copies: 0 }, { size: 'M' }).filter(Boolean).length, 4);
+  assert.deepEqual(worker.liveRows({ ...st, copies: 3 }, { size: 'M' }).at(-1), { value: '3 servers now', label: 'of size M', wide: true });
+});

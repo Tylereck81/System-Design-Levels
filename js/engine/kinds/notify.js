@@ -20,6 +20,12 @@ const workersOf = (n) => notifySettingsOf(null, null, n).workers;
 export const notifyWorker = {
   id: 'notify-worker',
   matches: (c) => c.notify === 'worker',
+  liveRows: ({ notify: o }) => !o ? [] : [
+    { value: `${o.workers} workers`, label: `${o.perChannel ? 'split over a queue per channel' : 'all on one shared queue'}${o.retry ? ', with a notification log' : ''}`, wide: true },
+    o.lost > 0 && { value: `${(100 * o.lost).toFixed(0)}%`, label: 'of notifications lost', tone: 'bad', wide: true },
+    o.dup > 0 && { value: `${(100 * o.dup).toFixed(0)}%`, label: 'sent twice', tone: 'warn', wide: true },
+    o.waiting > 0 && { value: `${(100 * o.waiting).toFixed(0)}%`, label: 'waiting in the SMS queue for a retry', wide: true },
+  ],
   outcome: 'notify',
   step(n, L, ctx) {
     const c = COMPONENTS[n.type], o = ctx.outcomes.notify, cap = c.cap * o.workers, s = L * o.served;

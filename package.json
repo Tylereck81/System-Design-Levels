@@ -16,7 +16,7 @@
     "coverage": "node tests/coverage/run.mjs",
     "coverage:report": "node tests/coverage/report.mjs",
     "typecheck": "tsc -p jsconfig.json",
-    "lint": "eslint js levels tests \"*.js\" --max-warnings 42",
+    "lint": "eslint js levels tests \"*.js\" --max-warnings 41",
     "test:webkit": "playwright test --project=webkit",
     "test:ui": "playwright test --ui"
   },
