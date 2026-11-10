@@ -15,7 +15,7 @@ import { drawFigures } from './ui/lesson.js';
 import { quizScore, renderQuiz } from './ui/quiz.js';
 import { renderShell } from './ui/shell.js';
 import { entry, level } from './level.js';
-import { parseRoute, routeHash } from './route.js';
+import { parseRoute, routeHash, replaceHash } from './route.js';
 import { registerHooks } from './hooks.js';
 import { LEVELS, MOCK } from '../levels/index.js';
 
@@ -43,7 +43,7 @@ function setTab(t, focusTab) {
   S.tab = t;
   if (t !== 'build' && run.playing) { run.playing = false; paintControls(); }
   renderTabs(); save();
-  try { history.replaceState(null, '', routeHash(entry.id, t)); } catch { /* ignore */ }
+  replaceHash(routeHash(entry.id, t));
   if (t === 'build') { renderCanvas(true); renderHUD(); }
   if (focusTab) $('tab-' + t).focus();
   window.scrollTo({ top: 0 });
@@ -67,7 +67,7 @@ window.addEventListener('hashchange', () => {
 });
 /** Show this level's own address for `tab` when the address bar holds another form of it (or a wrong one). */
 function fixAddress(tab) {
-  if (location.hash && location.hash !== routeHash(entry.id, tab)) { try { history.replaceState(null, '', routeHash(entry.id, tab)); } catch { /* ignore */ } }
+  if (location.hash && location.hash !== routeHash(entry.id, tab)) replaceHash(routeHash(entry.id, tab));
 }
 
 function afterChange(forceFit) {
@@ -89,7 +89,7 @@ function afterDesignChange({ keepResults = false } = {}) {
 }
 
 function start(data) {
-  try { load(data); } catch { setS(fresh()); }
+  try { load(data); } catch (err) { console.warn('Saved progress could not be loaded; starting fresh.', err); setS(fresh()); }
   const route = parseRoute(location.hash);
   if (TABS.includes(route.tab)) S.tab = route.tab;
   if (!TABS.includes(S.tab)) S.tab = 'lesson';

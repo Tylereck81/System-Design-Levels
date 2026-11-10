@@ -10,4 +10,9 @@ export function parseRoute(hash) {
   return { level: 1, tab: h || null };
 }
 
+/** Show `hash` in the address bar without a new history entry (some embedded pages forbid it: then nothing changes). */
+export function replaceHash(hash) {
+  try { history.replaceState(null, '', hash); } catch { /* the address bar keeps its old value */ }
+}
+
 export const routeHash = (levelId, tab) => (levelId === 1 ? '#' + tab : levelId === 'mock' ? `#mock/${tab}` : `#level-${levelId}/${tab}`);

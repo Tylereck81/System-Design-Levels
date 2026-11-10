@@ -38,6 +38,26 @@ export default [
     },
   },
   {
+    // Storage throws when it is blocked or full: the game reads and writes it only through js/storage.js.
+    files: ['js/**/*.js', 'levels/**/*.js'],
+    ignores: ['js/storage.js'],
+    rules: {
+      'no-restricted-globals': ['error',
+        { name: 'localStorage', message: 'Use readStorage/writeStorage from js/storage.js.' },
+        { name: 'sessionStorage', message: 'Use readStorage/writeStorage from js/storage.js.' },
+      ],
+    },
+  },
+  {
+    files: ['js/**/*.js', 'levels/**/*.js'],
+    ignores: ['js/route.js'],
+    rules: {
+      'no-restricted-properties': ['error',
+        { object: 'history', property: 'replaceState', message: 'Use replaceHash from js/route.js.' },
+      ],
+    },
+  },
+  {
     // Only boot.js loads the app's entry point. Other modules call main.js's functions through js/hooks.js, which
     // imports nothing, so importing main.js (and the import cycle that makes) is an error.
     files: ['js/**/*.js'],

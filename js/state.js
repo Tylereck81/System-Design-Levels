@@ -1,5 +1,6 @@
 // Level data, game state and saved progress.
 import { level } from './level.js';
+import { readStorage, writeStorage } from './storage.js';
 import { SIZES, COMPONENTS, choiceOf, sizesOf } from './engine/catalog.js';
 
 export const TARGET_MS = level.targets.latencyMs;
@@ -65,10 +66,18 @@ export function validState(src) {
   if (!Number.isInteger(src.mission) || src.mission < 0 || src.mission >= MISSIONS.length) return false;
   return true;
 }
+/** The saved state as stored, or null when there is none. A save that isn't JSON is discarded with a warning. */
+function readSave() {
+  const text = readStorage(LS_KEY);
+  if (!text) return null;
+  try { return JSON.parse(text); } catch (err) { console.warn('Saved progress is not valid JSON; starting fresh.', err); return null; }
+}
 export function load(data) {
-  let src = data && data.S ? data.S : null;
-  if (!src) { try { src = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch { src = null; } }
-  if (!validState(src)) return;
+  const src = data && data.S ? data.S : readSave();
+  if (!validState(src)) {
+    if (src != null) console.warn('Saved progress does not fit this level; starting fresh.', src);
+    return;
+  }
   const f = fresh();
   S = Object.assign(f, src);
   const bools = (a) => MISSIONS.map((_, i) => !!(Array.isArray(a) && a[i]));
@@ -105,7 +114,12 @@ export function load(data) {
   const maxId = Math.max(0, ...S.nodes.concat(S.edges).map(x => parseInt(String(x.id).replace(/\D/g, ''), 10) || 0));
   S.seq = Math.max(Number.isInteger(src.seq) ? src.seq : 1, maxId + 1);
 }
-export function save() { try { localStorage.setItem(LS_KEY, JSON.stringify(S)); } catch { /* storage unavailable */ } }
+let saveWarned = false;
+export function save() {
+  if (writeStorage(LS_KEY, JSON.stringify(S)) || saveWarned) return;
+  saveWarned = true; // once: the game saves after every change
+  console.warn('Progress could not be saved: browser storage is unavailable or full.');
+}
 export const byId = (id) => S.nodes.find(n => n.id === id);
 
 export function setS(v) { S = v; }
