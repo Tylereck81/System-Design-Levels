@@ -6,7 +6,7 @@ import { model } from '../engine/model.js';
 import { stopRun } from '../engine/sim.js';
 import { paintControls } from './controls.js';
 import { log } from './log.js';
-import { setTab, afterChange } from '../main.js';
+import { hooks } from '../hooks.js';
 import { anyOn } from '../engine/experiments.js';
 import { level } from '../level.js';
 import { renderMock, stressOpen } from './mock.js';
@@ -28,7 +28,7 @@ export function switchMission(i) {
   if (!unlocked(i) || i === S.mission) return;
   S.mission = i;
   stopRun(true);
-  afterChange(true);
+  hooks.afterChange(true);
   log(`Mission ${i + 1}: ${MISSIONS[i].title}. Traffic is now ${trafficHidden(MISSIONS[i]) ? 'unknown until you estimate it' : fmt(MISSIONS[i].qps) + ' req/s'}.`);
 }
 
@@ -61,7 +61,7 @@ function buildMission() {
     const last = i === MISSIONS.length - 1;
     c.innerHTML = `<b>Mission complete.</b><p>${M.takeaway}</p>`;
     const nb = el('button', 'btn primary', last ? 'Take the quiz →' : `Mission ${i + 2} →`); nb.type = 'button';
-    nb.onclick = () => last ? setTab('quiz') : switchMission(i + 1);
+    nb.onclick = () => last ? hooks.setTab('quiz') : switchMission(i + 1);
     c.appendChild(nb); box.appendChild(c);
   } else {
     const d = el('details', 'hint');
@@ -89,7 +89,7 @@ export function renderGate(M) {
     const m = (inp.value || '').replace(/,/g, '').match(/-?\d+(\.\d+)?/);
     if (!m || parseFloat(m[0]) < 0) { fb.className = 'fb bad'; fb.textContent = M.gate.notNumber; return; } // a count can't be negative
     const v = parseFloat(m[0]);
-    if (v >= M.gate.lo && v <= M.gate.hi) { S.est = true; log(M.gate.acceptedLog, 'ok'); afterChange(); return; }
+    if (v >= M.gate.lo && v <= M.gate.hi) { S.est = true; log(M.gate.acceptedLog, 'ok'); hooks.afterChange(); return; }
     fb.className = 'fb bad';
     const hint = M.gate.hints.find(h => h.test(v));
     fb.textContent = hint ? hint.text : M.gate.fallback;

@@ -5,7 +5,7 @@ import { S, save } from '../state.js';
 import { STEPS, PROBLEM_KEY } from '../../levels/mock-steps.js';
 import { LEVELS, MOCK_LEVELS } from '../../levels/index.js';
 import { log } from './log.js';
-import { renderTabs } from '../main.js';
+import { hooks } from '../hooks.js';
 
 let since = null; // ms when the current step's clock started; null while paused (a reload pauses the clock)
 
@@ -36,7 +36,7 @@ function pause() {
 
 /** Put the panel into `box` (the mission panel). `redraw` redraws it after a button changes the state. */
 export function renderMock(box, redraw) {
-  const rerender = () => { redraw(); renderTabs(); };
+  const rerender = () => { redraw(); hooks.renderTabs(); };
   const m = mockState();
   box.appendChild(el('p', 'label', 'Mock interview · 45 minutes'));
   box.appendChild(el('h2', null, level.interview.title));

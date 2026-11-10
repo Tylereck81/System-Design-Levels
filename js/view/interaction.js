@@ -10,7 +10,7 @@ import { setBanner } from '../ui/hud.js';
 import { renderInspector } from '../ui/inspector.js';
 import { togglePlay } from '../ui/controls.js';
 import { log } from '../ui/log.js';
-import { afterDesignChange } from '../main.js';
+import { hooks } from '../hooks.js';
 import { dropMissingCrashes, downIds, trafficFactor } from '../engine/experiments.js';
 import { placeDots } from './dots.js';
 
@@ -53,7 +53,7 @@ export function addNode(type, x, y) {
   if (c.replicated && t.roles) n.role = S.nodes.some(m => m.type === type && m.role === 'primary') ? 'replica' : 'primary';
   S.nodes.push(n);
   setSel({ kind: 'node', id: n.id });
-  afterDesignChange();
+  hooks.afterDesignChange();
 }
 
 // palette pointer handling
@@ -203,14 +203,14 @@ export function tryConnect(aId, bId) {
   if (S.edges.some(e => e.from === from.id && e.to === to.id)) return false;
   S.edges.push({ id: 'e' + (S.seq++), from: from.id, to: to.id });
   log(`Connected ${nameOf(from)} → ${nameOf(to)} (${edgeInfo(from, to).label}).`);
-  afterDesignChange();
+  hooks.afterDesignChange();
   return true;
 }
 export function disconnect(aId, bId) {
   // Two servers of the same type can be connected both ways (e.g. replication); remove only the one asked for.
   const same = (byId(aId) || {}).type === (byId(bId) || {}).type;
   S.edges = S.edges.filter(e => !((e.from === aId && e.to === bId) || (!same && e.from === bId && e.to === aId)));
-  afterDesignChange();
+  hooks.afterDesignChange();
 }
 
 export function removeSel() {
@@ -224,7 +224,7 @@ export function removeSel() {
   } else {
     S.edges = S.edges.filter(e => e.id !== sel.id);
   }
-  setSel(null); afterDesignChange();
+  setSel(null); hooks.afterDesignChange();
 }
 
 /** Make replica `n` the primary; the old primary becomes a replica. If it was down, its newest writes never reached `n`. */
@@ -233,7 +233,7 @@ export function promote(n) {
   const oldDown = !!old && downIds().has(old.id);
   for (const m of S.nodes) if (m.type === n.type && m.role === 'primary') { m.role = 'replica'; m.wasPrimary = true; }
   n.role = 'primary'; delete n.wasPrimary;
-  afterDesignChange({ keepResults: true }); // promoting is what the primary crash test asks for, not a new design
+  hooks.afterDesignChange({ keepResults: true }); // promoting is what the primary crash test asks for, not a new design
   const M = MISSIONS[S.mission], writesPerSec = M.qps * trafficFactor() * (M.writes || 0);
   log(TXT.promoted({ oldDown, missing: Math.round(writesPerSec * T.lag), lagSecs: T.lag }), oldDown ? 'warn' : 'ok');
 }

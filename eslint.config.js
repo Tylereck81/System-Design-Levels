@@ -38,6 +38,26 @@ export default [
     },
   },
   {
+    // Only boot.js loads the app's entry point. Other modules call main.js's functions through js/hooks.js, which
+    // imports nothing, so importing main.js (and the import cycle that makes) is an error.
+    files: ['js/**/*.js'],
+    ignores: ['js/boot.js'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [{ regex: '(^|/)main\\.js$', message: "Import { hooks } from js/hooks.js instead of importing main.js." }],
+      }],
+    },
+  },
+  {
+    files: ['js/hooks.js'],
+    rules: {
+      'no-restricted-syntax': ['error', {
+        selector: 'ImportDeclaration, ImportExpression',
+        message: 'hooks.js imports nothing, so any module can import it without making a cycle.',
+      }],
+    },
+  },
+  {
     // Level files import the goal helpers from levels/shared/goals.js; a level defining its own copy is an error.
     // Binding one to the level's numbers is fine: `const served99 = servedAtLeast(targets.servedPct)`.
     files: ['levels/level-*.js'],

@@ -10,7 +10,7 @@ import { paintInspectorLive } from '../ui/inspector.js';
 import { renderMission, paintGoals } from '../ui/mission.js';
 import { paintControls } from '../ui/controls.js';
 import { log, observe } from '../ui/log.js';
-import { renderTabs } from '../main.js';
+import { hooks } from '../hooks.js';
 
 const OBSERVE_SECS = 1.5; // an experiment counts once it has run this long
 
@@ -100,7 +100,7 @@ export function checkDone() {
   if (S.verified[i] && expsOk && (!M.gate || S.est)) {
     S.done[i] = true;
     log(i === MISSIONS.length - 1 ? TXT.levelComplete : `Mission ${i + 1} complete.`, 'ok');
-    renderTabs();
+    hooks.renderTabs();
   }
 }
 
