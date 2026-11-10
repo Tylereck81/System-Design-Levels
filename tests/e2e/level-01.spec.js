@@ -64,7 +64,10 @@ test.describe('Level 1 · full playthrough', () => {
     await page.click('#exp-crash');
     await page.click('#exp-spike');
     await fastForward(page, 2);
-    expect(await logText(page)).toContain('hard limit');
+    // The log is written by the frame loop's 0.2 s paint, which fastForward skips: let real frames run so it paints.
+    // Match the experiment's note only ("Scaling up has a hard limit" from its observed line would also match 'hard limit').
+    await playFor(page, 0.5);
+    expect(await logText(page)).toContain('even the largest size (XL, 1,600 req/s) is not enough');
     await page.click('#exp-spike');
     expect(await state(page, () => window.__sdl.S.done)).toEqual([true, true, true]);
 
