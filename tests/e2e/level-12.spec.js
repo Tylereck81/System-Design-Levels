@@ -1,22 +1,15 @@
 import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from '../helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, openMission, selectNode, setProps, pressEnterOn } from '../helpers.js';
 
 // Level 12: Distributed key-value store.
 // The level starts inside one data center: Users ('u'), DNS ('d'), one load balancer ('l'), two autoscaled groups of
 // L web servers ('w1', 'w2') and a key-value store ('k') with N = 3, W = 1, R = 1 and a strict quorum.
 
-const goTo = (page, i) => page.evaluate((k) => {
-  const S = window.__sdl.S;
-  for (let j = 0; j < k; j++) { S.done[j] = true; S.verified[j] = true; }
-  S.mission = k; S.est = true; window.__sdl.afterChange(true);
-}, i);
 const measure = (page) => page.evaluate(() => {
   const m = window.__sdl.model(), k = m.node.k || {};
   return { served: m.servedPct, latency: m.latency, cost: m.cost, stale: m.kvStalePct, fail: m.kvFailPct, readMs: m.kvReadMs, quorum: m.kvQuorum, spof: m.spof, ms: k.ms };
 });
-const select = async (page, id) => { await page.focus(`[data-node="${id}"]`); await page.keyboard.press('Enter'); };
-const set = (page, props) => page.evaluate((p) => { Object.assign(window.__sdl.S.nodes.find((n) => n.id === 'k'), p); window.__sdl.afterDesignChange(); }, props);
 /** The partition without the clock: the model while the network is split. */
 const split = (page, on = true) => page.evaluate((o) => { window.__sdl.run.on = o ? { partition: {} } : {}; }, on);
 const click = (page, key) => page.locator(`#insp [data-focus-key="${key}"]`).click();
@@ -32,7 +25,7 @@ test.describe('Level 12 · playthrough', () => {
     // Mission 1: estimate R = 2, then W = R = 2 with a strict quorum (through the inspector), then the partition.
     await page.fill('#estIn', '2');
     await page.click('#estBtn');
-    await select(page, 'k');
+    await selectNode(page, 'k');
     await click(page, 'w-2');
     await click(page, 'r-2');
     await expect(page.locator('[data-node="k"] .node-sub')).toHaveText('N 3 · W 2 · R 2 · strict');
@@ -48,7 +41,7 @@ test.describe('Level 12 · playthrough', () => {
 
     // Mission 2: a sloppy quorum keeps carts working through the partition.
     await page.click('#mission .complete button');
-    await select(page, 'k');
+    await selectNode(page, 'k');
     await click(page, 'mode-sloppy');
     await page.click('#playBtn');
     await fastForward(page, 5);
@@ -61,7 +54,7 @@ test.describe('Level 12 · playthrough', () => {
 
     // Mission 3: fast reads: R = 1, so W = N, with a strict quorum.
     await page.click('#mission .complete button');
-    await select(page, 'k');
+    await selectNode(page, 'k');
     await click(page, 'mode-strict');
     await click(page, 'w-3');
     await click(page, 'r-1');
@@ -89,14 +82,14 @@ test.describe('Level 12 · numbers', () => {
     expect(r.stale).toBeCloseTo(20 * 2 / 3, 9);
     expect(r.spof).toBe(1); // the load balancer; a store with three replicas is not one
     for (const [w, rr, stale, readMs, writeMs] of [['2', '1', 20 / 3, 2, 4], ['2', '2', 0, 4, 4], ['3', '1', 0, 2, 10], ['1', '3', 0, 10, 2]]) {
-      await set(page, { w, r: rr });
+      await setProps(page, 'k', { w, r: rr });
       r = await measure(page);
       expect([w, rr, r.stale, r.readMs]).toEqual([w, rr, expect.closeTo(stale, 9), readMs]);
       // The store's time: 90% reads, 10% writes.
       expect(r.ms).toBeCloseTo(0.9 * readMs + 0.1 * writeMs, 9);
     }
     // W and R count at most N.
-    await set(page, { n: '1', w: '3', r: '3' });
+    await setProps(page, 'k', { n: '1', w: '3', r: '3' });
     r = await measure(page);
     expect(r.quorum).toEqual({ N: 1, W: 1, R: 1, sloppy: false });
     expect(r.stale).toBe(0);
@@ -106,13 +99,13 @@ test.describe('Level 12 · numbers', () => {
 
   test('the partition: a strict quorum fails the cut-off side, a sloppy one answers with old data', async ({ page }) => {
     await freshPage(page, '#level-12/build');
-    await set(page, { w: '2', r: '2' });
+    await setProps(page, 'k', { w: '2', r: '2' });
     await split(page);
     let r = await measure(page);
     expect(r.fail).toBeCloseTo(30, 9); // 30% of users reach one replica of three, fewer than 2
     expect(r.served).toBeCloseTo(70, 6);
     expect(r.stale).toBe(0);
-    await set(page, { mode: 'sloppy' });
+    await setProps(page, 'k', { mode: 'sloppy' });
     r = await measure(page);
     expect(r.fail).toBe(0);
     // Both sides take writes: a recently written key's last write came from the other side for 30% (or 70%) of reads.
@@ -120,7 +113,7 @@ test.describe('Level 12 · numbers', () => {
     await split(page, false);
     expect((await measure(page)).stale).toBe(0); // a sloppy quorum is consistent while nothing fails
     // W = 3, R = 1: no side can write, every side can read.
-    await set(page, { mode: 'strict', w: '3', r: '1' });
+    await setProps(page, 'k', { mode: 'strict', w: '3', r: '1' });
     await split(page);
     r = await measure(page);
     expect(r.fail).toBeCloseTo(10, 9); // the writes, 10% of requests
@@ -139,7 +132,7 @@ test.describe('Level 12 · numbers', () => {
 test.describe('Level 12 · teaching feedback', () => {
   test('W + R not more than N: the log explains the old values', async ({ page }) => {
     await freshPage(page, '#level-12/build');
-    await goTo(page, 0);
+    await openMission(page, 0, { estimate: true });
     await page.click('#playBtn');
     await fastForward(page, 1);
     await expect(page.locator('#log')).toContainText('13.3% of reads return an old value: W + R = 2, not more than N = 3');
@@ -148,8 +141,8 @@ test.describe('Level 12 · teaching feedback', () => {
 
   test('a sloppy quorum sells seats twice in a partition; a strict one fails instead', async ({ page }) => {
     await freshPage(page, '#level-12/build');
-    await goTo(page, 0);
-    await set(page, { w: '2', r: '2', mode: 'sloppy' });
+    await openMission(page, 0, { estimate: true });
+    await setProps(page, 'k', { w: '2', r: '2', mode: 'sloppy' });
     await page.click('#playBtn');
     await page.click('#exp-partition');
     await fastForward(page, 2);
@@ -160,15 +153,15 @@ test.describe('Level 12 · teaching feedback', () => {
 
   test('carts with a strict quorum fail on the cut-off side, and the log says to go sloppy', async ({ page }) => {
     await freshPage(page, '#level-12/build');
-    await goTo(page, 1);
-    await set(page, { w: '2', r: '1' });
+    await openMission(page, 1, { estimate: true });
+    await setProps(page, 'k', { w: '2', r: '1' });
     await page.click('#playBtn');
     await page.click('#exp-partition');
     await fastForward(page, 2);
     await expect(page.locator('#log')).toContainText('fail on the cut-off side');
     await expect(page.locator('#log')).toContainText('Use a sloppy quorum');
     // W = 1 would keep carts up, but a change must be on 2 replicas.
-    await set(page, { w: '1' });
+    await setProps(page, 'k', { w: '1' });
     await page.click('#exp-partition');
     await page.click('#playBtn');
     await fastForward(page, 1);
@@ -177,8 +170,8 @@ test.describe('Level 12 · teaching feedback', () => {
 
   test('a sloppy quorum with W + R > N: the log blames the partition, not W + R', async ({ page }) => {
     await freshPage(page, '#level-12/build');
-    await goTo(page, 1);
-    await set(page, { w: '2', r: '2', mode: 'sloppy' });
+    await openMission(page, 1, { estimate: true });
+    await setProps(page, 'k', { w: '2', r: '2', mode: 'sloppy' });
     await page.click('#exp-partition');
     await fastForward(page, 2);
     await expect(page.locator('#log')).toContainText('8.4% of reads return an old value: in the partition both sides keep answering');
@@ -187,8 +180,8 @@ test.describe('Level 12 · teaching feedback', () => {
 
   test('W = 3 with a strict quorum: the log says writes fail on both sides', async ({ page }) => {
     await freshPage(page, '#level-12/build');
-    await goTo(page, 2);
-    await set(page, { w: '3', r: '1' });
+    await openMission(page, 2, { estimate: true });
+    await setProps(page, 'k', { w: '3', r: '1' });
     await page.click('#exp-partition');
     await fastForward(page, 2);
     // The larger side has 2 of the 3 replicas, so no side can write; the 5% of requests that are writes fail.
@@ -198,11 +191,11 @@ test.describe('Level 12 · teaching feedback', () => {
 
   test('the inspector shows the waits, old values and failures', async ({ page }) => {
     await freshPage(page, '#level-12/build');
-    await goTo(page, 0);
-    await set(page, { w: '2', r: '2' });
+    await openMission(page, 0, { estimate: true });
+    await setProps(page, 'k', { w: '2', r: '2' });
     await page.click('#playBtn');
     await fastForward(page, 1);
-    await select(page, 'k');
+    await selectNode(page, 'k');
     await expect(page.locator('#inspLive')).toContainText('a read waits for 2 of 3 replicas, a write for 2');
     await expect(page.locator('#inspLive')).toContainText('0.0%');
     await page.click('#exp-partition');
@@ -212,7 +205,7 @@ test.describe('Level 12 · teaching feedback', () => {
 
   test('store settings survive a reload; bad saved settings load as the defaults', async ({ page }) => {
     await freshPage(page, '#level-12/build');
-    await set(page, { n: '5', w: '3', r: '4', mode: 'sloppy' });
+    await setProps(page, 'k', { n: '5', w: '3', r: '4', mode: 'sloppy' });
     await reloadGame(page);
     const get = () => state(page, () => { const n = window.__sdl.S.nodes.find((x) => x.id === 'k'); return [n.n, n.w, n.r, n.mode]; });
     expect(await get()).toEqual(['5', '3', '4', 'sloppy']);
@@ -247,19 +240,18 @@ test.describe('Level 12 · teaching feedback', () => {
 test.describe('Level 12 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-12/build');
-    const enter = async (selector) => { await page.focus(selector); await page.keyboard.press('Enter'); };
     await page.focus('#estIn');
     await page.keyboard.type('2');
     await page.keyboard.press('Enter');
     expect(await state(page, () => window.__sdl.S.est)).toBe(true);
-    await enter('[data-node="k"]');
-    await enter('#insp [data-focus-key="w-3"]');
-    await enter('#insp [data-focus-key="r-1"]');
-    await enter('#playBtn');
+    await pressEnterOn(page, '[data-node="k"]');
+    await pressEnterOn(page, '#insp [data-focus-key="w-3"]');
+    await pressEnterOn(page, '#insp [data-focus-key="r-1"]');
+    await pressEnterOn(page, '#playBtn');
     await fastForward(page, 5);
-    await enter('#exp-partition');
+    await pressEnterOn(page, '#exp-partition');
     await fastForward(page, 2);
-    await enter('#exp-partition');
+    await pressEnterOn(page, '#exp-partition');
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
   });
 
@@ -268,7 +260,7 @@ test.describe('Level 12 · layout and accessibility', () => {
     await freshPage(page, '#level-12/build');
     const top = await page.locator('#cv').evaluate((e) => e.getBoundingClientRect().top);
     expect(top).toBeLessThan(844);
-    await select(page, 'k');
+    await selectNode(page, 'k');
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   });
 
@@ -291,7 +283,7 @@ test.describe('Level 12 · layout and accessibility', () => {
           if (tab === 'build') {
             await page.evaluate(() => { window.__sdl.S.est = true; window.__sdl.afterChange(true); });
             await page.click('#playBtn'); await playFor(page, 0.5);
-            await select(page, 'k');
+            await selectNode(page, 'k');
           }
           const results = await new AxeBuilder({ page }).setLegacyMode().analyze();
           expect(results.violations.map((v) => `${tab}: ${v.id} (${v.nodes.length})`)).toEqual([]);

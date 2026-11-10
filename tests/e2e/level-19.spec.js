@@ -1,22 +1,15 @@
 import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from '../helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, openMission, selectNode, setProps, pressEnterOn } from '../helpers.js';
 
 // Level 19: Search autocomplete.
 // Users ('u') send a request per keystroke to the API servers ('a': 4 servers, no browser caching), which ask the
 // trie cache ('t': table queries, 3 shards split by letter, rebuilt weekly). 55,600 requests a second at the peak.
 
-const goTo = (page, i) => page.evaluate((k) => {
-  const S = window.__sdl.S;
-  for (let j = 0; j < k; j++) { S.done[j] = true; S.verified[j] = true; }
-  S.mission = k; S.est = true; window.__sdl.afterChange(true);
-}, i);
 const measure = (page) => page.evaluate(() => {
   const m = window.__sdl.model({ peak: true });
   return { qps: m.qps, served: m.servedPct, latency: m.latency, cost: m.cost, o: m.typeahead };
 });
-const select = async (page, id) => { await page.focus(`[data-node="${id}"]`); await page.keyboard.press('Enter'); };
-const set = (page, id, props) => page.evaluate(([x, p]) => { Object.assign(window.__sdl.S.nodes.find((n) => n.id === x), p); window.__sdl.afterDesignChange(); }, [id, props]);
 const during = (page, id) => page.evaluate((x) => { window.__sdl.run.on = x ? { [x]: {} } : {}; }, id);
 const click = (page, key) => page.locator(`#insp [data-focus-key="${key}"]`).click();
 const pause = (page) => page.evaluate(() => { if (window.__sdl.run.playing) window.__sdl.togglePlay(); });
@@ -31,9 +24,9 @@ test.describe('Level 19 · playthrough', () => {
     // Mission 1: estimate 27,800, top 5 per node and browser caching; a big match.
     await page.fill('#estIn', '27800');
     await page.click('#estBtn');
-    await select(page, 't');
+    await selectNode(page, 't');
     await click(page, 'method-topk');
-    await select(page, 'a');
+    await selectNode(page, 'a');
     await click(page, 'browser-on');
     await expect(page.locator('[data-node="a"] .node-sub')).toHaveText('4 servers · browser cache');
     expect((await measure(page)).cost).toBe(1800);
@@ -46,9 +39,9 @@ test.describe('Level 19 · playthrough', () => {
 
     // Mission 2: 6 API servers and a shard map; election night.
     await page.click('#mission .complete button');
-    await select(page, 'a');
+    await selectNode(page, 'a');
     await click(page, 'count-6');
-    await select(page, 't');
+    await selectNode(page, 't');
     await click(page, 'split-map');
     await expect(page.locator('[data-node="t"] .node-sub')).toHaveText('top 5 · 3 shards · shard map');
     await page.click('#playBtn');
@@ -60,7 +53,7 @@ test.describe('Level 19 · playthrough', () => {
 
     // Mission 3: rebuild hourly; a new search trends.
     await page.click('#mission .complete button');
-    await select(page, 't');
+    await selectNode(page, 't');
     await click(page, 'rebuild-hourly');
     await page.click('#playBtn');
     await fastForward(page, 5);
@@ -82,11 +75,11 @@ test.describe('Level 19 · numbers', () => {
     expect(r.qps).toBeCloseTo(57268, 6);
     expect(r.served).toBeCloseTo(100 * 48000 / 57268, 6);
     expect(r.latency).toBeCloseTo(40 + 5 + 0.5 + 100, 6); // the trip, the API server, the hop inside the data center, the lookup
-    await set(page, 't', { method: 'trie' });
+    await setProps(page, 't', { method: 'trie' });
     expect((await measure(page)).latency).toBeCloseTo(105.5, 6);
-    await set(page, 't', { method: 'topk' });
+    await setProps(page, 't', { method: 'topk' });
     expect((await measure(page)).latency).toBeCloseTo(46.5, 6);
-    await set(page, 'a', { browser: 'on' });
+    await setProps(page, 'a', { browser: 'on' });
     r = await measure(page);
     expect(r.qps).toBeCloseTo(57268 * 0.7, 6); // 30% answered by the browser
     expect(r.served).toBe(100);
@@ -94,25 +87,25 @@ test.describe('Level 19 · numbers', () => {
 
   test('shards: equal letter ranges put 45% on the busiest of three; a shard map a third', async ({ page }) => {
     await freshPage(page, '#level-19/build');
-    await set(page, 't', { method: 'topk' });
-    await set(page, 'a', { browser: 'on', count: '6' });
+    await setProps(page, 't', { method: 'topk' });
+    await setProps(page, 'a', { browser: 'on', count: '6' });
     await during(page, 'peak');
     let r = await measure(page);
     const reach = 57268 * 1.6 * 0.7;
     expect(r.o.shardLoad).toBeCloseTo(reach * 0.45, 6);
     expect(r.served).toBeCloseTo(100 * (1 - 0.45 * (1 - 25000 / (reach * 0.45))), 6);
-    await set(page, 't', { split: 'map' });
+    await setProps(page, 't', { split: 'map' });
     r = await measure(page);
     expect(r.o.shardLoad).toBeCloseTo(reach / 3, 6);
     expect(r.served).toBe(100);
-    await set(page, 't', { split: 'letter', shards: '4' });
+    await setProps(page, 't', { split: 'letter', shards: '4' });
     expect((await measure(page)).o.shardLoad).toBeCloseTo(reach * 0.36, 6);
   });
 
   test('rebuilds: weekly, daily, hourly', async ({ page }) => {
     await freshPage(page, '#level-19/build');
     for (const [rebuild, h, cost] of [['weekly', 168, 1800], ['daily', 24, 1900], ['hourly', 1, 2200]]) {
-      await set(page, 't', { rebuild });
+      await setProps(page, 't', { rebuild });
       const r = await measure(page);
       expect([rebuild, r.o.staleH, r.cost]).toEqual([rebuild, h, cost]);
     }
@@ -127,7 +120,7 @@ test.describe('Level 19 · numbers', () => {
 test.describe('Level 19 · teaching feedback', () => {
   test('table queries: the latency goal fails at 145.5 ms', async ({ page }) => {
     await freshPage(page, '#level-19/build');
-    await goTo(page, 0);
+    await openMission(page, 0, { estimate: true });
     await page.click('#playBtn');
     await fastForward(page, 1);
     await expect(page.locator('#goals li', { hasText: 'Suggestions in under 100 ms' })).toHaveClass(/fail/);
@@ -135,9 +128,9 @@ test.describe('Level 19 · teaching feedback', () => {
 
   test('election night split by letter: the log blames the busiest shard', async ({ page }) => {
     await freshPage(page, '#level-19/build');
-    await goTo(page, 1);
-    await set(page, 't', { method: 'topk' });
-    await set(page, 'a', { browser: 'on', count: '6' });
+    await openMission(page, 1, { estimate: true });
+    await setProps(page, 't', { method: 'topk' });
+    await setProps(page, 'a', { browser: 'on', count: '6' });
     await page.click('#playBtn');
     await page.click('#exp-peak');
     await fastForward(page, 2);
@@ -148,9 +141,9 @@ test.describe('Level 19 · teaching feedback', () => {
 
   test('a trend with weekly rebuilds: the log says to rebuild hourly', async ({ page }) => {
     await freshPage(page, '#level-19/build');
-    await goTo(page, 2);
-    await set(page, 't', { method: 'topk' });
-    await set(page, 'a', { browser: 'on' });
+    await openMission(page, 2, { estimate: true });
+    await setProps(page, 't', { method: 'topk' });
+    await setProps(page, 'a', { browser: 'on' });
     await page.click('#playBtn');
     await page.click('#exp-trend');
     await fastForward(page, 2);
@@ -159,19 +152,19 @@ test.describe('Level 19 · teaching feedback', () => {
 
   test('the inspector shows the busiest shard and the rebuild delay', async ({ page }) => {
     await freshPage(page, '#level-19/build');
-    await goTo(page, 0);
+    await openMission(page, 0, { estimate: true });
     await page.click('#playBtn');
     await fastForward(page, 1);
     await pause(page);
-    await select(page, 't');
+    await selectNode(page, 't');
     await expect(page.locator('#inspLive')).toContainText('of lookups on the busiest of 3 shards');
     await expect(page.locator('#inspLive')).toContainText('168 h');
   });
 
   test('settings survive a reload; bad saved settings load as the defaults', async ({ page }) => {
     await freshPage(page, '#level-19/build');
-    await set(page, 'a', { count: '6', browser: 'on' });
-    await set(page, 't', { method: 'topk', shards: '4', split: 'map', rebuild: 'hourly' });
+    await setProps(page, 'a', { count: '6', browser: 'on' });
+    await setProps(page, 't', { method: 'topk', shards: '4', split: 'map', rebuild: 'hourly' });
     await reloadGame(page);
     const get = () => state(page, () => { const n = (id) => window.__sdl.S.nodes.find((x) => x.id === id); return [n('a').count, n('a').browser, n('t').method, n('t').shards, n('t').split, n('t').rebuild]; });
     expect(await get()).toEqual(['6', 'on', 'topk', '4', 'map', 'hourly']);
@@ -206,20 +199,19 @@ test.describe('Level 19 · teaching feedback', () => {
 test.describe('Level 19 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-19/build');
-    const enter = async (selector) => { await page.focus(selector); await page.keyboard.press('Enter'); };
     await page.focus('#estIn');
     await page.keyboard.type('27800');
     await page.keyboard.press('Enter');
     expect(await state(page, () => window.__sdl.S.est)).toBe(true);
-    await enter('[data-node="t"]');
-    await enter('#insp [data-focus-key="method-topk"]');
-    await enter('[data-node="a"]');
-    await enter('#insp [data-focus-key="browser-on"]');
-    await enter('#playBtn');
+    await pressEnterOn(page, '[data-node="t"]');
+    await pressEnterOn(page, '#insp [data-focus-key="method-topk"]');
+    await pressEnterOn(page, '[data-node="a"]');
+    await pressEnterOn(page, '#insp [data-focus-key="browser-on"]');
+    await pressEnterOn(page, '#playBtn');
     await fastForward(page, 5);
-    await enter('#exp-rush');
+    await pressEnterOn(page, '#exp-rush');
     await fastForward(page, 2);
-    await enter('#exp-rush');
+    await pressEnterOn(page, '#exp-rush');
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
   });
 
@@ -228,7 +220,7 @@ test.describe('Level 19 · layout and accessibility', () => {
     await freshPage(page, '#level-19/build');
     const top = await page.locator('#cv').evaluate((e) => e.getBoundingClientRect().top);
     expect(top).toBeLessThan(844);
-    await select(page, 't');
+    await selectNode(page, 't');
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   });
 
@@ -251,7 +243,7 @@ test.describe('Level 19 · layout and accessibility', () => {
           if (tab === 'build') {
             await page.evaluate(() => { window.__sdl.S.est = true; window.__sdl.afterChange(true); });
             await page.click('#playBtn'); await playFor(page, 0.5);
-            await select(page, 't');
+            await selectNode(page, 't');
           }
           const results = await new AxeBuilder({ page }).setLegacyMode().analyze();
           expect(results.violations.map((v) => `${tab}: ${v.id} (${v.nodes.length})`)).toEqual([]);

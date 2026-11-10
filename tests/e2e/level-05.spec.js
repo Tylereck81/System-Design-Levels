@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, sampleRoutes } from '../helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, sampleRoutes, openMission, selectNode, setProps, calm, pressEnterOn } from '../helpers.js';
 
 // Level 5: CDN for static content.
 // The level starts with Level 4's design: two load balancers ('l1', 'l2'), two XL web servers ('w1', 'w2'),
@@ -18,11 +18,6 @@ async function addCdn(page, { ttl = '3600', onChange = 'ttl', fallback = 'none',
     return n.id;
   }, { ttl, onChange, fallback, origin, users });
 }
-const goTo = (page, i) => page.evaluate((k) => {
-  const S = window.__sdl.S;
-  for (let j = 0; j < k; j++) { S.done[j] = true; S.verified[j] = true; }
-  S.mission = k; S.est = true; window.__sdl.afterChange(true);
-}, i);
 const measure = (page) => page.evaluate(() => {
   const s = window.__sdl, m = s.model(), at = (id) => m.node[id] || {};
   const cdn = s.S.nodes.find((n) => n.type === 'cdn');
@@ -32,9 +27,6 @@ const measure = (page) => page.evaluate(() => {
   };
 });
 // Pause and go back to t = 0, where traffic has no wobble, so numbers can be pinned exactly.
-const calm = (page) => page.evaluate(() => { const s = window.__sdl; s.run.playing = false; s.run.t = 0; });
-const select = async (page, id) => { await page.focus(`[data-node="${id}"]`); await page.keyboard.press('Enter'); };
-const set = (page, id, props) => page.evaluate(([i, p]) => { Object.assign(window.__sdl.S.nodes.find((n) => n.id === i), p); window.__sdl.afterDesignChange(); }, [id, props]);
 
 test.describe('Level 5 · playthrough', () => {
   test('all three missions can be completed', async ({ page }) => {
@@ -53,7 +45,7 @@ test.describe('Level 5 · playthrough', () => {
 
     // Mission 2: fall back to the origin (through the inspector), then take the CDN down.
     await page.click('#mission .complete button');
-    await select(page, id);
+    await selectNode(page, id);
     await page.locator('#insp').getByRole('button', { name: /^Load from the origin/ }).click();
     await page.click('#playBtn');
     await fastForward(page, 5);
@@ -65,7 +57,7 @@ test.describe('Level 5 · playthrough', () => {
 
     // Mission 3: give changed files a new name, then ship the logo.
     await page.click('#mission .complete button');
-    await select(page, id);
+    await selectNode(page, id);
     await page.locator('#insp').getByRole('button', { name: /^Give it a new name/ }).click();
     await page.click('#playBtn');
     await fastForward(page, 5);
@@ -84,7 +76,7 @@ test.describe('Level 5 · playthrough', () => {
 test.describe('Level 5 · numbers', () => {
   test('pinned designs match the simulation model', async ({ page }) => {
     await freshPage(page, '#level-5/build');
-    await goTo(page, 0);
+    await openMission(page, 0, { estimate: true });
     await calm(page);
     // Start: every file comes from Frankfurt. America: 120 + 5 (load balancer, 80% busy) + 0.5 + 2 × 3.2 = 131.9 ms.
     let r = await measure(page);
@@ -108,7 +100,7 @@ test.describe('Level 5 · numbers', () => {
   test('the TTL sets the edge hit rate and the far shoppers\' wait', async ({ page }) => {
     await freshPage(page, '#level-5/build');
     const id = await addCdn(page);
-    const at = async (ttl) => { await set(page, id, { ttl }); await calm(page); return measure(page); };
+    const at = async (ttl) => { await setProps(page, id, { ttl }); await calm(page); return measure(page); };
     expect((await at('60')).cdnHit).toBeCloseTo(2 / 3, 9); // 1 request in 3 misses
     expect((await at('60')).farFileMs).toBeCloseTo(70.5, 1);
     expect((await at('600')).farFileMs).toBeCloseTo(45.2, 1);
@@ -127,21 +119,21 @@ test.describe('Level 5 · numbers', () => {
 test.describe('Level 5 · teaching feedback', () => {
   test('without a CDN, America waits for every file; a 1-minute TTL is still too slow', async ({ page }) => {
     await freshPage(page, '#level-5/build');
-    await goTo(page, 0);
+    await openMission(page, 0, { estimate: true });
     await page.click('#playBtn');
     await fastForward(page, 1);
     await expect(page.locator('#goals')).toContainText('132 ms');
     const id = await addCdn(page, { ttl: '60' });
     await fastForward(page, 1);
     await expect(page.locator('#goals')).toContainText('70 ms');
-    await set(page, id, { ttl: '600' });
+    await setProps(page, id, { ttl: '600' });
     await fastForward(page, 1);
     await expect(page.locator('#goals')).toContainText('45 ms');
   });
 
   test('a CDN with no origin holds nothing, so every file fails', async ({ page }) => {
     await freshPage(page, '#level-5/build');
-    await goTo(page, 0);
+    await openMission(page, 0, { estimate: true });
     await addCdn(page, { origin: false });
     await calm(page);
     expect((await measure(page)).served).toBeCloseTo(50, 6);
@@ -169,7 +161,7 @@ test.describe('Level 5 · teaching feedback', () => {
 
   test('a CDN outage without fallback breaks every file; with fallback the origin takes them', async ({ page }) => {
     await freshPage(page, '#level-5/build');
-    await goTo(page, 1);
+    await openMission(page, 1, { estimate: true });
     const id = await addCdn(page);
     await page.click('#playBtn');
     await page.click('#exp-crash-cdn');
@@ -179,7 +171,7 @@ test.describe('Level 5 · teaching feedback', () => {
     await fastForward(page, 3);
     expect(await state(page, () => window.__sdl.S.exp[window.__sdl.S.mission]['crash-cdn'])).toBe(false);
     await expect(page.locator('#log')).toContainText('load files from the origin');
-    await set(page, id, { fallback: 'origin' });
+    await setProps(page, id, { fallback: 'origin' });
     await calm(page);
     const r = await measure(page);
     expect(r.served).toBeCloseTo(100, 6);
@@ -189,7 +181,7 @@ test.describe('Level 5 · teaching feedback', () => {
 
   test('a long TTL keeps the old logo; invalidating misses browsers; a new name reaches everyone', async ({ page }) => {
     await freshPage(page, '#level-5/build');
-    await goTo(page, 2);
+    await openMission(page, 2, { estimate: true });
     const id = await addCdn(page);
     expect((await measure(page)).fileStaleSecs).toBe(3600);
     await page.click('#playBtn');
@@ -198,18 +190,18 @@ test.describe('Level 5 · teaching feedback', () => {
     expect(await state(page, () => window.__sdl.S.exp[window.__sdl.S.mission]['new-logo'])).toBe(false);
     await expect(page.locator('#log')).toContainText('old logo for up to 1 hour');
     await page.click('#exp-new-logo'); // stop it, invalidate instead, and ship again
-    await set(page, id, { onChange: 'purge' });
+    await setProps(page, id, { onChange: 'purge' });
     expect((await measure(page)).fileStaleSecs).toBe(3600);
     await page.click('#exp-new-logo');
     await fastForward(page, 3);
     expect(await state(page, () => window.__sdl.S.exp[window.__sdl.S.mission]['new-logo'])).toBe(false);
     await expect(page.locator('#log')).toContainText('browsers that already had it');
     // A 1-minute TTL is fresh enough, but too slow for America.
-    await set(page, id, { onChange: 'ttl', ttl: '60' });
+    await setProps(page, id, { onChange: 'ttl', ttl: '60' });
     let r = await measure(page);
     expect(r.fileStaleSecs).toBe(60);
     expect(r.farFileMs).toBeGreaterThan(60);
-    await set(page, id, { onChange: 'version', ttl: '3600' });
+    await setProps(page, id, { onChange: 'version', ttl: '3600' });
     r = await measure(page);
     expect(r.fileStaleSecs).toBe(0);
     expect(r.farFileMs).toBeLessThan(60);
@@ -218,7 +210,7 @@ test.describe('Level 5 · teaching feedback', () => {
   test('a restarted experiment or a changed design logs its advice again', async ({ page }) => {
     // The log checks every 0.2 s of real time. Paused, each check runs by hand: no check falls between fast clicks.
     await freshPage(page, '#level-5/build');
-    await goTo(page, 2);
+    await openMission(page, 2, { estimate: true });
     const id = await addCdn(page);
     await page.evaluate(() => { window.__sdl.run.playing = false; });
     const check = () => page.evaluate(async () => { const { observe } = await import('/js/ui/log.js'); observe(window.__sdl.model()); });
@@ -236,10 +228,10 @@ test.describe('Level 5 · teaching feedback', () => {
     await page.evaluate(async () => (await import('/js/ui/log.js')).log('Logo shipped again.', ''));
     await check();
     expect(await latest()).toContain('old logo for up to 1 hour');
-    await set(page, id, { onChange: 'purge' }); // while it runs
+    await setProps(page, id, { onChange: 'purge' }); // while it runs
     await check();
     expect(await latest()).toContain('browsers that already had it');
-    await set(page, id, { onChange: 'version' }); // fixed: the log says so
+    await setProps(page, id, { onChange: 'version' }); // fixed: the log says so
     await check();
     expect(await latest()).toContain('All good');
   });
@@ -259,12 +251,12 @@ test.describe('Level 5 · teaching feedback', () => {
 
   test('the inspector shows the CDN, the web servers\' files and both round trips', async ({ page }) => {
     await freshPage(page, '#level-5/build');
-    await goTo(page, 0);
+    await openMission(page, 0, { estimate: true });
     const id = await addCdn(page);
     await expect(page.locator(`[data-node="${id}"] .node-sub`)).toHaveText('TTL 1 h');
     await expect(page.locator('.edge-label', { hasText: 'files' })).not.toHaveCount(0);
     await expect(page.locator('.edge-label', { hasText: 'misses' })).not.toHaveCount(0);
-    await select(page, id);
+    await selectNode(page, id);
     await expect(page.locator('#inspLive')).toContainText('$1,037');
     await expect(page.locator('#inspLive')).toContainText('52 TB');
     await page.click('#playBtn');
@@ -273,9 +265,9 @@ test.describe('Level 5 · teaching feedback', () => {
     await expect(page.locator('#inspLive')).toContainText('misses/s pulled from the origin');
     await page.locator('#insp').getByRole('button', { name: /^1 day/ }).click();
     await expect(page.locator(`[data-node="${id}"] .node-sub`)).toHaveText('TTL 1 day');
-    await select(page, 'w1');
+    await selectNode(page, 'w1');
     await expect(page.locator('#inspLive')).toContainText('pages + files arriving');
-    await select(page, 'u');
+    await selectNode(page, 'u');
     await expect(page.locator('#insp .live')).toContainText('120 ms');
     await expect(page.locator('#insp .live')).toContainText('America (30%)');
   });
@@ -312,14 +304,14 @@ test.describe('Level 5 · teaching feedback', () => {
 test.describe('Level 5 · fixes from QA', () => {
   test('Mission 2: a CDN without fallback is a single point of failure; with fallback it is not', async ({ page }) => {
     await freshPage(page, '#level-5/build');
-    await goTo(page, 1);
+    await openMission(page, 1, { estimate: true });
     const id = await addCdn(page);
     await calm(page);
     expect((await measure(page)).spof).toBe(1);
     await page.click('#playBtn');
     await fastForward(page, 1);
     await expect(page.locator('#goals li', { hasText: 'No single point of failure' })).toHaveClass(/fail/);
-    await set(page, id, { fallback: 'origin' });
+    await setProps(page, id, { fallback: 'origin' });
     await calm(page);
     expect((await measure(page)).spof).toBe(0);
     await page.click('#playBtn');
@@ -338,19 +330,18 @@ test.describe('Level 5 · fixes from QA', () => {
 test.describe('Level 5 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-5/build');
-    const enter = async (selector) => { await page.focus(selector); await page.keyboard.press('Enter'); };
     await page.fill('#estIn', '52');
-    await enter('#estBtn');
-    await enter('.pal-item[data-type="cdn"]');
+    await pressEnterOn(page, '#estBtn');
+    await pressEnterOn(page, '.pal-item[data-type="cdn"]');
     const id = await state(page, () => window.__sdl.S.nodes.find((n) => n.type === 'cdn').id);
-    await enter(`[data-node="${id}"]`);
-    await enter('#insp [data-focus-key="ttl-3600"]');
+    await pressEnterOn(page, `[data-node="${id}"]`);
+    await pressEnterOn(page, '#insp [data-focus-key="ttl-3600"]');
     while (await page.locator('#insp .conn').getByRole('button', { name: 'Connect', exact: true }).count()) {
       await page.locator('#insp .conn').getByRole('button', { name: 'Connect', exact: true }).first().focus();
       await page.keyboard.press('Enter');
     }
     expect((await measure(page)).cost).toBe(3042);
-    await enter('#playBtn');
+    await pressEnterOn(page, '#playBtn');
     await fastForward(page, 5);
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
   });
@@ -381,10 +372,10 @@ test.describe('Level 5 · layout and accessibility', () => {
         for (const tab of ['lesson', 'build', 'quiz']) {
           await page.click(`#tab-${tab}`);
           if (tab === 'build') {
-            await goTo(page, 0);
+            await openMission(page, 0, { estimate: true });
             const id = await addCdn(page);
             await page.click('#playBtn'); await playFor(page, 0.5);
-            await select(page, id);
+            await selectNode(page, id);
           }
           const results = await new AxeBuilder({ page }).setLegacyMode().analyze();
           expect(results.violations.map((v) => `${tab}: ${v.id} (${v.nodes.length})`)).toEqual([]);

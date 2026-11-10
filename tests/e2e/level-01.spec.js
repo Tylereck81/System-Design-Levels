@@ -2,7 +2,7 @@ import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
 import {
   QUIZ_KEY_L1, freshPage, fastForward, playFor, state, nodeIds, model, logText,
-  tap, dragBetween, unlockMissions, buildBasic, trackErrors, reloadGame,
+  tap, dragBetween, openMission, buildBasic, trackErrors, reloadGame,
 } from '../helpers.js';
 
 test.describe('Level 1 · full playthrough', () => {
@@ -99,7 +99,7 @@ test.describe('Level 1 · quiz', () => {
 test.describe('Level 1 · robustness', () => {
   test('changing the design on another mission resets an unfinished mission\'s check', async ({ page }) => {
     await freshPage(page, '#build');
-    await unlockMissions(page, 2);
+    await openMission(page, 2);
     const ids = await buildBasic(page);
     // Mission 3: estimate, scale both tiers to L, hold the targets.
     await page.fill('#estIn', '463');
@@ -125,7 +125,7 @@ test.describe('Level 1 · robustness', () => {
   test('crashing with no web server does not freeze the simulation', async ({ page }) => {
     const errors = trackErrors(page);
     await freshPage(page, '#build');
-    await unlockMissions(page, 2);
+    await openMission(page, 2);
     await page.fill('#estIn', '463');
     await page.click('#estBtn');
     await page.click('#exp-crash');
@@ -146,7 +146,7 @@ test.describe('Level 1 · robustness', () => {
 
   test('only one Break-it experiment runs at a time, so both cannot count together', async ({ page }) => {
     await freshPage(page, '#build');
-    await unlockMissions(page, 2);
+    await openMission(page, 2);
     await buildBasic(page);
     await page.fill('#estIn', '463');
     await page.click('#estBtn');
@@ -227,7 +227,7 @@ test.describe('Level 1 · robustness', () => {
 
   test('reset level progress clears missions and canvas but keeps the quiz', async ({ page }) => {
     await freshPage(page, '#build');
-    await unlockMissions(page, 2);
+    await openMission(page, 2);
     await buildBasic(page);
     await page.evaluate(() => { window.__sdl.S.quiz = { 0: 2 }; window.__sdl.afterChange(); });
     await page.click('#resetLevel');
@@ -250,7 +250,7 @@ test.describe('Level 1 · teaching feedback', () => {
 
   test('changing the design after verifying resets the check', async ({ page }) => {
     await freshPage(page, '#build');
-    await unlockMissions(page, 2);
+    await openMission(page, 2);
     await page.fill('#estIn', '463');
     await page.click('#estBtn');
     const ids = await buildBasic(page);
@@ -271,7 +271,7 @@ test.describe('Level 1 · teaching feedback', () => {
 
   test('the log explains slow responses, single-server capacity and the NoSQL cost', async ({ page }) => {
     await freshPage(page, '#build');
-    await unlockMissions(page, 1);
+    await openMission(page, 1);
     let ids = await buildBasic(page, { db: false });
     await expect(page.locator(`[data-node="${ids.web}"] .node-sub`)).toHaveText('S · 100 req/s (½)');
     await page.evaluate(() => window.__sdl.addNode('db'));
@@ -312,7 +312,7 @@ test.describe('Level 1 · teaching feedback', () => {
 test.describe('Level 1 · layout', () => {
   test('laptop 1440×900: inspector fully visible', async ({ page }) => {
     await freshPage(page, '#build');
-    await unlockMissions(page, 2);
+    await openMission(page, 2);
     await page.evaluate(() => window.__sdl.addNode('web'));
     const box = await page.locator('.insp-card').boundingBox();
     expect(box.y + box.height).toBeLessThanOrEqual(900);
@@ -389,7 +389,7 @@ test.describe('Level 1 · accessibility', () => {
 
   test('keyboard only: Missions 2 and 3 keep focus on a control after every action', async ({ page }) => {
     await freshPage(page, '#build');
-    await unlockMissions(page, 1);
+    await openMission(page, 1);
     const ids = await buildBasic(page, { db: false });
     const focused = () => page.evaluate(() => {
       const a = document.activeElement;

@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from '../helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, openMission, pressEnterOn } from '../helpers.js';
 
 // Level 2: load balancer and horizontal scaling.
 
@@ -23,11 +23,6 @@ async function build(page, { webs = ['M', 'M', 'M'], db = 'L', lbs = 1, connectD
     return { webs: all('web').map((n) => n.id), lbs: all('lb').map((n) => n.id) };
   }, { webs, db, lbs, connectDb });
 }
-const goTo = (page, i) => page.evaluate((k) => {
-  const S = window.__sdl.S;
-  for (let j = 0; j < k; j++) { S.done[j] = true; S.verified[j] = true; }
-  S.mission = k; window.__sdl.afterChange(true);
-}, i);
 const measure = (page) => page.evaluate(() => { const m = window.__sdl.model(); return { served: m.servedPct, latency: m.latency, cost: m.cost, spof: m.spof, issue: m.issue }; });
 
 test.describe('Level 2 · playthrough', () => {
@@ -117,7 +112,7 @@ test.describe('Level 2 · numbers', () => {
     expect(r.served).toBeCloseTo(100, 6);
     expect(r.latency).toBeCloseTo(113.32, 1);
     // 1,204 req/s over 5 M with an XL database.
-    await goTo(page, 1);
+    await openMission(page, 1);
     await page.evaluate(() => { window.__sdl.S.est = true; window.__sdl.run.t = 0; });
     await page.evaluate(() => {
       const s = window.__sdl, S = s.S;
@@ -224,7 +219,7 @@ test.describe('Level 2 · teaching feedback', () => {
   test('Mission 2: leaving the database at L overloads it', async ({ page }) => {
     await freshPage(page, '#level-2/build');
     await build(page, { webs: ['M', 'M', 'M', 'M', 'M'] });
-    await goTo(page, 1);
+    await openMission(page, 1);
     await page.evaluate(() => { window.__sdl.S.est = true; window.__sdl.afterChange(); });
     expect((await measure(page)).served).toBeCloseTo(66.4, 1);
     await page.click('#playBtn');
@@ -234,7 +229,7 @@ test.describe('Level 2 · teaching feedback', () => {
 
   test('Mission 3: a standby connected to only some web servers is not ready, and the message names the fix', async ({ page }) => {
     await freshPage(page, '#level-2/build');
-    await goTo(page, 2);
+    await openMission(page, 2);
     await build(page, { webs: ['M', 'M', 'M', 'M', 'M'], db: 'XL' });
     await page.evaluate(() => {
       const s = window.__sdl, S = s.S;
@@ -268,7 +263,7 @@ test.describe('Level 2 · teaching feedback', () => {
 
   test('Mission 3: one load balancer crashed means nothing is served; a standby keeps the site up', async ({ page }) => {
     await freshPage(page, '#level-2/build');
-    await goTo(page, 2);
+    await openMission(page, 2);
     await build(page, { webs: ['M', 'M', 'M', 'M', 'M'], db: 'XL' });
     await page.click('#playBtn');
     await page.click('#exp-crash-lb');
@@ -293,7 +288,7 @@ test.describe('Level 2 · teaching feedback', () => {
 
   test('the estimate box accepts formatted answers and gives specific hints', async ({ page }) => {
     await freshPage(page, '#level-2/build');
-    await goTo(page, 1);
+    await openMission(page, 1);
     await page.fill('#estIn', '602');
     await page.click('#estBtn');
     await expect(page.locator('#estFb')).toContainText('twice the average');
@@ -343,7 +338,7 @@ test.describe('Level 2 · break-it results', () => {
 
   test('the outcome is judged at peak traffic: L + M + M + M never passes', async ({ page }) => {
     await freshPage(page, '#level-2/build');
-    await goTo(page, 1);
+    await openMission(page, 1);
     await page.evaluate(() => { window.__sdl.S.est = true; });
     await build(page, { webs: ['L', 'M', 'M', 'M'], db: 'XL' });
     await page.evaluate(() => { window.__sdl.S.nodes.find((n) => n.type === 'lb').algo = 'wrr'; window.__sdl.afterDesignChange(); });
@@ -359,7 +354,7 @@ test.describe('Level 2 · break-it results', () => {
 
   test('when the database is the bottleneck, the crash message names it', async ({ page }) => {
     await freshPage(page, '#level-2/build');
-    await goTo(page, 1);
+    await openMission(page, 1);
     await page.evaluate(() => { window.__sdl.S.est = true; });
     await build(page, { webs: ['M', 'M', 'M', 'M', 'M', 'M'], db: 'L' });
     await page.click('#playBtn');
@@ -415,7 +410,7 @@ test.describe('Level 2 · saved data and inputs', () => {
 
   test('the estimate box rejects a negative number', async ({ page }) => {
     await freshPage(page, '#level-2/build');
-    await goTo(page, 1);
+    await openMission(page, 1);
     await page.fill('#estIn', '-1204');
     await page.click('#estBtn');
     await expect(page.locator('#estFb')).toContainText('Type the estimate as a number');
@@ -426,12 +421,11 @@ test.describe('Level 2 · saved data and inputs', () => {
 test.describe('Level 2 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-2/build');
-    const enter = async (selector) => { await page.focus(selector); await page.keyboard.press('Enter'); };
-    await enter('.pal-item[data-type="lb"]');
-    for (let i = 0; i < 3; i++) await enter('.pal-item[data-type="web"]');
+    await pressEnterOn(page, '.pal-item[data-type="lb"]');
+    for (let i = 0; i < 3; i++) await pressEnterOn(page, '.pal-item[data-type="web"]');
     const ids = await page.evaluate(() => Object.fromEntries(['lb', 'web'].map((t) => [t, window.__sdl.S.nodes.filter((n) => n.type === t).map((n) => n.id)])));
     const connectAll = async (nodeId) => {
-      await enter(`[data-node="${nodeId}"]`);
+      await pressEnterOn(page, `[data-node="${nodeId}"]`);
       while (await page.locator('#insp .conn').getByRole('button', { name: 'Connect', exact: true }).count()) {
         await page.locator('#insp .conn').getByRole('button', { name: 'Connect', exact: true }).first().focus();
         await page.keyboard.press('Enter');
@@ -441,23 +435,23 @@ test.describe('Level 2 · layout and accessibility', () => {
     await connectAll(ids.lb[0]);
     for (const w of ids.web) {
       await connectAll(w);
-      await enter(`[data-node="${w}"]`);
-      await enter('#insp .seg:not(.two) button:nth-child(1)'); // S
+      await pressEnterOn(page, `[data-node="${w}"]`);
+      await pressEnterOn(page, '#insp .seg:not(.two) button:nth-child(1)'); // S
     }
-    await enter('[data-node="w1"]');
-    await enter('#insp .seg:not(.two) button:nth-child(1)'); // S
-    await enter('#playBtn');
+    await pressEnterOn(page, '[data-node="w1"]');
+    await pressEnterOn(page, '#insp .seg:not(.two) button:nth-child(1)'); // S
+    await pressEnterOn(page, '#playBtn');
     await fastForward(page, 5);
-    await enter('#exp-crash-web');
+    await pressEnterOn(page, '#exp-crash-web');
     await fastForward(page, 2);
-    await enter('#exp-crash-web');
+    await pressEnterOn(page, '#exp-crash-web');
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
   });
 
   test('phone: canvas on the first screen and no sideways scroll on Mission 3', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await freshPage(page, '#level-2/build');
-    await goTo(page, 2);
+    await openMission(page, 2);
     await build(page, { webs: ['M', 'M', 'M', 'M', 'M'], db: 'XL', lbs: 2 });
     const top = await page.locator('#cv').evaluate((e) => e.getBoundingClientRect().top);
     expect(top).toBeLessThan(844);

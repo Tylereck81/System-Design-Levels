@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors } from '../helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, openMission, selectNode, setProps, calm, pressEnterOn } from '../helpers.js';
 
 // Level 9: Scale the data tier with sharding.
 // The level starts inside one data center: Users ('u'), DNS ('d'), one load balancer ('l'), two autoscaled groups of
@@ -18,19 +18,11 @@ const addShards = (page, props = {}) => page.evaluate((p) => {
   return n.id;
 }, props);
 const addNoSql = (page) => page.evaluate(() => { const s = window.__sdl; s.addNode('nosql'); const id = s.S.nodes.at(-1).id; s.tryConnect('w1', id); s.tryConnect('w2', id); s.afterDesignChange(); return id; });
-const goTo = (page, i) => page.evaluate((k) => {
-  const S = window.__sdl.S;
-  for (let j = 0; j < k; j++) { S.done[j] = true; S.verified[j] = true; }
-  S.mission = k; S.est = true; window.__sdl.afterChange(true);
-}, i);
 const measure = (page) => page.evaluate(() => {
   const s = window.__sdl, m = s.model(), z = s.S.nodes.find((n) => n.type === 'shards');
   const st = z ? m.node[z.id] || {} : {};
   return { served: m.servedPct, latency: m.latency, cost: m.cost, max: m.maxShardUtil, loads: (st.shards || []).map((x) => Math.round(x.load)), primary: (m.node.b || {}).util };
 });
-const calm = (page) => page.evaluate(() => { const s = window.__sdl; s.run.playing = false; s.run.t = 0; });
-const select = async (page, id) => { await page.focus(`[data-node="${id}"]`); await page.keyboard.press('Enter'); };
-const set = (page, id, props) => page.evaluate(([i, p]) => { Object.assign(window.__sdl.S.nodes.find((n) => n.id === i), p); window.__sdl.afterDesignChange(); }, [id, props]);
 
 test.describe('Level 9 · playthrough', () => {
   test('all three missions can be completed', async ({ page }) => {
@@ -42,7 +34,7 @@ test.describe('Level 9 · playthrough', () => {
     await page.fill('#estIn', '3');
     await page.click('#estBtn');
     const z = await addShards(page, { size: 'S', count: '2', key: 'date' });
-    await select(page, z);
+    await selectNode(page, z);
     await page.locator('#insp').getByRole('button', { name: /^3 shards/ }).click();
     await page.locator('#insp').getByRole('button', { name: /^account_id % N/ }).click();
     await page.locator('#insp [data-focus-key="size-XL"]').click();
@@ -54,7 +46,7 @@ test.describe('Level 9 · playthrough', () => {
 
     // Mission 2: a shard for each very popular account.
     await page.click('#mission .complete button');
-    await select(page, z);
+    await selectNode(page, z);
     await page.locator('#insp').getByRole('button', { name: /^A shard for each/ }).click();
     await page.click('#playBtn');
     await fastForward(page, 5);
@@ -97,7 +89,7 @@ test.describe('Level 9 · numbers', () => {
     expect(r.cost).toBe(2027);
     // Keys that pile queries onto one shard, however many shards.
     for (const [props, max] of [[{ key: 'country' }, 1260 / 1600], [{ key: 'date' }, 1500 / 1600], [{ key: 'country', count: '8' }, 1260 / 1600], [{ key: 'date', count: '8' }, 1500 / 1600]]) {
-      await set(page, z, { count: '3', ...props });
+      await setProps(page, z, { count: '3', ...props });
       await calm(page);
       expect((await measure(page)).max).toBeCloseTo(max, 6);
     }
@@ -105,29 +97,29 @@ test.describe('Level 9 · numbers', () => {
 
   test('hot accounts: more shards don\'t help, their own shards do', async ({ page }) => {
     await freshPage(page, '#level-9/build');
-    await goTo(page, 1);
+    await openMission(page, 1, { estimate: true });
     const z = await addShards(page);
     await calm(page);
     expect((await measure(page)).loads).toEqual([1400, 800, 800]); // 20% of 3,000 on the first shard
-    await set(page, z, { count: '8', size: 'L' });
+    await setProps(page, z, { count: '8', size: 'L' });
     await calm(page);
     let r = await measure(page);
     expect(r.loads[0]).toBe(900);
     expect(r.served).toBeLessThan(99);
-    await set(page, z, { count: '3', size: 'XL', hot: 'own' });
+    await setProps(page, z, { count: '3', size: 'XL', hot: 'own' });
     await calm(page);
     r = await measure(page);
     expect(r.loads).toEqual([800, 800, 800, 200, 200, 200]);
     expect(r.max).toBeCloseTo(0.5, 6);
     expect(r.cost).toBe(3377);
-    await set(page, z, { count: '8', hot: 'stay' }); // brute force: eight XL shards
+    await setProps(page, z, { count: '8', hot: 'stay' }); // brute force: eight XL shards
     expect((await measure(page)).cost).toBe(4277);
     await expect(page.locator('#goals li', { hasText: 'Spend at most $3,500' })).toHaveClass(/fail/);
   });
 
   test('the NoSQL store takes 40% of the queries off the shards', async ({ page }) => {
     await freshPage(page, '#level-9/build');
-    await goTo(page, 2);
+    await openMission(page, 2, { estimate: true });
     await addShards(page, { hot: 'own' });
     await calm(page);
     expect((await measure(page)).max).toBeCloseTo(1200 / 1600, 6);
@@ -149,7 +141,7 @@ test.describe('Level 9 · numbers', () => {
 test.describe('Level 9 · teaching feedback', () => {
   test('the log names the busiest shard', async ({ page }) => {
     await freshPage(page, '#level-9/build');
-    await goTo(page, 0);
+    await openMission(page, 0, { estimate: true });
     await addShards(page, { key: 'country' });
     // The first log check, by hand at t = 0: in play it can come late, when the traffic's wobble has added 2%.
     await page.evaluate(async () => { const { observe } = await import('/js/ui/log.js'); window.__sdl.run.t = 0; observe(window.__sdl.model()); });
@@ -161,7 +153,7 @@ test.describe('Level 9 · teaching feedback', () => {
 
   test('resharding from 4 to 5 moves 80% of accounts', async ({ page }) => {
     await freshPage(page, '#level-9/build');
-    await goTo(page, 2);
+    await openMission(page, 2, { estimate: true });
     await addShards(page, { count: '4', hot: 'own' });
     await addNoSql(page);
     await page.click('#playBtn');
@@ -180,11 +172,11 @@ test.describe('Level 9 · teaching feedback', () => {
 
   test('the inspector shows each shard\'s load', async ({ page }) => {
     await freshPage(page, '#level-9/build');
-    await goTo(page, 1);
+    await openMission(page, 1, { estimate: true });
     const z = await addShards(page);
     await page.click('#playBtn');
     await fastForward(page, 1);
-    await select(page, z);
+    await selectNode(page, z);
     await expect(page.locator('#insp')).toContainText('Shard size (each shard)');
     await expect(page.locator('#inspLive')).toContainText('queries/s on each shard');
     await expect(page.locator('#inspLive')).toContainText('88%');
@@ -221,21 +213,20 @@ test.describe('Level 9 · teaching feedback', () => {
 test.describe('Level 9 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-9/build');
-    const enter = async (selector) => { await page.focus(selector); await page.keyboard.press('Enter'); };
     await page.fill('#estIn', '3');
-    await enter('#estBtn');
-    for (const id of ['b', 'r']) { await enter(`[data-node="${id}"]`); await enter('#insp [data-focus-key="remove"]'); }
-    await enter('.pal-item[data-type="shards"]');
+    await pressEnterOn(page, '#estBtn');
+    for (const id of ['b', 'r']) { await pressEnterOn(page, `[data-node="${id}"]`); await pressEnterOn(page, '#insp [data-focus-key="remove"]'); }
+    await pressEnterOn(page, '.pal-item[data-type="shards"]');
     const z = await state(page, () => window.__sdl.S.nodes.at(-1).id);
-    await enter(`[data-node="${z}"]`);
-    await enter('#insp [data-focus-key="count-3"]');
-    await enter('#insp [data-focus-key="size-XL"]');
+    await pressEnterOn(page, `[data-node="${z}"]`);
+    await pressEnterOn(page, '#insp [data-focus-key="count-3"]');
+    await pressEnterOn(page, '#insp [data-focus-key="size-XL"]');
     while (await page.locator('#insp .conn').getByRole('button', { name: 'Connect', exact: true }).count()) {
       await page.locator('#insp .conn').getByRole('button', { name: 'Connect', exact: true }).first().focus();
       await page.keyboard.press('Enter');
     }
     expect((await measure(page)).cost).toBe(2027);
-    await enter('#playBtn');
+    await pressEnterOn(page, '#playBtn');
     await fastForward(page, 5);
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
   });
@@ -267,11 +258,11 @@ test.describe('Level 9 · layout and accessibility', () => {
         for (const tab of ['lesson', 'build', 'quiz']) {
           await page.click(`#tab-${tab}`);
           if (tab === 'build') {
-            await goTo(page, 2);
+            await openMission(page, 2, { estimate: true });
             const z = await addShards(page, { hot: 'own' });
             await addNoSql(page);
             await page.click('#playBtn'); await playFor(page, 0.5);
-            await select(page, z);
+            await selectNode(page, z);
           }
           const results = await new AxeBuilder({ page }).setLegacyMode().analyze();
           expect(results.violations.map((v) => `${tab}: ${v.id} (${v.nodes.length})`)).toEqual([]);

@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, sampleRoutes } from '../helpers.js';
+import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, sampleRoutes, openMission, selectNode, setProps, calm, pressEnterOn } from '../helpers.js';
 
 // Level 7: Multiple data centers.
 // The level starts with one data center in Frankfurt ('f', size L, standing for Level 6's whole design), DNS ('d',
@@ -15,19 +15,11 @@ const addVirginia = (page, size = 'S') => page.evaluate((sz) => {
   s.afterDesignChange();
   return n.id;
 }, size);
-const goTo = (page, i) => page.evaluate((k) => {
-  const S = window.__sdl.S;
-  for (let j = 0; j < k; j++) { S.done[j] = true; S.verified[j] = true; }
-  S.mission = k; S.est = true; window.__sdl.afterChange(true);
-}, i);
 const measure = (page) => page.evaluate(() => {
   const s = window.__sdl, m = s.model(), at = (id) => m.node[id] || {};
   const v = s.S.nodes.find((n) => n.type === 'dc' && n.region === 'far');
   return { served: m.servedPct, latency: m.latency, cost: m.cost, spof: m.spof, farPageMs: m.farPageMs, noData: m.noDataPct, lagWrites: m.lagWrites, f: at('f').util, v: v ? at(v.id).util : null };
 });
-const calm = (page) => page.evaluate(() => { const s = window.__sdl; s.run.playing = false; s.run.t = 0; });
-const select = async (page, id) => { await page.focus(`[data-node="${id}"]`); await page.keyboard.press('Enter'); };
-const set = (page, id, props) => page.evaluate(([i, p]) => { Object.assign(window.__sdl.S.nodes.find((n) => n.id === i), p); window.__sdl.afterDesignChange(); }, [id, props]);
 const connect = (page, a, b) => page.evaluate(([x, y]) => window.__sdl.tryConnect(x, y), [a, b]);
 
 test.describe('Level 7 · playthrough', () => {
@@ -42,9 +34,9 @@ test.describe('Level 7 · playthrough', () => {
     await page.locator('#insp').getByRole('button', { name: /^Virginia/ }).click();
     await page.locator('#insp .conn').getByRole('button', { name: 'Connect' }).first().click(); // Users → Virginia DC
     await expect(page.locator(`[data-node="${v}"] .node-name`)).toHaveText('Virginia DC ');
-    await select(page, 'd');
+    await selectNode(page, 'd');
     await page.locator('#insp').getByRole('button', { name: /^GeoDNS/ }).click();
-    await select(page, 'f');
+    await selectNode(page, 'f');
     await page.locator('#insp [data-focus-key="size-M"]').click();
     expect((await measure(page)).cost).toBe(2942);
     await page.click('#playBtn');
@@ -55,7 +47,7 @@ test.describe('Level 7 · playthrough', () => {
     await page.click('#mission .complete button');
     await page.fill('#estIn', '2,000');
     await page.click('#estBtn');
-    await select(page, 'f');
+    await selectNode(page, 'f');
     await page.locator('#insp [data-focus-key="size-L"]').click();
     await connect(page, v, 'f');
     await expect(page.locator('.edge-label', { hasText: 'replicates' })).not.toHaveCount(0);
@@ -86,7 +78,7 @@ test.describe('Level 7 · numbers', () => {
     expect(r.spof).toBe(1);
     // Virginia with GeoDNS: 40 + 50 = 90 ms; each data center gets its own region.
     await addVirginia(page);
-    await set(page, 'd', { routing: 'geo' });
+    await setProps(page, 'd', { routing: 'geo' });
     await calm(page);
     r = await measure(page);
     expect(r.farPageMs).toBeCloseTo(90, 6);
@@ -119,10 +111,10 @@ test.describe('Level 7 · teaching feedback', () => {
 
   test('Frankfurt sized for Europe alone fails over badly; without replication the data is missing', async ({ page }) => {
     await freshPage(page, '#level-7/build');
-    await goTo(page, 1);
+    await openMission(page, 1, { estimate: true });
     const v = await addVirginia(page);
-    await set(page, 'd', { routing: 'geo' });
-    await set(page, 'f', { size: 'M' });
+    await setProps(page, 'd', { routing: 'geo' });
+    await setProps(page, 'f', { size: 'M' });
     await page.click('#playBtn');
     await page.click('#exp-dc-offline');
     await calm(page);
@@ -140,7 +132,7 @@ test.describe('Level 7 · teaching feedback', () => {
     await fastForward(page, 2);
     await expect(page.locator('#log')).toContainText('over capacity');
     expect(await state(page, () => window.__sdl.S.exp[window.__sdl.S.mission]['dc-offline'])).toBe(false);
-    await set(page, 'f', { size: 'L' });
+    await setProps(page, 'f', { size: 'L' });
     await calm(page);
     r = await measure(page);
     expect(r.served).toBeCloseTo(100, 6);
@@ -150,7 +142,7 @@ test.describe('Level 7 · teaching feedback', () => {
 
   test('plain DNS keeps sending shoppers to the dead data center', async ({ page }) => {
     await freshPage(page, '#level-7/build');
-    await goTo(page, 1);
+    await openMission(page, 1, { estimate: true });
     const v = await addVirginia(page);
     await connect(page, v, 'f'); await connect(page, 'f', v);
     await page.click('#playBtn');
@@ -167,7 +159,7 @@ test.describe('Level 7 · teaching feedback', () => {
     await connect(page, v, 'f'); await connect(page, 'f', v);
     const between = () => state(page, () => window.__sdl.S.edges.filter((e) => ['f'].includes(e.from) !== ['f'].includes(e.to) && e.from !== 'u' && e.from !== 'k' && e.to !== 'u').length);
     expect(await between()).toBe(2);
-    await select(page, 'f');
+    await selectNode(page, 'f');
     await page.locator('#insp .conn', { hasText: 'Frankfurt DC → Virginia DC' }).getByRole('button', { name: 'Disconnect' }).click();
     expect(await between()).toBe(1);
     expect(await state(page, () => window.__sdl.S.edges.some((e) => e.to === 'f' && e.from !== 'u' && e.from !== 'k'))).toBe(true);
@@ -178,7 +170,7 @@ test.describe('Level 7 · teaching feedback', () => {
   test('request dots: pages go to the nearest data center and back', async ({ page }) => {
     await freshPage(page, '#level-7/build');
     const v = await addVirginia(page);
-    await set(page, 'd', { routing: 'geo' });
+    await setProps(page, 'd', { routing: 'geo' });
     const routes = await sampleRoutes(page, 1000);
     const toV = routes.filter((r) => r.route[1] === v), toF = routes.filter((r) => r.route[1] === 'f');
     expect(toV.length).toBeGreaterThan(80);
@@ -190,12 +182,12 @@ test.describe('Level 7 · teaching feedback', () => {
     await freshPage(page, '#level-7/build');
     await expect(page.locator('[data-node="f"] .node-sub')).toHaveText('L · 2,400 pages/s');
     await expect(page.locator('[data-node="d"] .node-sub')).toHaveText('Same answer for all');
-    await select(page, 'f');
+    await selectNode(page, 'f');
     await expect(page.locator('#insp')).toContainText('Size (pages/s at peak)');
     await page.click('#playBtn');
     await fastForward(page, 1);
     await expect(page.locator('#inspLive')).toContainText('83%');
-    await select(page, 'd');
+    await selectNode(page, 'd');
     await page.locator('#insp').getByRole('button', { name: /^GeoDNS/ }).click();
     await expect(page.locator('[data-node="d"] .node-sub')).toHaveText('GeoDNS');
   });
@@ -203,7 +195,7 @@ test.describe('Level 7 · teaching feedback', () => {
   test('settings survive a reload; bad saved settings load as the defaults', async ({ page }) => {
     await freshPage(page, '#level-7/build');
     const v = await addVirginia(page, 'M');
-    await set(page, 'd', { routing: 'geo' });
+    await setProps(page, 'd', { routing: 'geo' });
     await reloadGame(page);
     const get = () => state(page, () => { const n = (id) => window.__sdl.S.nodes.find((x) => x.id === id); return [n('d').routing, n(window.__sdl.S.nodes.at(-1).id).region, n(window.__sdl.S.nodes.at(-1).id).size]; });
     expect(await get()).toEqual(['geo', 'far', 'M']);
@@ -219,7 +211,7 @@ test.describe('Level 7 · teaching feedback', () => {
 
   test('the failover estimate accepts "2,000" and gives specific hints', async ({ page }) => {
     await freshPage(page, '#level-7/build');
-    await goTo(page, 1);
+    await openMission(page, 1, { estimate: true });
     await page.evaluate(() => { window.__sdl.S.est = false; window.__sdl.afterChange(true); });
     for (const [v, hint] of [['1,400', 'Europe alone'], ['600', 'America alone'], ['4000', 'counts files too']]) {
       await page.fill('#estIn', v);
@@ -235,19 +227,18 @@ test.describe('Level 7 · teaching feedback', () => {
 test.describe('Level 7 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-7/build');
-    const enter = async (selector) => { await page.focus(selector); await page.keyboard.press('Enter'); };
-    await enter('.pal-item[data-type="dc"]');
+    await pressEnterOn(page, '.pal-item[data-type="dc"]');
     const v = await state(page, () => window.__sdl.S.nodes.at(-1).id);
-    await enter(`[data-node="${v}"]`);
-    await enter('#insp [data-focus-key="region-far"]');
+    await pressEnterOn(page, `[data-node="${v}"]`);
+    await pressEnterOn(page, '#insp [data-focus-key="region-far"]');
     await page.locator('#insp .conn').getByRole('button', { name: 'Connect', exact: true }).first().focus();
     await page.keyboard.press('Enter');
-    await enter('[data-node="d"]');
-    await enter('#insp [data-focus-key="routing-geo"]');
-    await enter('[data-node="f"]');
-    await enter('#insp [data-focus-key="size-M"]');
+    await pressEnterOn(page, '[data-node="d"]');
+    await pressEnterOn(page, '#insp [data-focus-key="routing-geo"]');
+    await pressEnterOn(page, '[data-node="f"]');
+    await pressEnterOn(page, '#insp [data-focus-key="size-M"]');
     expect((await measure(page)).cost).toBe(2942);
-    await enter('#playBtn');
+    await pressEnterOn(page, '#playBtn');
     await fastForward(page, 5);
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
   });
@@ -281,7 +272,7 @@ test.describe('Level 7 · layout and accessibility', () => {
             const v = await addVirginia(page);
             await connect(page, v, 'f');
             await page.click('#playBtn'); await playFor(page, 0.5);
-            await select(page, 'd');
+            await selectNode(page, 'd');
           }
           const results = await new AxeBuilder({ page }).setLegacyMode().analyze();
           expect(results.violations.map((v) => `${tab}: ${v.id} (${v.nodes.length})`)).toEqual([]);
