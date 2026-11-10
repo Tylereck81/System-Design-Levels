@@ -5,6 +5,11 @@ import globals from 'globals';
 
 // The helpers in levels/shared/goals.js, under their names there and the names their old copies had.
 const GOAL_HELPERS = '/^(servedGoal|latGoal|costGoal|spofGoal|servedAtLeast|served99|fmtPct|pct|fmtMoney|money)$/';
+// HTML built from strings reaches the page only through js/dom.js, whose html template escapes every value.
+const HTML_WRITES = [
+  { selector: 'AssignmentExpression[left.property.name=/^(innerHTML|outerHTML)$/]', message: 'Use setHtml(el, html`...`) from js/dom.js, or el().' },
+  { selector: "CallExpression[callee.property.name='insertAdjacentHTML']", message: 'Use prependHtml(el, html`...`) from js/dom.js, or el().' },
+];
 const SLEEP = 'Wait for a state instead of a fixed time: playFor, fastForward or a web-first assertion (tests/helpers.js).';
 
 export default [
@@ -69,8 +74,13 @@ export default [
       'no-restricted-syntax': ['error', { // no-restricted-imports does not see import()
         selector: 'ImportExpression[source.value=/(^|\\/)main\\.js$/]',
         message: "Import { hooks } from js/hooks.js instead of importing main.js.",
-      }],
+      }, ...HTML_WRITES],
     },
+  },
+  {
+    // boot.js may import main.js, so the block above skips it; it still gets the HTML rule.
+    files: ['js/boot.js'],
+    rules: { 'no-restricted-syntax': ['error', ...HTML_WRITES] },
   },
   {
     // The engine knows nothing about the page: it reports through callbacks it is given (see js/engine/sim.js).
@@ -92,7 +102,7 @@ export default [
       'no-restricted-syntax': ['error', {
         selector: 'ImportDeclaration, ImportExpression',
         message: 'hooks.js imports nothing, so any module can import it without making a cycle.',
-      }],
+      }, ...HTML_WRITES],
     },
   },
   {

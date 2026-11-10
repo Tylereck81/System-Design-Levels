@@ -1,6 +1,6 @@
 // Inspector panel for the selected component or connection.
 import { fmt } from '../format.js';
-import { $, el, keepFocus } from '../dom.js';
+import { $, el, keepFocus, html, setHtml } from '../dom.js';
 import { TYPES, OK_PAIRS, pairKey, nameOf, lowerName, edgeInfo, MISSIONS, S, sel, run, byId, setSel, trafficHidden } from '../state.js';
 import { T, COMPONENTS, choiceOf, sizesOf } from '../engine/catalog.js';
 import { roleOf, runsAlone, holdsSessions, scales, dayCopies, serverSpec, isEdge, isClustered, costOf, monthlyFileGB } from '../engine/components.js';
@@ -49,7 +49,7 @@ function buildInspector() {
     const seg = el('div', 'seg two');
     for (const kind of TYPES[n.type].kinds) {
       const b = el('button'); b.type = 'button'; b.dataset.focusKey = 'kind-' + kind.id; b.setAttribute('aria-pressed', n.kind === kind.id ? 'true' : 'false');
-      b.innerHTML = `<b>${kind.name}</b><span>${kind.sub}</span>`;
+      setHtml(b, html`<b>${kind.name}</b><span>${kind.sub}</span>`);
       b.onclick = () => { n.kind = kind.id; hooks.afterDesignChange(); log(kind.log, kind.tone); };
       seg.appendChild(b);
     }
@@ -63,7 +63,7 @@ function buildInspector() {
     const current = n.algo || COMPONENTS[n.type].defaultAlgo;
     for (const algo of TYPES[n.type].algos) {
       const b = el('button'); b.type = 'button'; b.dataset.focusKey = 'algo-' + algo.id; b.setAttribute('aria-pressed', current === algo.id ? 'true' : 'false');
-      b.innerHTML = `<b>${algo.name}</b><span>${algo.sub}</span>`;
+      setHtml(b, html`<b>${algo.name}</b><span>${algo.sub}</span>`);
       b.onclick = () => { n.algo = algo.id; hooks.afterDesignChange(); log(algo.log); };
       seg.appendChild(b);
     }
@@ -78,7 +78,7 @@ function buildInspector() {
     const current = choiceOf(n, ch.key);
     for (const opt of ch.options) {
       const b = el('button'); b.type = 'button'; b.dataset.focusKey = ch.key + '-' + opt.id; b.setAttribute('aria-pressed', current === opt.id ? 'true' : 'false');
-      b.innerHTML = `<b>${opt.name}</b><span>${opt.sub}</span>`;
+      setHtml(b, html`<b>${opt.name}</b><span>${opt.sub}</span>`);
       b.onclick = () => { n[ch.key] = opt.id; hooks.afterDesignChange(); log(opt.log); };
       seg.appendChild(b);
     }
@@ -92,7 +92,7 @@ function buildInspector() {
     for (const k of Object.keys(SIZES)) {
       const b = el('button'); b.type = 'button'; b.dataset.focusKey = 'size-' + k; b.setAttribute('aria-pressed', n.size === k ? 'true' : 'false');
       const what = TYPES[n.type].sizeWhat ? TYPES[n.type].sizeWhat(SIZES[k]) : mem(k) ? `${mem(k)} GB` : `${fmt(SIZES[k].cap)}/s`;
-      b.innerHTML = `<b>${k}</b> <span>${what}</span><br><span>$${fmt(SIZES[k].cost)}</span>`;
+      setHtml(b, html`<b>${k}</b> <span>${what}</span><br><span>$${fmt(SIZES[k].cost)}</span>`);
       b.title = TYPES[n.type].sizeWhat ? `${what} · $${fmt(SIZES[k].cost)}/month` : mem(k) ? `${mem(k)} GB memory · $${fmt(SIZES[k].cost)}/month` : SIZES[k].cpu ? `${SIZES[k].cpu} vCPU · ${fmt(SIZES[k].cap)} requests/s · $${fmt(SIZES[k].cost)}/month` : `${fmt(SIZES[k].cap)}/s · $${fmt(SIZES[k].cost)}/month`;
       b.setAttribute('aria-label', `${k} ${what}, $${fmt(SIZES[k].cost)} a month`);
       b.onclick = () => { n.size = k; hooks.afterDesignChange(); };
@@ -111,9 +111,9 @@ function buildInspector() {
     const live = el('div', 'live');
     // With users near and far from the data center (TYPES.users.regions), show both round trips.
     const rg = M0.far && TYPES[n.type].regions;
-    live.innerHTML = `<div><b>${hid ? '?' : fmt(M0.qps * trafficFactor())}</b><span>req/s at peak</span></div>`
-      + (rg ? `<div><b>${T.rtt} ms</b><span>round trip, ${rg.near} (${Math.round(100 * (1 - M0.far))}%)</span></div><div><b>${T.far} ms</b><span>round trip, ${rg.far} (${Math.round(100 * M0.far)}%)</span></div>`
-        : `<div><b>${T.rtt} ms</b><span>internet round trip</span></div>`);
+    setHtml(live, [html`<div><b>${hid ? '?' : fmt(M0.qps * trafficFactor())}</b><span>req/s at peak</span></div>`,
+      rg ? html`<div><b>${T.rtt} ms</b><span>round trip, ${rg.near} (${Math.round(100 * (1 - M0.far))}%)</span></div><div><b>${T.far} ms</b><span>round trip, ${rg.far} (${Math.round(100 * M0.far)}%)</span></div>`
+        : html`<div><b>${T.rtt} ms</b><span>internet round trip</span></div>`]);
     box.appendChild(live);
   }
   // connections (keyboard- and touch-friendly alternative to dragging)
@@ -146,62 +146,72 @@ export function paintInspectorLive() {
   if (!st && scales(n)) {
     // An autoscaled group: what it costs, and how many servers it runs over a day, from its load at the peak.
     const w = graph().peak.get(n.id) || 0, k = dayCopies(w, serverSpec(n).cap);
-    live.innerHTML = `<div><b>$${fmt(costOf(n, w))}</b><span>a month, paid by the hour</span></div><div><b>${Math.min(...k)} to ${Math.max(...k)}</b><span>servers over a day</span></div>`;
+    setHtml(live, html`<div><b>$${fmt(costOf(n, w))}</b><span>a month, paid by the hour</span></div><div><b>${Math.min(...k)} to ${Math.max(...k)}</b><span>servers over a day</span></div>`);
     return;
   }
-  if (!st && isEdge(n)) { live.innerHTML = `<div><b>$${fmt(costOf(n))}</b><span>a month, for ${fmt(monthlyFileGB() / 1000)} TB sent</span></div><div><b>—</b><span>press Play for load</span></div>`; return; }
-  if (!st) { live.innerHTML = `<div><b>${fmt(serverSpec(n).cap)}</b><span>capacity, per second</span></div><div><b>—</b><span>press Play for load</span></div>`; return; }
-  if (st.standby) { live.innerHTML = `<div><b>standby</b><span>takes no traffic</span></div><div><b>${fmt(st.cap)}</b><span>capacity, ready to take over</span></div>`; return; }
-  if (st.down) { live.innerHTML = `<div><b style="color:var(--bad)">down</b><span>serving nothing</span></div><div><b>0</b><span>req/s served</span></div>`; return; }
+  if (!st && isEdge(n)) { setHtml(live, html`<div><b>$${fmt(costOf(n))}</b><span>a month, for ${fmt(monthlyFileGB() / 1000)} TB sent</span></div><div><b>—</b><span>press Play for load</span></div>`); return; }
+  if (!st) { setHtml(live, html`<div><b>${fmt(serverSpec(n).cap)}</b><span>capacity, per second</span></div><div><b>—</b><span>press Play for load</span></div>`); return; }
+  if (st.standby) { setHtml(live, html`<div><b>standby</b><span>takes no traffic</span></div><div><b>${fmt(st.cap)}</b><span>capacity, ready to take over</span></div>`); return; }
+  if (st.down) { setHtml(live, html`<div><b style="color:var(--bad)">down</b><span>serving nothing</span></div><div><b>0</b><span>req/s served</span></div>`); return; }
   if (st.consumer) {
     // A worker group: jobs in and out, and what waits in its queue.
-    live.innerHTML = `<div><b>${st.load.toFixed(2)}</b><span>jobs/s arriving</span></div><div><b>${st.cap.toFixed(2)}</b><span>jobs/s it can take</span></div>`
-      + `<div><b>${Math.round(st.util * 100)}%</b><span>busy</span></div><div><b>${fmt(st.backlog)}</b><span>jobs waiting in the queue</span></div>`
-      + (st.copies ? `<div class="wide"><b>${st.copies} ${st.copies === 1 ? 'server' : 'servers'} now</b><span>of size ${n.size}</span></div>` : '');
+    setHtml(live, [
+      html`<div><b>${st.load.toFixed(2)}</b><span>jobs/s arriving</span></div><div><b>${st.cap.toFixed(2)}</b><span>jobs/s it can take</span></div>`,
+      html`<div><b>${Math.round(st.util * 100)}%</b><span>busy</span></div><div><b>${fmt(st.backlog)}</b><span>jobs waiting in the queue</span></div>`,
+      st.copies ? html`<div class="wide"><b>${st.copies} ${st.copies === 1 ? 'server' : 'servers'} now</b><span>of size ${n.size}</span></div>` : '',
+    ]);
     return;
   }
   if (st.ids) {
     // An ID generator: IDs asked for and what it can make, what its IDs look like, and repeats.
     const x = st.ids, col = st.load > st.cap * 1.005 ? 'var(--bad)' : 'var(--ok)';
-    live.innerHTML = `<div><b>${fmt(st.load)}</b><span>IDs/s asked for</span></div>`
-      + (x.method === 'uuid' ? '<div><b>no limit</b><span>made in each web server</span></div>' : `<div><b style="color:${col}">${fmt(st.cap)}</b><span>IDs/s on ${x.healthy} ${x.healthy === 1 ? 'server' : 'servers'}</span></div>`)
-      + `<div class="wide"><b>${x.bits} bits</b><span>${x.numeric ? 'a number' : 'written as hex digits and dashes'}, ${x.ordered ? 'in time order' : 'not in time order'}</span></div>`
-      + (x.dup > 0 ? `<div class="wide"><b style="color:var(--bad)">${(100 * x.dup).toFixed(0)}%</b><span>of IDs repeat one already made</span></div>` : '');
+    setHtml(live, [
+      html`<div><b>${fmt(st.load)}</b><span>IDs/s asked for</span></div>`,
+      x.method === 'uuid' ? html`<div><b>no limit</b><span>made in each web server</span></div>` : html`<div><b style="color:${col}">${fmt(st.cap)}</b><span>IDs/s on ${x.healthy} ${x.healthy === 1 ? 'server' : 'servers'}</span></div>`,
+      html`<div class="wide"><b>${x.bits} bits</b><span>${x.numeric ? 'a number' : 'written as hex digits and dashes'}, ${x.ordered ? 'in time order' : 'not in time order'}</span></div>`,
+      x.dup > 0 ? html`<div class="wide"><b style="color:var(--bad)">${(100 * x.dup).toFixed(0)}%</b><span>of IDs repeat one already made</span></div>` : '',
+    ]);
     return;
   }
   if (st.hit != null) {
     // A cache's words by default; a level can word them for another type (e.g. a CDN's files and origin).
     const w = { arriving: 'reads arriving, per second', misses: 'misses/s sent to the database', per: 'per lookup', ...TYPES[n.type].live };
-    live.innerHTML = `<div><b>${fmt(st.load)}</b><span>${w.arriving}</span></div><div><b>${Math.round(st.hit * 100)}%</b><span>hit rate</span></div>`
-      + `<div><b>${fmt(st.misses)}</b><span>${w.misses}</span></div><div><b>${st.ms.toFixed(1)} ms</b><span>${w.per}</span></div>`;
+    setHtml(live, [
+      html`<div><b>${fmt(st.load)}</b><span>${w.arriving}</span></div><div><b>${Math.round(st.hit * 100)}%</b><span>hit rate</span></div>`,
+      html`<div><b>${fmt(st.misses)}</b><span>${w.misses}</span></div><div><b>${st.ms.toFixed(1)} ms</b><span>${w.per}</span></div>`,
+    ]);
     return;
   }
   const pct = Math.round(st.util * 100);
   const col = st.load > st.cap * 1.005 ? 'var(--bad)' : st.util >= 0.8 ? 'var(--warn)' : 'var(--ok)';
-  live.innerHTML = `<div><b>${fmt(st.load)}</b><span>${st.files ? `${st.unit} of work` : `${st.unit} arriving`}</span></div><div><b>${fmt(st.cap)}</b><span>capacity${st.combined ? ' (code + data)' : ''}</span></div><div><b style="color:${col}">${pct}%</b><span>busy</span></div><div><b>${st.ms.toFixed(st.ms < 10 ? 1 : 0)} ms</b><span>per request (${st.mult.toFixed(1)}× base)</span></div>`
-    + (st.copied ? `<div class="wide"><b>${fmt(st.load - st.copied)} + ${fmt(st.copied)}</b><span>reads + writes copied from the primary</span></div>` : '')
-    + (st.files ? `<div class="wide"><b>${fmt(st.pages)} + ${fmt(st.files)}</b><span>pages + files arriving per second. A file takes ${fmt(100 * serverSpec(n).filePer)}% of a page's work.</span></div>` : '')
-    + (st.copies ? `<div class="wide"><b>${st.copies} ${st.copies === 1 ? 'server' : 'servers'} now</b><span>of size ${n.size}, each at most ${Math.round(100 * T.scaleAt)}% busy</span></div>` : '')
-    + (st.limiter ? `<div class="wide"><b>${fmt(st.bots)} → ${fmt(st.botPass)}</b><span>bot requests/s arriving → let through</span></div>` : '')
-    + (st.limiter && st.falseBlock > 0 ? `<div class="wide"><b style="color:var(--bad)">${Math.round(st.falseBlock * 100)}%</b><span>of real users' requests rejected: their bursts don't fit</span></div>` : '')
-    + (st.limiter && st.waitMs > 0 ? `<div class="wide"><b>${(st.waitMs / 1000).toFixed(1)} s</b><span>a real request waits in the queue, on average</span></div>` : '')
-    + (st.kv ? `<div class="wide"><b>${st.kv.readMs} ms · ${st.kv.writeMs} ms</b><span>a read waits for ${st.kv.R} of ${st.kv.N} replicas, a write for ${st.kv.W}</span></div><div class="wide"><b${st.kv.stale > 0 ? ' style="color:var(--warn)"' : ''}>${(100 * st.kv.stale).toFixed(1)}%</b><span>of reads return an old value</span></div>` : '')
-    + (st.kv && st.kv.failed > 0 ? `<div class="wide"><b style="color:var(--bad)">${(100 * st.kv.failed).toFixed(0)}%</b><span>of requests fail: no quorum on their side of the partition</span></div>` : '')
-    + (st.sync && COMPONENTS[n.type].sync === 'block' ? `<div class="wide"><b>${st.sync.mbPerUpload.toFixed(2)} MB</b><span>sent per upload${st.sync.delta ? ', changed blocks only' : ', whole files'}${st.sync.compress ? ', compressed' : ''}</span></div>` : '')
-    + (st.sync && COMPONENTS[n.type].sync === 'poll' ? `<div class="wide"><b>${fmt(st.sync.connsPerServer)}</b><span>long-poll connections per server (1 million max)</span></div>` : '')
-    + (st.video && COMPONENTS[n.type].video === 'upload' ? `<div class="wide"><b>${(100 * st.video.uploaded).toFixed(1)}%</b><span>of uploads arrive${st.video.apiLoad > 1 ? `: the API servers' links are ${Math.round(100 * st.video.apiLoad)}% loaded` : ''}${st.video.failed ? `; ${Math.round(100 * st.video.failed)}% of whole files fail and are given up on` : ''}</span></div>` : '')
-    + (st.video && COMPONENTS[n.type].video === 'transcode' ? `<div class="wide"><b>${st.video.workers} servers</b><span>${st.video.retry ? 'retry a dead worker\'s tasks' : 'no retry: a dead worker\'s videos are lost'}</span></div>` : '')
-    + (st.typeahead && st.typeahead.shards && COMPONENTS[n.type].typeahead === 'trie' ? `<div class="wide"><b>${Math.round(100 * st.typeahead.topShare)}%</b><span>of lookups on the busiest of ${st.typeahead.shards} ${st.typeahead.shards === 1 ? 'shard' : 'shards'}: ${fmt(st.typeahead.shardLoad)} a second</span></div><div class="wide"><b>${st.typeahead.staleH} h</b><span>until a new trending search can show up</span></div>` : '')
-    + (st.chat ? `<div class="wide"><b>${st.chat.delay < 1 ? fmt(st.chat.delay * 1000) + ' ms' : st.chat.delay.toFixed(1) + ' s'}</b><span>for a message to arrive, by ${{ poll: 'polling', long: 'long polling', ws: 'WebSocket' }[st.chat.protocol]}</span></div><div class="wide"><b>${st.chat.memoryGB.toFixed(1)} GB</b><span>of connections on each chat server (8 GB each)</span></div>` : '')
-    + (st.feed ? `<div class="wide"><b>${fmt(st.feed.writes)}</b><span>feed cache writes a second (fanout), ${fmt(st.feed.cacheGB)} GB cached</span></div><div class="wide"><b${st.feed.lag > 5 ? ' style="color:var(--bad)"' : ''}>${st.feed.lag === Infinity ? 'never' : fmt(st.feed.lag) + ' s'}</b><span>for a post to reach friends' feeds</span></div>` : '')
-    + (st.notify ? `<div class="wide"><b>${st.notify.workers} workers</b><span>${st.notify.perChannel ? 'split over a queue per channel' : 'all on one shared queue'}${st.notify.retry ? ', with a notification log' : ''}</span></div>` : '')
-    + (st.notify && st.notify.lost > 0 ? `<div class="wide"><b style="color:var(--bad)">${(100 * st.notify.lost).toFixed(0)}%</b><span>of notifications lost</span></div>` : '')
-    + (st.notify && st.notify.dup > 0 ? `<div class="wide"><b style="color:var(--warn)">${(100 * st.notify.dup).toFixed(0)}%</b><span>sent twice</span></div>` : '')
-    + (st.notify && st.notify.waiting > 0 ? `<div class="wide"><b>${(100 * st.notify.waiting).toFixed(0)}%</b><span>waiting in the SMS queue for a retry</span></div>` : '')
-    + (st.crawl ? `<div class="wide"><b>${st.crawl.count} × ${fmt(st.crawl.per)}</b><span>machines × pages/s each${st.crawl.dnsCache ? ', with a DNS cache' : ': DNS lookups one at a time'}</span></div>` : '')
-    + (st.crawl && st.crawl.refused > 0 ? `<div class="wide"><b style="color:var(--bad)">${Math.round(100 * st.crawl.refused)}%</b><span>of downloads refused by a flooded host</span></div>` : '')
-    + (st.shards ? `<div class="wide"><b>${st.shards.map(x => fmt(x.load)).join(' · ')}</b><span>queries/s on each shard; the busiest sets the % busy</span></div>` : '')
-    + (run.queues[n.id] != null ? `<div class="wide"><b>${fmt(run.queues[n.id])} jobs</b><span>waiting for a worker</span></div>` : '')
-    + (st.uploads ? `<div class="wide"><b>${st.jobMs != null ? (st.jobMs / 1000).toFixed(0) + ' s' : 'published'}</b><span>per upload${st.jobMs != null ? ', processed here before it answers' : ' to the queue, then answered'}</span></div>` : '')
-    + (st.sessionMiss ? `<div class="wide"><b style="color:var(--bad)">${Math.round(100 * st.sessionMiss)}% of pages</b><span>land here without their session and fail: the cart is on another server</span></div>` : '');
+  // A value coloured only when it is bad (or a warning); otherwise the style attribute is empty.
+  const tone = (on, c) => on ? `color:var(--${c})` : '';
+  setHtml(live, [
+    html`<div><b>${fmt(st.load)}</b><span>${st.files ? `${st.unit} of work` : `${st.unit} arriving`}</span></div><div><b>${fmt(st.cap)}</b><span>capacity${st.combined ? ' (code + data)' : ''}</span></div><div><b style="color:${col}">${pct}%</b><span>busy</span></div><div><b>${st.ms.toFixed(st.ms < 10 ? 1 : 0)} ms</b><span>per request (${st.mult.toFixed(1)}× base)</span></div>`,
+    st.copied ? html`<div class="wide"><b>${fmt(st.load - st.copied)} + ${fmt(st.copied)}</b><span>reads + writes copied from the primary</span></div>` : '',
+    st.files ? html`<div class="wide"><b>${fmt(st.pages)} + ${fmt(st.files)}</b><span>pages + files arriving per second. A file takes ${fmt(100 * serverSpec(n).filePer)}% of a page's work.</span></div>` : '',
+    st.copies ? html`<div class="wide"><b>${st.copies} ${st.copies === 1 ? 'server' : 'servers'} now</b><span>of size ${n.size}, each at most ${Math.round(100 * T.scaleAt)}% busy</span></div>` : '',
+    st.limiter ? html`<div class="wide"><b>${fmt(st.bots)} → ${fmt(st.botPass)}</b><span>bot requests/s arriving → let through</span></div>` : '',
+    st.limiter && st.falseBlock > 0 ? html`<div class="wide"><b style="color:var(--bad)">${Math.round(st.falseBlock * 100)}%</b><span>of real users' requests rejected: their bursts don't fit</span></div>` : '',
+    st.limiter && st.waitMs > 0 ? html`<div class="wide"><b>${(st.waitMs / 1000).toFixed(1)} s</b><span>a real request waits in the queue, on average</span></div>` : '',
+    st.kv ? html`<div class="wide"><b>${st.kv.readMs} ms · ${st.kv.writeMs} ms</b><span>a read waits for ${st.kv.R} of ${st.kv.N} replicas, a write for ${st.kv.W}</span></div><div class="wide"><b style="${tone(st.kv.stale > 0, 'warn')}">${(100 * st.kv.stale).toFixed(1)}%</b><span>of reads return an old value</span></div>` : '',
+    st.kv && st.kv.failed > 0 ? html`<div class="wide"><b style="color:var(--bad)">${(100 * st.kv.failed).toFixed(0)}%</b><span>of requests fail: no quorum on their side of the partition</span></div>` : '',
+    st.sync && COMPONENTS[n.type].sync === 'block' ? html`<div class="wide"><b>${st.sync.mbPerUpload.toFixed(2)} MB</b><span>sent per upload${st.sync.delta ? ', changed blocks only' : ', whole files'}${st.sync.compress ? ', compressed' : ''}</span></div>` : '',
+    st.sync && COMPONENTS[n.type].sync === 'poll' ? html`<div class="wide"><b>${fmt(st.sync.connsPerServer)}</b><span>long-poll connections per server (1 million max)</span></div>` : '',
+    st.video && COMPONENTS[n.type].video === 'upload' ? html`<div class="wide"><b>${(100 * st.video.uploaded).toFixed(1)}%</b><span>of uploads arrive${st.video.apiLoad > 1 ? `: the API servers' links are ${Math.round(100 * st.video.apiLoad)}% loaded` : ''}${st.video.failed ? `; ${Math.round(100 * st.video.failed)}% of whole files fail and are given up on` : ''}</span></div>` : '',
+    st.video && COMPONENTS[n.type].video === 'transcode' ? html`<div class="wide"><b>${st.video.workers} servers</b><span>${st.video.retry ? 'retry a dead worker\'s tasks' : 'no retry: a dead worker\'s videos are lost'}</span></div>` : '',
+    st.typeahead && st.typeahead.shards && COMPONENTS[n.type].typeahead === 'trie' ? html`<div class="wide"><b>${Math.round(100 * st.typeahead.topShare)}%</b><span>of lookups on the busiest of ${st.typeahead.shards} ${st.typeahead.shards === 1 ? 'shard' : 'shards'}: ${fmt(st.typeahead.shardLoad)} a second</span></div><div class="wide"><b>${st.typeahead.staleH} h</b><span>until a new trending search can show up</span></div>` : '',
+    st.chat ? html`<div class="wide"><b>${st.chat.delay < 1 ? fmt(st.chat.delay * 1000) + ' ms' : st.chat.delay.toFixed(1) + ' s'}</b><span>for a message to arrive, by ${{ poll: 'polling', long: 'long polling', ws: 'WebSocket' }[st.chat.protocol]}</span></div><div class="wide"><b>${st.chat.memoryGB.toFixed(1)} GB</b><span>of connections on each chat server (8 GB each)</span></div>` : '',
+    st.feed ? html`<div class="wide"><b>${fmt(st.feed.writes)}</b><span>feed cache writes a second (fanout), ${fmt(st.feed.cacheGB)} GB cached</span></div><div class="wide"><b style="${tone(st.feed.lag > 5, 'bad')}">${st.feed.lag === Infinity ? 'never' : fmt(st.feed.lag) + ' s'}</b><span>for a post to reach friends' feeds</span></div>` : '',
+    st.notify ? html`<div class="wide"><b>${st.notify.workers} workers</b><span>${st.notify.perChannel ? 'split over a queue per channel' : 'all on one shared queue'}${st.notify.retry ? ', with a notification log' : ''}</span></div>` : '',
+    st.notify && st.notify.lost > 0 ? html`<div class="wide"><b style="color:var(--bad)">${(100 * st.notify.lost).toFixed(0)}%</b><span>of notifications lost</span></div>` : '',
+    st.notify && st.notify.dup > 0 ? html`<div class="wide"><b style="color:var(--warn)">${(100 * st.notify.dup).toFixed(0)}%</b><span>sent twice</span></div>` : '',
+    st.notify && st.notify.waiting > 0 ? html`<div class="wide"><b>${(100 * st.notify.waiting).toFixed(0)}%</b><span>waiting in the SMS queue for a retry</span></div>` : '',
+    st.crawl ? html`<div class="wide"><b>${st.crawl.count} × ${fmt(st.crawl.per)}</b><span>machines × pages/s each${st.crawl.dnsCache ? ', with a DNS cache' : ': DNS lookups one at a time'}</span></div>` : '',
+    st.crawl && st.crawl.refused > 0 ? html`<div class="wide"><b style="color:var(--bad)">${Math.round(100 * st.crawl.refused)}%</b><span>of downloads refused by a flooded host</span></div>` : '',
+    st.shards ? html`<div class="wide"><b>${st.shards.map(x => fmt(x.load)).join(' · ')}</b><span>queries/s on each shard; the busiest sets the % busy</span></div>` : '',
+    run.queues[n.id] != null ? html`<div class="wide"><b>${fmt(run.queues[n.id])} jobs</b><span>waiting for a worker</span></div>` : '',
+    st.uploads ? html`<div class="wide"><b>${st.jobMs != null ? (st.jobMs / 1000).toFixed(0) + ' s' : 'published'}</b><span>per upload${st.jobMs != null ? ', processed here before it answers' : ' to the queue, then answered'}</span></div>` : '',
+    st.sessionMiss ? html`<div class="wide"><b style="color:var(--bad)">${Math.round(100 * st.sessionMiss)}% of pages</b><span>land here without their session and fail: the cart is on another server</span></div>` : '',
+  ]);
 }
