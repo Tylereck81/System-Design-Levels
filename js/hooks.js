@@ -16,10 +16,9 @@ const notRegistered = (name) => () => { throw new Error(`hooks.${name} was calle
  */
 export const hooks = Object.fromEntries(NAMES.map(name => [name, notRegistered(name)]));
 
-/** Called once by main.js before the first render, with all four functions. */
+/** Called once by main.js before the first render, with all four functions. Registers all of them or none. */
 export function registerHooks(fns) {
-  for (const name of NAMES) {
-    if (typeof fns[name] !== 'function') throw new Error(`registerHooks: ${name} is missing`);
-    hooks[name] = fns[name];
-  }
+  const missing = NAMES.find(name => typeof fns[name] !== 'function');
+  if (missing) throw new Error(`registerHooks: ${missing} is missing`);
+  for (const name of NAMES) hooks[name] = fns[name];
 }

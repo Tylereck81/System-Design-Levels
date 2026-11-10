@@ -46,6 +46,10 @@ export default [
       'no-restricted-imports': ['error', {
         patterns: [{ regex: '(^|/)main\\.js$', message: "Import { hooks } from js/hooks.js instead of importing main.js." }],
       }],
+      'no-restricted-syntax': ['error', { // no-restricted-imports does not see import()
+        selector: 'ImportExpression[source.value=/(^|\\/)main\\.js$/]',
+        message: "Import { hooks } from js/hooks.js instead of importing main.js.",
+      }],
     },
   },
   {
