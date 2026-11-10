@@ -5,7 +5,7 @@ import { sampleRoute } from '../engine/model.js';
 import { advance, resetRun } from '../engine/sim.js';
 import { crashing } from '../engine/experiments.js';
 import { tagsG, paintLive } from './canvas.js';
-import { dots, spawn, showIpTag, moveDots, setDots } from './dots.js';
+import { dots, spawn, showIpTag, moveDots } from './dots.js';
 import { renderHUD, setBanner } from '../ui/hud.js';
 import { paintInspectorLive } from '../ui/inspector.js';
 import { renderMission, paintGoals } from '../ui/mission.js';
@@ -19,7 +19,7 @@ const report = { log, progress() { renderMission(); hooks.renderTabs(); } };
 /** Stops the run and clears the dots. `full` also rewinds the clock (see resetRun). */
 export function stopRun(full) {
   resetRun(full);
-  dots.forEach(d => d.c.remove()); setDots([]); tagsG.textContent = '';
+  dots.forEach(d => d.c.remove()); dots.length = 0; tagsG.textContent = '';
 }
 
 /** One simulation step of `dt` seconds, and the dots it sends. window.__sdl.step is this, so tests see the dots too. */

@@ -4,7 +4,7 @@ import { TXT, run, byId } from '../state.js';
 import { NW, NH, dotsG, tagsG, edgePoint } from './canvas.js';
 import { roleOf } from '../engine/components.js';
 
-export let dots = [];
+export const dots = [];
 
 export function spawn(route, kind, failAt) {
   const c = svgEl('circle', { r: 4.3, class: 'dot ' + kind, cx: -20, cy: -20 }, dotsG);
@@ -88,5 +88,3 @@ export function moveDots(dt) {
     }
   }
 }
-
-export function setDots(v) { dots = v; }

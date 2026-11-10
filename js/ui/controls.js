@@ -1,6 +1,6 @@
 // Play, experiments and reset buttons.
 import { $ } from '../dom.js';
-import { MISSIONS, EXPERIMENTS, fresh, S, run, setS, setSel, setConnectFrom, expPassed } from '../state.js';
+import { MISSIONS, EXPERIMENTS, fresh, S, ui, run, replaceState, expPassed } from '../state.js';
 import { graph, model } from '../engine/model.js';
 import { paintLive } from '../view/canvas.js';
 import { stopRun } from '../view/loop.js';
@@ -70,11 +70,11 @@ export function armButton(btn, label, armedLabel, action) {
   };
 }
 armButton($('resetBtn'), 'Clear canvas', 'Click again to clear', () => {
-  S.nodes = S.nodes.filter(n => n.type === 'users'); S.edges = []; setSel(null); setConnectFrom(null);
+  S.nodes = S.nodes.filter(n => n.type === 'users'); S.edges = []; ui.sel = null; ui.connectFrom = null;
   stopRun(true); hooks.afterDesignChange(); log('Canvas cleared.');
 });
 armButton($('resetLevel'), 'Reset level progress', 'Click again: this clears your missions and canvas', () => {
   const keepQuiz = S.quiz, keepTab = S.tab;
-  setS(fresh()); S.quiz = keepQuiz; S.tab = keepTab; setSel(null); setConnectFrom(null);
+  replaceState(fresh()); S.quiz = keepQuiz; S.tab = keepTab; ui.sel = null; ui.connectFrom = null;
   stopRun(true); hooks.afterChange(true); log('Level progress reset. Mission 1 is waiting.');
 });

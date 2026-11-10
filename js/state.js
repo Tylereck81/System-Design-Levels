@@ -49,10 +49,20 @@ export const fresh = () => ({
 export const expPassed = (id, i = S.mission) => !!(S.exp[i] && S.exp[i][id]);
 /** Forget the break-it results of every mission not finished yet (after a design change, as for verification). */
 export function clearOpenResults() { S.exp = S.exp.map((r, i) => (S.done[i] ? r : noResults(i))); }
-export let S = fresh();
-export let sel = null;          // {kind:'node'|'edge', id}
-export let connectFrom = null;  // tap-to-connect source id
-export let refocus = null;      // node id to give keyboard focus after re-render
+/** The saved state. One object for the page's life: replaceState swaps its contents, so references to it stay valid. */
+export const S = fresh();
+/** Replace the saved state's contents with `next`'s, keeping the same object. */
+export function replaceState(next) {
+  if (next === S) return;
+  for (const k of Object.keys(S)) delete S[k];
+  Object.assign(S, next);
+}
+/** What the player is pointing at; not saved. */
+export const ui = {
+  sel: null,          // {kind:'node'|'edge', id}
+  connectFrom: null,  // tap-to-connect source id
+  refocus: null,      // node id to give keyboard focus after re-render
+};
 export const qsel = {};         // quiz selection before "Check"
 export const run = { queues: {}, playing: false, t: 0, on: {}, hold: 0, dnsDone: false, dnsFlying: false, spawnAcc: 0, mdl: null, uiAcc: 1, expT: {}, active: new Set(), relog: new Set(), everPlayed: false, errored: false };
 
@@ -79,7 +89,7 @@ export function load(data) {
     return;
   }
   const f = fresh();
-  S = Object.assign(f, src);
+  replaceState(Object.assign(f, src));
   const bools = (a) => MISSIONS.map((_, i) => !!(Array.isArray(a) && a[i]));
   S.done = bools(src.done); S.verified = bools(src.verified);
   // Results per mission. An older save kept one result per experiment for the whole level: it belongs to the
@@ -121,11 +131,3 @@ export function save() {
   console.warn('Progress could not be saved: browser storage is unavailable or full.');
 }
 export const byId = (id) => S.nodes.find(n => n.id === id);
-
-export function setS(v) { S = v; }
-
-export function setSel(v) { sel = v; }
-
-export function setConnectFrom(v) { connectFrom = v; }
-
-export function setRefocus(v) { refocus = v; }
