@@ -29,7 +29,7 @@ test.describe('Level 16 · playthrough', () => {
     await selectNode(page, 'q');
     await click(page, 'layout-channel');
     await expect(page.locator('[data-node="q"] .node-sub')).toHaveText('a queue per channel');
-    expect((await measure(page)).cost).toBe(650);
+    expect((await measure(page)).cost).toBe(650); // notification service $150 + queue $50 + 5 workers × $90 + provider $0
     await page.click('#playBtn');
     await fastForward(page, 5);
     await breakIt(page, 'sms');

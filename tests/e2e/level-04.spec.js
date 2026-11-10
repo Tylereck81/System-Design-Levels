@@ -36,7 +36,7 @@ test.describe('Level 4 · playthrough', () => {
     await page.fill('#estIn', '4 GB');
     await page.click('#estBtn');
     const [c1] = await setup(page, { caches: [['L', '600']] });
-    expect((await measure(page)).cost).toBe(1925);
+    expect((await measure(page)).cost).toBe(1925); // start $2,295 − XL replica $450 + L cache $80
     await page.click('#playBtn');
     await fastForward(page, 5);
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
@@ -44,7 +44,7 @@ test.describe('Level 4 · playthrough', () => {
     // Mission 2: a second cache, then crash one.
     await page.click('#mission .complete button');
     await setup(page, { caches: [['L', '600']], dropReplica: false });
-    expect((await measure(page)).cost).toBe(2005);
+    expect((await measure(page)).cost).toBe(2005); // $1,925 + a second L cache $80
     await page.click('#playBtn');
     await fastForward(page, 5);
     await page.click('#exp-crash-cache');
@@ -82,7 +82,7 @@ test.describe('Level 4 · numbers', () => {
     await calm(page);
     // Start: two XL replicas, no cache. Each gets 800 reads + 400 copied writes: 75% busy.
     let r = await measure(page);
-    expect(r.cost).toBe(2295);
+    expect(r.cost).toBe(2295); // DNS $5 + 2 LB × $20 + 2 XL web × $450 + XL primary and 2 XL replicas 3 × $450
     expect(r.hitRate).toBeNull();
     expect(r.dbs.filter((d) => d.role === 'replica').map((d) => d.util)).toEqual([0.75, 0.75]);
     // One replica and an 8 GB cache, 10-minute TTL: hit = 0.4^0.1386 × 600/610 = 86.6%.
@@ -92,7 +92,7 @@ test.describe('Level 4 · numbers', () => {
     expect(r.hitRate).toBeCloseTo(0.8662, 3);
     expect(r.dbs.find((d) => d.role === 'replica').util).toBeCloseTo(0.384, 3); // 1,600 × 0.134 + 400 = 614 of 1,600
     expect(r.latency).toBeCloseTo(100.6, 1);
-    expect(r.cost).toBe(1925);
+    expect(r.cost).toBe(1925); // $2,295 − XL replica $450 + L cache $80
   });
 
   test('hit rate follows memory and TTL; two caches hold as much as one twice the size', async ({ page }) => {
@@ -286,7 +286,7 @@ test.describe('Level 4 · layout and accessibility', () => {
       await page.locator('#insp .conn').getByRole('button', { name: 'Connect', exact: true }).first().focus();
       await page.keyboard.press('Enter');
     }
-    expect((await measure(page)).cost).toBe(1925);
+    expect((await measure(page)).cost).toBe(1925); // start $2,295 − XL replica $450 + L cache $80
     await pressEnterOn(page, '#playBtn');
     await fastForward(page, 5);
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);

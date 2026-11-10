@@ -33,7 +33,7 @@ test.describe('Level 3 · playthrough', () => {
 
     // Mission 1: two XL replicas, then crash one.
     await addReplicas(page, ['XL', 'XL']);
-    expect((await measure(page)).cost).toBe(2295);
+    expect((await measure(page)).cost).toBe(2295); // DNS $5 + 2 LB × $20 + 2 XL web × $450 + XL primary and 2 XL replicas 3 × $450
     await page.click('#playBtn');
     await fastForward(page, 5);
     expect(await state(page, () => window.__sdl.S.verified[0])).toBe(true);
@@ -48,7 +48,7 @@ test.describe('Level 3 · playthrough', () => {
     await page.fill('#estIn', '400 writes/s');
     await page.click('#estBtn');
     await addReplicas(page, ['XL']);
-    expect((await measure(page)).cost).toBe(2745);
+    expect((await measure(page)).cost).toBe(2745); // $2,295 + a third XL replica $450
     await page.click('#playBtn');
     await fastForward(page, 5);
     await page.click('#exp-crash-replica');
@@ -115,7 +115,7 @@ test.describe('Level 3 · numbers', () => {
     r = await measure(page);
     expect(r.dbs.filter((d) => d.role === 'replica').map((d) => Math.round(d.load))).toEqual([933, 933, 933]);
     expect(r.latency).toBeCloseTo(117.9, 1);
-    expect(r.cost).toBe(2745);
+    expect(r.cost).toBe(2745); // DNS $5 + 2 LB × $20 + 2 XL web × $450 + XL primary and 3 XL replicas 4 × $450
   });
 
   test('levels 1 and 2 keep their numbers: databases there have no roles', async ({ page }) => {
@@ -405,7 +405,7 @@ test.describe('Level 3 · layout and accessibility', () => {
         await page.keyboard.press('Enter');
       }
     }
-    expect((await measure(page)).cost).toBe(2295);
+    expect((await measure(page)).cost).toBe(2295); // DNS $5 + 2 LB × $20 + 2 XL web × $450 + XL primary and 2 XL replicas 3 × $450
     await pressEnterOn(page, '#playBtn');
     await fastForward(page, 5);
     await pressEnterOn(page, '#exp-crash-replica');

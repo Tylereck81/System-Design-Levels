@@ -29,7 +29,7 @@ test.describe('Level 18 · playthrough', () => {
     await click(page, 'reconnect-discovery');
     await click(page, 'count-4');
     await expect(page.locator('[data-node="c"] .node-sub')).toHaveText('4 servers · WebSocket');
-    expect((await measure(page)).cost).toBe(1700);
+    expect((await measure(page)).cost).toBe(1700); // 4 chat servers × $300 + message store $500
     await page.click('#playBtn');
     await fastForward(page, 5);
     await breakIt(page, 'dies');

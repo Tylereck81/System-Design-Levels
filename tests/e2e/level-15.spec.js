@@ -28,7 +28,7 @@ test.describe('Level 15 · playthrough', () => {
     await click(page, 'count-5');
     await click(page, 'dns-cache');
     await expect(page.locator('[data-node="h"] .node-sub')).toHaveText('5 machines · DNS cache');
-    expect((await measure(page)).cost).toBe(1450);
+    expect((await measure(page)).cost).toBe(1450); // 5 downloaders × $200 + parser $150 + content store $300
     await page.click('#playBtn');
     await fastForward(page, 5);
     await breakIt(page, 'dns');

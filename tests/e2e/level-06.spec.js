@@ -66,7 +66,7 @@ test.describe('Level 6 · playthrough', () => {
       await page.locator('#insp').getByRole('button', { name: /^Autoscale/ }).click();
       await page.locator('#insp [data-focus-key="size-M"]').click();
     }
-    expect((await measure(page)).cost).toBe(2758);
+    expect((await measure(page)).cost).toBe(2758); // $2,292 (as below, with the store) + 2 M groups × $233
     await page.click('#playBtn');
     await fastForward(page, 5);
     await page.click('#exp-run-day');
@@ -86,7 +86,7 @@ test.describe('Level 6 · numbers', () => {
     await calm(page);
     // Start: round robin over two servers that keep sessions in memory. Half the pages miss; files are fine.
     let r = await measure(page);
-    expect(r.cost).toBe(3042);
+    expect(r.cost).toBe(3042); // DNS $5 + CDN $1,037 + 2 LB × $20 + 2 XL web × $450 + 2 L caches × $80 + 2 XL databases × $450
     expect(r.miss).toBeCloseTo(0.5, 9);
     expect(r.served).toBeCloseTo(75, 6);
     // Sticky sessions: every page finds its session.
@@ -103,7 +103,7 @@ test.describe('Level 6 · numbers', () => {
     expect(r.served).toBeCloseTo(100, 6);
     expect(r.store).toBeCloseTo(0.2, 6);
     expect(r.latency).toBeCloseTo(84.3, 1);
-    expect(r.cost).toBe(3192);
+    expect(r.cost).toBe(3192); // $3,042 + session store $150
     expect(r.spof).toBe(0); // a managed service
   });
 
@@ -117,16 +117,19 @@ test.describe('Level 6 · numbers', () => {
     const r = await measure(page);
     expect(r.copies).toEqual([5, 5]);
     expect(r.w1).toBeCloseTo(0.5, 3);
-    expect(r.cost).toBe(2758);
-    for (const [size, cost] of [['S', 2668], ['L', 2958], ['XL', 3230]]) {
+    // DNS $5 + CDN $1,037 + 2 LB × $20 + 2 L caches × $80 + 2 XL databases × $450 + store $150 = $2,292, plus two groups.
+    // A group pays size price × server-hours ÷ 24. Servers per hour = ceil(1,000 × day share ÷ (60% × capacity)):
+    // M 62 h → 90 × 62 ÷ 24 = $233; S 113 h → $188; L 40 h → $333; XL 25 h → $469 (× 2 groups each).
+    expect(r.cost).toBe(2758); // $2,292 + 2 × $233
+    for (const [size, cost] of [['S', 2668], ['L', 2958], ['XL', 3230]]) { // $2,292 + 2 × $188, + 2 × $333, + 2 × $469
       await autoscale(page, size);
       expect((await measure(page)).cost).toBe(cost);
     }
     // Fixed servers: two XL are over budget; L + XL with weighted routing too.
     await setProps(page, 'w1', { scaling: 'fixed', size: 'XL' }); await setProps(page, 'w2', { scaling: 'fixed', size: 'XL' });
-    expect((await measure(page)).cost).toBe(3192);
+    expect((await measure(page)).cost).toBe(3192); // $2,292 + 2 XL web × $450
     await setProps(page, 'w1', { size: 'L' }); await setProps(page, 'l1', { algo: 'wrr' });
-    expect((await measure(page)).cost).toBe(2942);
+    expect((await measure(page)).cost).toBe(2942); // $2,292 + L web $200 + XL web $450
     await expect(page.locator('#goals')).toContainText('$2,942');
   });
 
@@ -135,7 +138,7 @@ test.describe('Level 6 · numbers', () => {
     const r = await measure(page);
     expect(r.miss).toBe(0);
     expect(r.lost).toBe(0);
-    expect(r.cost).toBe(2005);
+    expect(r.cost).toBe(2005); // Level 5 start: DNS $5 + 2 LB × $20 + 2 XL web × $450 + 2 L caches × $80 + 2 XL databases × $450
   });
 });
 
@@ -185,7 +188,7 @@ test.describe('Level 6 · teaching feedback', () => {
     await openMission(page, 2, { estimate: true });
     await sticky(page);
     await autoscale(page, 'M');
-    expect((await measure(page)).cost).toBe(2608); // in budget, and fine at the peak
+    expect((await measure(page)).cost).toBe(2608); // $2,758 (above) without the $150 session store; in budget, and fine at the peak
     await page.click('#playBtn');
     await page.click('#exp-run-day');
     await fastForward(page, 25);
@@ -309,7 +312,7 @@ test.describe('Level 6 · layout and accessibility', () => {
       await page.locator('#insp .conn').getByRole('button', { name: 'Connect', exact: true }).first().focus();
       await page.keyboard.press('Enter');
     }
-    expect((await measure(page)).cost).toBe(3192);
+    expect((await measure(page)).cost).toBe(3192); // start $3,042 + session store $150
     await pressEnterOn(page, '#playBtn');
     await fastForward(page, 5);
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);

@@ -39,7 +39,7 @@ test.describe('Level 9 · playthrough', () => {
     await page.locator('#insp').getByRole('button', { name: /^account_id % N/ }).click();
     await page.locator('#insp [data-focus-key="size-XL"]').click();
     await expect(page.locator(`[data-node="${z}"] .node-sub`)).toHaveText('3 × XL · account');
-    expect((await measure(page)).cost).toBe(2027);
+    expect((await measure(page)).cost).toBe(2027); // DNS $5 + LB $20 + 2 autoscaled M web groups × $326 + 3 XL shards × $450
     await page.click('#playBtn');
     await fastForward(page, 5);
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
@@ -76,6 +76,7 @@ test.describe('Level 9 · numbers', () => {
     await freshPage(page, '#level-9/build');
     await calm(page);
     // Start: 1,800 writes a second on one XL primary.
+    // Web groups: 1,500 req/s each at the peak; ceil(1,500 × day share ÷ 240) M servers an hour = 87 h → 90 × 87 ÷ 24 = $326.
     let r = await measure(page);
     expect(r.primary).toBeCloseTo(1800 / 1600, 6);
     expect(r.served).toBeLessThan(80);
@@ -86,7 +87,7 @@ test.describe('Level 9 · numbers', () => {
     expect(r.loads).toEqual([1000, 1000, 1000]);
     expect(r.max).toBeCloseTo(0.625, 6);
     expect(r.served).toBeCloseTo(100, 6);
-    expect(r.cost).toBe(2027);
+    expect(r.cost).toBe(2027); // DNS $5 + LB $20 + 2 web groups × $326 + 3 XL shards × $450
     // Keys that pile queries onto one shard, however many shards.
     for (const [props, max] of [[{ key: 'country' }, 1260 / 1600], [{ key: 'date' }, 1500 / 1600], [{ key: 'country', count: '8' }, 1260 / 1600], [{ key: 'date', count: '8' }, 1500 / 1600]]) {
       await setProps(page, z, { count: '3', ...props });
@@ -111,9 +112,9 @@ test.describe('Level 9 · numbers', () => {
     r = await measure(page);
     expect(r.loads).toEqual([800, 800, 800, 200, 200, 200]);
     expect(r.max).toBeCloseTo(0.5, 6);
-    expect(r.cost).toBe(3377);
+    expect(r.cost).toBe(3377); // $2,027 + 3 more XL shards for hot accounts × $450
     await setProps(page, z, { count: '8', hot: 'stay' }); // brute force: eight XL shards
-    expect((await measure(page)).cost).toBe(4277);
+    expect((await measure(page)).cost).toBe(4277); // DNS $5 + LB $20 + 2 web groups × $326 + 8 XL shards × $450
     await expect(page.locator('#goals li', { hasText: 'Spend at most $3,500' })).toHaveClass(/fail/);
   });
 
@@ -127,14 +128,14 @@ test.describe('Level 9 · numbers', () => {
     await calm(page);
     const r = await measure(page);
     expect(r.loads).toEqual([720, 720, 720, 180, 180, 180]);
-    expect(r.cost).toBe(3863);
+    expect(r.cost).toBe(3863); // 4,500 req/s: 2,250 per web group, 125 h → $469; DNS $5 + LB $20 + 2 × $469 + 6 XL shards × $450 + NoSQL $200
   });
 
   test('levels without shards ignore the new rules', async ({ page }) => {
     await freshPage(page, '#level-8/build');
     const r = await measure(page);
     expect(r.max).toBeNull();
-    expect(r.cost).toBe(1375);
+    expect(r.cost).toBe(1375); // Level 8 start: DNS $5 + LB $20 + 2 XL web × $450 + XL database $450
   });
 });
 
@@ -225,7 +226,7 @@ test.describe('Level 9 · layout and accessibility', () => {
       await page.locator('#insp .conn').getByRole('button', { name: 'Connect', exact: true }).first().focus();
       await page.keyboard.press('Enter');
     }
-    expect((await measure(page)).cost).toBe(2027);
+    expect((await measure(page)).cost).toBe(2027); // DNS $5 + LB $20 + 2 web groups × $326 + 3 XL shards × $450
     await pressEnterOn(page, '#playBtn');
     await fastForward(page, 5);
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);

@@ -33,7 +33,7 @@ test.describe('Level 10 · playthrough', () => {
     await selectNode(page, r1);
     await page.locator('#insp [data-focus-key="bucket-12"]').click();
     await expect(page.locator(`[data-node="${r1}"] .node-sub`)).toHaveText('token bucket · 12, 1/s');
-    expect((await measure(page)).cost).toBe(1955);
+    expect((await measure(page)).cost).toBe(1955); // DNS $5 + LB $20 + 3 XL shards × $450 + limiter $100 + 2 web groups × $240
     await page.click('#playBtn');
     await fastForward(page, 5);
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
@@ -76,10 +76,11 @@ test.describe('Level 10 · numbers', () => {
     await freshPage(page, '#level-10/build');
     await calm(page);
     // Start: 2,000 real + 2,400 bot requests a second reach the index: 4,400 over 3 XL shards.
+    // Web groups: M servers at most 60% of 400 busy; a group pays 90 × server-hours ÷ 24, hours = ceil(peak per group × day share ÷ 240).
     let r = await measure(page);
     expect(r.index).toBeCloseTo(4400 / 3 / 1600, 6);
     expect(r.latency).toBeGreaterThan(150);
-    expect(r.cost).toBe(2283);
+    expect(r.cost).toBe(2283); // 4,400 req/s → 2,200 per group, 121 h → $454; DNS $5 + LB $20 + 3 XL shards × $450 + 2 × $454
     // A token bucket of 4, refilled 1 a second: a typed search (12 in 2 s) loses 12 − 4 − 2 = 6 of 12.
     const id = await addLimiter(page);
     await calm(page);
@@ -92,7 +93,7 @@ test.describe('Level 10 · numbers', () => {
     r = await measure(page);
     expect(r.served).toBeCloseTo(100, 6);
     expect(r.quota).toBe(1);
-    expect(r.cost).toBe(1955);
+    expect(r.cost).toBe(1955); // 2,000 real + 160 bot keys × 1/s = 2,160 → 1,080 per group, 64 h → $240; $1,375 + limiter $100 + 2 × $240
     // Refilling 5 a second lets each key through 5 times the limit.
     await setProps(page, id, { refill: '5' });
     await calm(page);
@@ -117,7 +118,7 @@ test.describe('Level 10 · numbers', () => {
     const r = await measure(page);
     expect(r.quota).toBeNull();
     expect(r.botThrough).toBe(0);
-    expect(r.cost).toBe(1577);
+    expect(r.cost).toBe(1577); // Level 9 start: DNS $5 + LB $20 + 2 web groups × $326 + 2 XL databases × $450
   });
 });
 
@@ -141,7 +142,7 @@ test.describe('Level 10 · teaching feedback', () => {
       await calm(page);
       const r = await measure(page);
       expect([props.algo, r.quota]).toEqual([props.algo, quota]);
-      expect(r.cost).toBe(1955); // the bill follows normal days, not the experiment
+      expect(r.cost).toBe(1955); // $1,375 + limiter $100 + 2 web groups × $240; the bill follows normal days, not the experiment
     }
     await setProps(page, id, { algo: 'fixed', bucket: '12' });
     await page.click('#playBtn');
@@ -171,7 +172,7 @@ test.describe('Level 10 · teaching feedback', () => {
     r = await measure(page);
     expect(r.quota).toBe(1);
     expect(r.botThrough).toBeCloseTo(400, 6);
-    expect(r.cost).toBe(2167);
+    expect(r.cost).toBe(2167); // 2,000 + 400 = 2,400 → 1,200 per group, 71 h → $266; $1,375 + 2 limiters × $100 + counters $60 + 2 × $266
   });
 
   test('the limiter connects from Users to the load balancer only', async ({ page }) => {
@@ -245,7 +246,7 @@ test.describe('Level 10 · layout and accessibility', () => {
     await pressEnterOn(page, '[data-node="u"]');
     await page.locator('#insp .conn', { hasText: 'Users → Load balancer' }).getByRole('button', { name: 'Disconnect' }).focus();
     await page.keyboard.press('Enter');
-    expect((await measure(page)).cost).toBe(1955);
+    expect((await measure(page)).cost).toBe(1955); // DNS $5 + LB $20 + 3 XL shards × $450 + limiter $100 + 2 web groups × $240
     await pressEnterOn(page, '#playBtn');
     await fastForward(page, 5);
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
