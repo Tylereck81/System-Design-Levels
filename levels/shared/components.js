@@ -3,6 +3,7 @@
 // autoscaled web server and the sharded database. Each object is made by a function, so every level gets its own
 // copy and a change in one level can never leak into another. Strings and pure functions are shared as they are.
 // Pure: nothing here reads game state.
+import { LB_PUBLIC_IP } from './addresses.js';
 
 /** The shop's users once they log in: most requests read data, the rest write it. */
 export const shopUsers = () => ({ name: 'Users', sub: 'Web + mobile app', desc: 'Your shoppers. They look up example.com in DNS, then send requests to the load balancer. Most requests read data, such as product pages and search; the rest write it, such as orders and reviews.' });
@@ -15,7 +16,7 @@ export const regionUsers = () => ({
 });
 
 /** DNS that points example.com at the load balancer. */
-export const dns = () => ({ name: 'DNS', short: 'Domain → IP address', sub: 'Third-party · $5', desc: 'Turns example.com into the load balancer\'s public IP, 203.0.113.10. Costs $5/month in this game.' });
+export const dns = () => ({ name: 'DNS', short: 'Domain → IP address', sub: 'Third-party · $5', desc: `Turns example.com into the load balancer's public IP, ${LB_PUBLIC_IP}. Costs $5/month in this game.` });
 
 /** A load balancer with an active/standby pair and three routing methods. */
 export const lb = () => ({
@@ -27,7 +28,7 @@ export const lb = () => ({
     { id: 'wrr', short: 'weighted', name: 'Weighted', sub: 'shares follow server size', note: 'Round robin with weights: a server twice the size gets twice the requests. You set the weights; here they follow each server\'s capacity.', log: 'Load balancer set to weighted round robin: shares follow each server\'s capacity.' },
     { id: 'lc', short: 'least conn', name: 'Least connections', sub: 'to the least busy server', note: 'Sends each request to the server with the fewest requests in progress. Faster servers finish sooner, so they get more. In this game that works out the same as weighted; real systems also gain when some requests take much longer than others.', log: 'Load balancer set to least connections: each request goes to the server with the fewest in progress.' },
   ],
-  desc: 'Users connect to its public IP, 203.0.113.10. It hands each request to a healthy web server over the private network, using the routing method you pick, and stops using a server that fails its health check. A second load balancer waits as a standby and takes over the same IP if the first one stops sending heartbeats. In this game it handles 5,000 req/s, adds 1 ms and costs $20/month.',
+  desc: `Users connect to its public IP, ${LB_PUBLIC_IP}. It hands each request to a healthy web server over the private network, using the routing method you pick, and stops using a server that fails its health check. A second load balancer waits as a standby and takes over the same IP if the first one stops sending heartbeats. In this game it handles 5,000 req/s, adds 1 ms and costs $20/month.`,
 });
 
 /** The web server's note when it has no database to use. */
