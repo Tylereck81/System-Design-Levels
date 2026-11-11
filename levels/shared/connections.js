@@ -5,8 +5,9 @@
 // spreads the ones it needs, in that order: `{ ...lbBad(), ...replicaBad(), ...cacheBad() }`.
 // Pure: nothing here reads game state.
 import { ONE_CDN } from './limits.js';
+import { LB_PUBLIC_IP } from './addresses.js';
 
-export const dnsLookup = () => ({ from: 'users', to: 'dns', label: 'DNS lookup', desc: 'The device asks DNS for the IP of example.com and gets the load balancer\'s public IP, 203.0.113.10. It happens once, then the answer is cached.' });
+export const dnsLookup = () => ({ from: 'users', to: 'dns', label: 'DNS lookup', desc: `The device asks DNS for the IP of example.com and gets the load balancer's public IP, ${LB_PUBLIC_IP}. It happens once, then the answer is cached.` });
 export const usersToLb = () => ({ from: 'users', to: 'lb', label: 'HTTP requests', desc: 'Users send every request to the load balancer\'s public IP. They never see the web servers.' });
 export const lbToWeb = () => ({ from: 'lb', to: 'web', label: 'private IP', desc: 'The load balancer forwards each request to a web server over the private network (10.0.0.x), inside the same data center (about 0.5 ms).' });
 export const webToDb = () => ({ from: 'web', to: 'db', label: 'queries', desc: 'The web server reads and writes data in the shared database, inside the same data center (about 0.5 ms round trip).' });

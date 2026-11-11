@@ -1,8 +1,9 @@
 // @ts-check
 // The engine's design messages (`text`) that several levels show.
 // Strings are shared as they are; objects are made by functions, so every level gets its own copy.
-// Pure: it imports only the formatting helper.
+// Pure: it imports only the formatting helper and the shared addresses.
 import { fmt } from '../../js/format.js';
+import { LB_PUBLIC_IP } from './addresses.js';
 
 /** The message shown when a level's design is finished. */
 export const levelComplete = (n) => `Level ${n} complete. Take the quiz.`;
@@ -14,8 +15,8 @@ export const lbText = () => ({
   noBackend: 'The load balancer has no web servers to send requests to, so every request fails. Connect it to the web servers.',
   combinedOver: ' It is not connected to the database, so it keeps its own data and only gets half its capacity.',
   nosqlOver: ' NoSQL cannot join, so each request costs 3 lookups.',
-  dnsAnswered: 'DNS answered: example.com is at 203.0.113.10, the load balancer\'s public IP. The device caches it.',
-  ipTag: 'IP 203.0.113.10 cached',
+  dnsAnswered: `DNS answered: example.com is at ${LB_PUBLIC_IP}, the load balancer's public IP. The device caches it.`,
+  ipTag: `IP ${LB_PUBLIC_IP} cached`,
 });
 
 /** Added to `lbText()` once there are a primary database and replicas. */

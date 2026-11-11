@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { Level, Goal } from '../js/types.js' */
+/** @import { Level, Goal, Lesson } from '../js/types.js' */
 // Level 2: Load balancer and horizontal scaling.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { servedGoal, latGoal, costGoal, servedAtLeast } from './shared/goals.js';
@@ -8,9 +8,15 @@ import { dnsLookup, usersToLb, lbToWeb, webToDb, lbBad } from './shared/connecti
 import { lbText, levelComplete } from './shared/text.js';
 import { ONE_DNS, TWO_LBS } from './shared/limits.js';
 import { failText, passText } from './shared/quiz.js';
-import { lessonSteps } from './shared/lesson.js';
+import { LB_PUBLIC_IP, WEB_PRIVATE_IPS } from './shared/addresses.js';
+import { fmt } from '../js/format.js';
+import { SIZES, T, COMPONENTS, SLOWDOWN_CAP_FROM, qmul } from '../js/engine/catalog.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
+/** Size of the web server the level starts with: Level 1's launch-day server. */
+const START_WEB_SIZE = 'L';
+/** Peak traffic before (Mission 1) and after (Missions 2 and 3) the partner app's users arrive, in req/s. */
+const PEAK = { before: 463, after: 1204 };
 
 /** @type {Goal} */
 const sharedDbGoal = { id: 'shared', type: 'struct', text: 'Every web server uses the shared database', test: (g) => g.everyReaches('web', 'db') };
@@ -27,6 +33,267 @@ function fewestReached(g) {
   return { lb: worst, n: worst ? n : 0, total, standby: !!worst && lbs.length > 1 && worst !== lbs[0] };
 }
 const standbyReady = (g) => { const f = fewestReached(g); return g.count('lb') >= 2 && f.total > 0 && f.n === f.total; };
+
+
+// ---------------- Lesson ----------------
+// Small text helpers. Nothing here changes a number; they only format it.
+const percent = (share) => `${+(share * 100).toPrecision(6)}%`; // 0.75 → "75%", 0.999999 → "99.9999%"
+const ms = (value) => `${Math.round(value * 10) / 10} ms`; // 0.5 → "0.5 ms"
+const oneDecimal = (value) => `${Math.round(value * 10) / 10}`; // 4.1666 → "4.2"
+const rate = (value) => `${fmt(Math.round(value))} req/s`; // 833.3 → "833 req/s"
+
+const { S, M, L } = SIZES;
+const sizeNames = Object.keys(SIZES);
+const lbRules = COMPONENTS.lb;
+const queriesPerRequest = COMPONENTS.db.kinds.sql.per;
+const sharedCapacity = COMPONENTS.web.alone.capFactor;
+
+const startSize = START_WEB_SIZE;
+const publicIp = LB_PUBLIC_IP;
+const privateIps = WEB_PRIVATE_IPS;
+
+// Step 1's table: the same capacity bought as one big server or as several smaller ones.
+const side = { count: L.cap / M.cap }; // how many M servers make one L: 2
+side.cost = side.count * M.cost;
+side.left = (side.count - 1) * M.cap;
+
+// Step 3's example: N + 1 on M servers. The 900 req/s peak is our example load, not a game number.
+const spare = { peak: 900, cap: M.cap };
+spare.n = Math.ceil(spare.peak / spare.cap);
+spare.left = spare.n * spare.cap; // what the pool carries after one of its n + 1 servers crashes
+// Step 3's question: the same sum with a 2,500 req/s peak (also ours).
+const turn = { peak: 2500, cap: M.cap };
+turn.n = Math.ceil(turn.peak / turn.cap);
+
+// Step 4's question: round robin over one L and one S server, with 800 req/s arriving (our example load).
+const mixed = { load: 800, total: L.cap + S.cap };
+mixed.each = mixed.load / 2;
+mixed.dropped = mixed.each - S.cap;
+
+// Step 5's example: a ticket site (our numbers), sized on S servers, with the database checked last.
+const est = { users: 1500000, each: 24 };
+est.day = est.users * est.each;
+est.avg = est.day / 86400;
+est.peak = est.avg * 2;
+est.n = Math.ceil(est.peak / S.cap);
+est.queries = est.peak * queriesPerRequest;
+est.dbSize = sizeNames.find((name) => SIZES[name].cap >= est.queries); // the smallest database that carries it
+est.tooSmall = sizeNames[sizeNames.indexOf(est.dbSize) - 1]; // the size below it
+
+// Step 7's sums. The availabilities are ours: 99.9% is Level 1's example, 95% is the question's.
+const HOURS_A_YEAR = 365.25 * 24;
+const one = { up: 0.999 };
+one.down = 1 - one.up;
+one.bothDown = one.down * one.down;
+const two = { up: 0.95 };
+two.bothDown = (1 - two.up) * (1 - two.up);
+
+/** @type {Lesson} */
+const lesson = {
+  kicker: 'Level 2 · Scaling out',
+  title: 'Load balancer and horizontal scaling',
+  promise: `Launch day ran on one ${startSize} server, until it crashed and took example.com down with it. By the end of this level you will know how to spread traffic over a pool of servers, how many to run, and how to keep the site up when a server or the load balancer dies.`,
+  minutes: 11,
+  steps: [
+    {
+      title: 'Why not just rent a bigger server?',
+      // "The next size up is also the last size" is checked in tests/unit/level-02-lesson.test.mjs.
+      hook: `Your one ${startSize} server crashed on launch day and the whole site went with it. You could rent the next size up. It is also the last size, and it would still be one machine.`,
+      body: [
+        { p: `Run several smaller servers side by side, and add more as traffic grows. That is <b>horizontal scaling</b>, or <b>scaling out</b>. Here are two ways to buy ${rate(L.cap)}:` },
+        { table: { head: ['Design', 'Capacity', 'Cost / month', 'Left after one crash'], num: true, rows: [
+          ['1 × L', rate(L.cap), `$${L.cost}`, rate(0)],
+          [`${side.count} × M`, rate(side.count * M.cap), `$${side.cost}`, rate(side.left)],
+        ] } },
+        { p: 'Scaling out removes both walls from Level 1. There is no biggest size: you add another server. And one crash no longer takes everything.' },
+        { p: 'The price: several servers need something in front of them that decides which one handles each request. That is the <b>load balancer</b>.' },
+        { assume: 'In this game smaller servers are also cheaper for the same capacity. Real prices vary, so do not promise that in an interview.' },
+      ],
+      takeaway: 'Scaling out has no size ceiling, and one server can fail without taking the site down.',
+      missions: [0],
+      quiz: [4],
+    },
+    {
+      title: 'How do users reach many servers through one address?',
+      hook: 'You now run two web servers, but <b>example.com</b> can only send people to one place. Which address does DNS hand out, and who decides which server answers?',
+      body: [
+        {
+          figure: 'figLb',
+          alt: `Users look up example.com in DNS and get the load balancer's public IP, ${publicIp}. They send HTTP requests to the load balancer, which forwards each one to a web server on a private IP, ${privateIps.join(' or ')}.`,
+          caption: 'One public address in front, private addresses behind',
+        },
+        { ol: [
+          `DNS now answers <code>example.com</code> with the <b>load balancer's public IP</b>, <code>${publicIp}</code>.`,
+          'Every request goes to the load balancer. It picks a web server and forwards the request over the private network.',
+          `The web servers have <b>private IPs</b>, such as <code>${privateIps.join('</code> and <code>')}</code>. A private IP works only inside your own network: nothing on the internet can reach it.`,
+        ] },
+        { p: 'So users can no longer reach a web server directly. Only the load balancer can. That keeps the servers out of direct reach and makes them interchangeable: users see one address, however many servers sit behind it.' },
+        { p: 'The private ranges are <code>10.0.0.0/8</code>, <code>172.16.0.0/12</code> and <code>192.168.0.0/16</code>.' },
+      ],
+      takeaway: 'Users talk to one public address, and the load balancer passes each request to a server on a private one.',
+      missions: [0],
+      quiz: [0, 1],
+    },
+    {
+      title: 'What happens when a web server dies?',
+      hook: 'It is 2 a.m. and one of your web servers stops answering. Nobody is awake to fix it. Do your users see errors?',
+      body: [
+        { p: 'The load balancer sends each server a request every few seconds: a <b>health check</b>. A server that stops answering gets no more traffic, and the healthy ones share its load.' },
+        { p: `The servers left must then carry the whole peak. Plan for <b>N + 1</b>: N servers for the peak, plus one spare. At a peak of ${rate(spare.peak)} on M servers:` },
+        {
+          example: [
+            `${rate(spare.peak)} ÷ ${rate(spare.cap)} per server = ${spare.peak / spare.cap} → ${spare.n} servers carry the peak`,
+            `${spare.n} servers + 1 spare = ${spare.n + 1} servers`,
+            `One crashes: ${spare.n} servers × ${rate(spare.cap)} = ${rate(spare.left)}, still above ${rate(spare.peak)}`,
+          ],
+          note: `Those ${spare.n} run ${percent(spare.peak / spare.left)} busy: slower, but nothing fails.`,
+        },
+        { assume: 'Game rule: a dead server is noticed at once. Real health checks take a few seconds, and some requests fail meanwhile.' },
+      ],
+      check: {
+        kind: 'turn',
+        q: `The peak is ${rate(turn.peak)} and each server handles ${rate(turn.cap)}. What is the fewest servers that still serve everything after one crashes?`,
+        options: [
+          { t: `${turn.n}`, why: `${fmt(turn.peak)} ÷ ${turn.cap} = ${turn.peak / turn.cap}, so ${turn.n} carry the peak. But when one crashes ${turn.n - 1} are left: ${turn.n - 1} × ${turn.cap} = ${rate((turn.n - 1) * turn.cap)}, less than ${rate(turn.peak)}.` },
+          { t: `${turn.n + 1}`, right: true, why: `${fmt(turn.peak)} ÷ ${turn.cap} = ${turn.peak / turn.cap}, so ${turn.n} servers carry the peak, plus 1 spare = ${turn.n + 1}. After a crash, ${turn.n} × ${turn.cap} = ${rate(turn.n * turn.cap)} still covers it.` },
+          { t: `${turn.n * 2}`, why: `A whole second set survives a crash, but you pay for ${turn.n * 2 - (turn.n + 1)} servers you do not need. One spare covers one failure.` },
+        ],
+      },
+      takeaway: 'Run one more server than the peak needs, so that any one of them can fail: N + 1.',
+      missions: [0, 1],
+      quiz: [2, 3],
+    },
+    {
+      title: 'Which server gets the next request?',
+      hook: 'Your pool has one L server and one S server. The load balancer deals requests out like cards: one for you, one for you. Is that fair?',
+      check: {
+        kind: 'guess',
+        q: `Round robin spreads ${rate(mixed.load)} over one L server (${rate(L.cap)}) and one S server (${rate(S.cap)}). What happens?`,
+        options: [
+          { t: `Nothing fails: together they can handle ${rate(mixed.total)}`, why: `The total is enough, but round robin does not look at size. Each server gets ${rate(mixed.each)}, and the S can only serve ${fmt(S.cap)}.` },
+          { t: `The S server gets ${rate(mixed.each)} and drops ${fmt(mixed.dropped)} of them`, right: true, why: `Round robin gives each server the same share: ${fmt(mixed.load)} ÷ 2 = ${rate(mixed.each)}. The S serves ${fmt(S.cap)} and the other ${fmt(mixed.dropped)} fail. That is ${percent(mixed.dropped / mixed.load)} of all requests, while the L is only ${percent(mixed.each / L.cap)} busy.` },
+          { t: `The L gets ${rate(mixed.load * L.cap / mixed.total)} and the S gets ${fmt(mixed.load * S.cap / mixed.total)}`, why: `That is what a weighted method does: shares follow size (${fmt(mixed.load)} × ${fmt(L.cap)} ÷ ${fmt(mixed.total)} = ${fmt(mixed.load * L.cap / mixed.total)}). Plain round robin gives both the same.` },
+        ],
+      },
+      body: [
+        { table: { head: ['Method', 'How it picks', 'Use it when'], rows: [
+          ['<b>Round robin</b>', 'Each server in turn, so each gets the same share', 'All servers are the same size'],
+          ['<b>Weighted</b>', 'In turn, but a bigger server gets a bigger share', 'You mix sizes'],
+          ['<b>Least connections</b>', 'The server with the fewest requests in progress', 'Some requests take much longer than others'],
+        ] } },
+        { p: 'With plain round robin and mixed sizes, the smallest server overloads first, even when the pool as a whole has room. Keep a pool to one size, or change the method.' },
+        { p: 'Growing the pool needs no downtime: add a server, and the load balancer starts sending it requests.' },
+        { assume: 'Game rule: round robin is the default. Weighted and least connections both share traffic in proportion to each server\'s capacity. You pick the method on the load balancer.' },
+      ],
+      takeaway: 'Round robin is only fair when every server in the pool is the same size.',
+      missions: [0, 1],
+      quiz: [5],
+    },
+    {
+      title: 'How many servers does the new traffic need?',
+      hook: 'A partner app is about to send you its users. You are told how many people, not how many requests a second. And the web servers are not the only thing the new traffic will hit.',
+      check: {
+        kind: 'guess',
+        q: 'Traffic doubles, so you double the number of web servers. What happens to the load on the one database behind them?',
+        options: [
+          { t: 'It stays the same: the extra web servers absorb it', why: 'Every request still needs a database query. More requests through the web servers means more queries behind them.' },
+          { t: 'It doubles too', right: true, why: 'Every request needs a query, so the database\'s load follows the traffic, however many web servers share the web work. The pool can grow sideways; the one database can only get bigger.' },
+          { t: 'It halves, because the work is shared out', why: 'The web servers share the web work between them. They all send their queries to the same database.' },
+        ],
+      },
+      body: [
+        { p: `Estimate first, as in Level 1: <b>daily users × requests per user per day ÷ 86,400</b>, then × 2 for the peak. Size the pool with N + 1. Then check the database: every request still needs ${queriesPerRequest} query from it. Take a ticket site with ${fmt(est.users)} daily users, each making ${est.each} requests a day:` },
+        {
+          example: [
+            `${fmt(est.users)} users × ${est.each} requests a day = ${fmt(est.day)} requests a day`,
+            `${fmt(est.day)} requests ÷ 86,400 s ≈ ${rate(est.avg)} on average, × 2 ≈ ${rate(est.peak)} at peak`,
+            `${rate(est.peak)} ÷ ${rate(S.cap)} per S server ≈ ${oneDecimal(est.peak / S.cap)} → ${est.n} servers, + 1 spare = ${est.n + 1} servers`,
+            `Database: ${fmt(Math.round(est.queries))} queries/s is more than size ${est.tooSmall} handles (${fmt(SIZES[est.tooSmall].cap)}), so it needs size ${est.dbSize} (${fmt(SIZES[est.dbSize].cap)})`,
+          ],
+          note: 'The web tier grew by adding servers. The database could only move up a size.',
+        },
+      ],
+      takeaway: 'Estimate the peak, size the pool with a spare, then check the one thing every request still shares: the database.',
+      missions: [1],
+      quiz: [8],
+    },
+    {
+      title: 'What if the load balancer itself fails?',
+      hook: 'Every web server now has a spare. But every request enters through one load balancer. If it stops, the site stops, however many servers are waiting behind it.',
+      check: {
+        kind: 'guess',
+        q: 'The active load balancer dies and a standby takes over. How do users\' devices find the standby?',
+        options: [
+          { t: 'DNS is updated to point at the standby\'s own address', why: 'Devices keep a DNS answer for a while, so a DNS change would leave many of them sending requests to the dead machine. The standby takes over the same address instead.' },
+          { t: 'They do not have to: the standby takes over the same public IP', right: true, why: 'Devices keep sending to the address they already know. The standby starts answering on it, so nothing changes for users and DNS stays as it was.' },
+          { t: 'Each device already has both addresses and tries the second', why: 'That describes active-active, where DNS returns both addresses. A standby has no address that users know about until it takes over the active one\'s.' },
+        ],
+      },
+      body: [
+        {
+          figure: 'figStandby',
+          alt: `Users send requests to the active load balancer at ${publicIp}. A standby load balancer exchanges heartbeats with it and is connected to the same web servers, ready to take over the public IP.`,
+          caption: 'Active and standby load balancers share one public IP',
+        },
+        { p: 'A part that is the only one of its kind on the request path is a <b>single point of failure</b>. The usual fix here is a <b>standby pair</b>:' },
+        { ul: [
+          'The <b>active</b> one handles all traffic. The <b>standby</b> is connected to the same web servers but handles none.',
+          'The two send each other a <b>heartbeat</b>: a small "still alive" signal, every second or so.',
+          `If the heartbeats stop for a few seconds, the standby takes over the public IP, <code>${publicIp}</code>. DNS does not change.`,
+        ] },
+        { p: 'The other option is <b>active-active</b>: both take traffic, but each must still be able to carry the whole load alone.' },
+        { assume: 'Game rule: the takeover is instant. A real one takes a few seconds, and some requests fail meanwhile.' },
+      ],
+      takeaway: 'A standby load balancer listens for heartbeats and takes over the same public IP when they stop.',
+      missions: [2],
+      quiz: [6, 7],
+    },
+    {
+      title: 'How much safer are two than one?',
+      hook: `The interviewer points at your pool: "Each of these is up ${percent(one.up)} of the time. What do I get for paying for two?" Answer with a number, not with "it is more reliable".`,
+      body: [
+        { p: 'The site is down only when <b>every</b> copy is down at the same moment. If the copies fail <b>independently</b>, multiply their chances of being down:' },
+        {
+          example: [
+            `One server: down ${percent(one.down)} of the time = ${(one.down * HOURS_A_YEAR).toFixed(2)} hours a year`,
+            `Both down at once: ${percent(one.down)} × ${percent(one.down)} = ${percent(one.bothDown)} of the time`,
+            `At least one up: 100% − ${percent(one.bothDown)} = ${percent(1 - one.bothDown)} → about ${Math.round(one.bothDown * HOURS_A_YEAR * 3600)} seconds a year`,
+          ],
+        },
+        { p: '"Independent" matters. Two servers on the same power supply, or updated by the same bad deploy, fail together, and the sum no longer holds.' },
+        { p: 'Then follow one request through your design and name every part that has no copy. After a pool and a standby pair, one is left: the database. Level 3 deals with it.' },
+      ],
+      check: {
+        kind: 'turn',
+        q: `Two web servers are each up ${percent(two.up)} of the time and fail independently. How often is at least one of them up?`,
+        options: [
+          { t: percent(two.up * two.up), why: `That is ${percent(two.up)} × ${percent(two.up)}: how often <b>both</b> are up. The site only needs one of them.` },
+          { t: percent(1 - two.bothDown), right: true, why: `Both are down ${percent(1 - two.up)} × ${percent(1 - two.up)} = ${percent(two.bothDown)} of the time, so at least one is up 100% − ${percent(two.bothDown)} = ${percent(1 - two.bothDown)}.` },
+          { t: percent(two.up), why: 'That is one server on its own. A second, independent server covers most of the first one\'s downtime.' },
+        ],
+      },
+      takeaway: 'Multiply the downtime of independent copies, then name the next part of the design that has no copy.',
+      missions: [2],
+      quiz: [6, 9],
+    },
+  ],
+  recap: {
+    numbers: [
+      ['N + 1', 'servers to carry the peak, plus one spare'],
+      ['1 public IP', 'all that users see, however many servers sit behind it'],
+      ['Same share', 'what round robin gives each server, whatever its size'],
+      ['86,400', 'seconds in a day; peak is about 2× the average'],
+      [`${percent(one.up)} → ${percent(1 - one.bothDown)}`, 'one server → two independent servers'],
+    ],
+    // One line per mission, in mission order.
+    bridge: [
+      `You put a load balancer in front of a pool of web servers at ${rate(PEAK.before)}, then crash one server and watch the others take its share.`,
+      `Traffic grows to ${rate(PEAK.after)}. You estimate the peak before Play unlocks, grow the pool and the database, and crash a server again.`,
+      'You add a standby load balancer, crash the active one, and watch the standby keep the site up.',
+    ],
+  },
+  rules: `The load balancer handles ${rate(lbRules.cap)}, adds ${ms(lbRules.base)} to each request and costs $${lbRules.cost} a month. Round robin gives every healthy web server the same share; weighted and least connections share by capacity. A crashed server gets no traffic, and its share moves to the others at once. A standby load balancer takes no traffic until the active one fails, then takes all of it. A web server that is not connected to the database keeps its own copy of the data and handles ${percent(sharedCapacity)} of its capacity. Web server work ${ms(T.web)}, database query ${ms(T.db)}, internet round trip ${ms(T.rtt)}, round trip inside the data center ${ms(T.dc)}. From ${percent(SLOWDOWN_CAP_FROM)} busy a request takes at most ${qmul(1)}× its base time; only load above 100% fails.`,
+};
 
 /** @type {Level} */
 export default {
@@ -59,7 +326,7 @@ export default {
   startNodes: [
     { id: 'u', type: 'users', x: 380, y: 64 },
     { id: 'd', type: 'dns', x: 640, y: 64 },
-    { id: 'w1', type: 'web', x: 380, y: 280, size: 'L' },
+    { id: 'w1', type: 'web', x: 380, y: 280, size: START_WEB_SIZE },
     { id: 'b', type: 'db', x: 380, y: 456, size: 'L', kind: 'sql' },
   ],
   startEdges: [{ id: 's1', from: 'u', to: 'd' }, { id: 's2', from: 'w1', to: 'b' }],
@@ -78,7 +345,7 @@ export default {
 
   missions: [
     {
-      title: 'One address, many servers', ref: 'Load balancer', qps: 463, budget: 500,
+      title: 'One address, many servers', ref: 'Load balancer', qps: PEAK.before, budget: 500,
       story: 'Launch day ran on one large server, until it crashed and took example.com down with it. Traffic is the same, 463 req/s at peak. Put a load balancer in front and spread the traffic over several web servers, so one crash no longer takes the site offline.',
       goals: [
         { id: 'lb', type: 'struct', text: 'Users reach the web servers through a load balancer', test: (g) => g.count('lb') >= 1 && g.everyReaches('lb', 'web') },
@@ -91,7 +358,7 @@ export default {
       takeaway: 'A server crashed and the site stayed up: the load balancer stopped sending it requests and the others took its share. That only works when the servers left can carry the whole peak. Plan for one more than you need: N + 1.',
     },
     {
-      title: 'Traffic doubles', ref: 'Scaling out', qps: 1204, budget: 950,
+      title: 'Traffic doubles', ref: 'Scaling out', qps: PEAK.after, budget: 950,
       gate: {
         lo: 1000, hi: 1400,
         prompt: '<b>Estimate before you build.</b> Peak QPS = DAU × requests per user per day ÷ 86,400, then × 2 for peak.',
@@ -117,7 +384,7 @@ export default {
       takeaway: 'You grew the web tier one server at a time, and the spare kept the site up during a crash. The database could only grow bigger: it is now 75% busy, and still a single point of failure. Level 3 fixes that with replicas.',
     },
     {
-      title: 'The load balancer is the new single point of failure', ref: 'Standby pair', qps: 1204, budget: 1000,
+      title: 'The load balancer is the new single point of failure', ref: 'Standby pair', qps: PEAK.after, budget: 1000,
       story: 'Every web server now has a spare, but all traffic still enters through one load balancer. If it stops, example.com stops. Add a second load balancer as a standby: the pair send each other heartbeats, and if the active one goes quiet, the standby takes over its public IP.',
       goals: [
         {
@@ -176,7 +443,7 @@ export default {
     failText,
     questions: [
       { q: 'You put a load balancer in front of your web servers. Which IP does DNS now give users\' devices for example.com?', o: ['The private IP of the first web server', 'The load balancer\'s public IP', 'A web server IP picked at random', 'The database server\'s IP'], a: 1, e: 'Devices connect to the load balancer\'s public IP. The load balancer then forwards each request to a web server over the private network, so users never see the web servers.', r: 'Load balancing' },
-      { q: 'Why are the web servers on private IPs once a load balancer is in front?', o: ['Only machines inside the network can reach them', 'Private IPs make every request faster', 'So DNS can cache all of their addresses', 'So each server can store more of the data'], a: 0, e: 'A private IP (for example 10.0.0.11) cannot be reached from the internet. Only the load balancer and other servers inside the network can talk to the web servers, which keeps them out of direct reach.', r: 'Private addresses · RFC 1918' },
+      { q: 'Why are the web servers on private IPs once a load balancer is in front?', o: ['Only machines inside the network can reach them', 'Private IPs make every request faster', 'So DNS can cache all of their addresses', 'So each server can store more of the data'], a: 0, e: `A private IP (for example ${WEB_PRIVATE_IPS[0]}) cannot be reached from the internet. Only the load balancer and other servers inside the network can talk to the web servers, which keeps them out of direct reach.`, r: 'Private addresses · RFC 1918' },
       { q: 'One of three web servers starts failing its health check. What does the load balancer do?', o: ['Sends that server\'s share to the database', 'Keeps sending it requests until it is fixed', 'Stops using it; the other two share the load', 'Restarts the server and waits for it to return'], a: 2, e: 'The load balancer checks each server regularly and stops sending requests to one that fails. The healthy servers share its traffic until it is fixed or replaced.', r: 'Health checks and failover' },
       { q: 'Each web server can serve at most 300 req/s. What is the fewest servers that still serve every request at a 1,000 req/s peak after one crashes?', o: ['3', '4', '6', '5'], a: 3, e: '1,000 ÷ 300 = 3.3, so 4 servers carry the peak. One more lets you lose any server and still have 4: that is N + 1 = 5.', r: 'N + 1 capacity' },
       { q: 'What does scaling out give you that scaling up cannot?', o: ['A faster response from each server', 'No size ceiling, and one server can fail safely', 'A database that never has to grow', 'Cheaper DNS lookups for every user in every country'], a: 1, e: 'Scaling up stops at the biggest machine you can buy, and that one machine is still a single point of failure. Scaling out adds servers behind a load balancer: no fixed ceiling, and one server can fail without taking the site down.', r: 'Scaling up vs scaling out' },
@@ -188,103 +455,7 @@ export default {
     ],
   },
 
-  // Lesson tab content (HTML). The diagrams below draw into its figLb and figStandby.
-  lessonHtml: `
-    <p class="label">Level 2 · Scaling out</p>
-    <h1>Load balancer and horizontal scaling</h1>
-    <p class="lede">One big server ran out of road: it has a size ceiling, and when it crashes the site goes with it. In this level you put a load balancer in front, spread traffic over a pool of web servers, and keep the site up while you crash parts of it.</p>
-    <div class="goals-box">
-      <div><b>You will learn</b>How a load balancer spreads traffic and survives a server crash.</div>
-      <div><b>You will decide</b>How many web servers, what size, and what to keep as a spare.</div>
-      <div><b>You will estimate</b>The new peak, and what is left when one server fails.</div>
-    </div>
-
-    <section>
-      <h2>Scale out instead of up</h2>
-      <p class="src">Scaling up vs scaling out</p>
-      <p>Level 1 ended with two problems. The biggest server you can rent is still one server, so there is a ceiling. And when that server stops, everything stops. Both have the same fix: run several smaller servers side by side and add more as traffic grows. That is <b>horizontal scaling</b>, or scaling out.</p>
-      <p>It is often cheaper too. In this game a bigger server costs more for each request it can handle:</p>
-      <div class="tbl-wrap"><table class="t">
-        <thead><tr><th>Server size (game)</th><th>Capacity</th><th>Cost / month</th><th>Cost per 100 req/s</th></tr></thead>
-        <tbody>
-          <tr><td>S</td><td class="n">200 req/s</td><td class="n">$40</td><td class="n">$20.00</td></tr>
-          <tr><td>M</td><td class="n">400 req/s</td><td class="n">$90</td><td class="n">$22.50</td></tr>
-          <tr><td>L</td><td class="n">800 req/s</td><td class="n">$200</td><td class="n">$25.00</td></tr>
-          <tr><td>XL</td><td class="n">1,600 req/s</td><td class="n">$450</td><td class="n">$28.13</td></tr>
-        </tbody>
-      </table></div>
-      <p>Several servers need something in front of them that decides which one handles each request. That is the load balancer.</p>
-    </section>
-
-    <section>
-      <h2>What a load balancer does</h2>
-      <p class="src">Load balancing · private addresses RFC 1918</p>
-      <figure class="fig"><svg id="figLb" viewBox="0 0 640 260" role="img" aria-label="Users look up example.com in DNS and get the load balancer's public IP, 203.0.113.10. They send HTTP requests to the load balancer, which forwards each one to a web server on a private IP, 10.0.0.11 or 10.0.0.12."></svg><figcaption>Users reach one public IP; the web servers sit on private IPs</figcaption></figure>
-      <ol>
-        <li>DNS now answers example.com with the <b>load balancer's public IP</b>, 203.0.113.10.</li>
-        <li>Every request goes to the load balancer. It picks a web server and forwards the request over the private network.</li>
-        <li>The web servers have <b>private IPs</b> such as 10.0.0.11 and 10.0.0.12. Addresses in 10.0.0.0/8, 172.16.0.0/12 and 192.168.0.0/16 are reserved for private networks and cannot be reached from the internet, so users can no longer reach a web server directly. Only the load balancer can.</li>
-      </ol>
-      <p>The web servers become interchangeable. Users only ever see one address, however many servers sit behind it.</p>
-    </section>
-
-    <section>
-      <h2>When a web server dies</h2>
-      <p class="src">Health checks and failover</p>
-      <p>The load balancer checks each server every few seconds with a small request, a <b>health check</b>. When a server stops answering, the load balancer stops sending it traffic and the healthy servers share its load. Most users never notice. You then replace the broken server and the load balancer starts using it again.</p>
-      <p>That only works if the servers that are left can carry the whole peak. Plan for <b>N + 1</b>: N servers to carry the peak, plus one spare. For example, at a peak of 900 req/s with M servers (400 req/s each), 3 servers carry the load (75% busy), so you run 4.</p>
-    </section>
-
-    <section>
-      <h2>When traffic grows</h2>
-      <p class="src">Scaling out · load-balancing methods</p>
-      <p>Add servers to the pool. The load balancer starts sending them requests straight away, with no downtime. How it picks a server:</p>
-      <ul>
-        <li><b>Round robin:</b> each server in turn. Simple, and fair when all servers are the same size. The default here.</li>
-        <li><b>Least connections:</b> the server with the fewest requests in progress. Better when some requests take much longer than others.</li>
-        <li><b>Weighted:</b> bigger servers get a bigger share, so you can mix sizes.</li>
-      </ul>
-      <p>With plain round robin, mix sizes and the small server overloads first: it gets the same share as the big one. Keep a pool to one size, or use weighted or least connections. You can pick the method on each load balancer in the inspector.</p>
-      <div class="note"><b>Layer 4 or layer 7.</b> A layer 4 load balancer looks only at IP addresses and ports and forwards the connection. A layer 7 load balancer reads the HTTP request, so it can route by path or cookie, for example sending /api to one pool and /images to another. It costs a little more work per request.</div>
-    </section>
-
-    <section>
-      <h2>The load balancer is the new single point of failure</h2>
-      <p class="src">Active-passive failover</p>
-      <p>Now every request goes through one load balancer. If it fails, the whole site fails, however many web servers you run. The usual fix is a <b>standby pair</b>:</p>
-      <figure class="fig"><svg id="figStandby" viewBox="0 0 640 260" role="img" aria-label="Users send requests to the active load balancer at 203.0.113.10. A standby load balancer exchanges heartbeats with it and is connected to the same web servers, ready to take over the public IP."></svg><figcaption>Active and standby load balancers share one public IP</figcaption></figure>
-      <ul>
-        <li>The <b>active</b> load balancer handles all traffic. The <b>standby</b> is connected to the same web servers but handles none.</li>
-        <li>The two send each other a <b>heartbeat</b>, a small "still alive" signal, every second or so.</li>
-        <li>If the heartbeats stop for a few seconds, the standby takes over the public IP, 203.0.113.10, and carries on. DNS does not change.</li>
-      </ul>
-      <p>The other option is <b>active-active</b>: both load balancers take traffic and DNS returns both addresses. You use both machines, but each must still be able to carry the whole load alone when the other fails.</p>
-    </section>
-
-    <section>
-      <h2>How this level is simulated</h2>
-      <p class="src">Game assumptions</p>
-      <p>With round robin the load balancer gives every healthy web server behind it the same share. With weighted or least connections, each server's share is in proportion to its capacity: under heavy load, with a steady stream of similar requests, least connections settles there too. A crashed server gets no traffic; its share moves to the others at once. A standby load balancer takes no traffic until the active one fails, then takes all of it.</p>
-      <p class="assume">Game assumptions: the load balancer handles 5,000 req/s, adds 1 ms per request and costs $20/month. Health checks and the standby's takeover are instant here; in real systems they take a few seconds, and a few requests fail meanwhile. Server sizes, the 40 ms internet round trip, the 0.5 ms hop inside the data center and the database times are the same as in Level 1. A web server not connected to the database keeps its own copy of the data and gets half its capacity.</p>
-    </section>
-
-    <section>
-      <h2>Numbers to carry into the interview</h2>
-      <p class="src">N + 1 capacity · availability arithmetic</p>
-      <p><b>Servers to run</b> = peak req/s ÷ what one server handles (rounded up), plus one spare. Size for a comfortable load, not 100%: a server at 75% busy already takes 4× its base time.</p>
-      <p><b>Redundancy multiplies availability.</b> If one server is up 99% of the time (3.65 days of downtime a year), two independent servers are both down only 1% × 1% = 0.01% of the time. At least one is up 99.99% of the time: about 53 minutes a year. "Independent" matters: two servers on the same power supply, or updated by the same bad deploy, can fail together.</p>
-    </section>
-
-    <section>
-      ${lessonSteps([
-        'Read the brief. Estimate the peak.',
-        'Load balancer, pool, database.',
-        'Size the pool. Keep a spare.',
-        'Crash your biggest server, then the load balancer.',
-      ])}
-      <p>When the interviewer asks "what happens if this server dies?", follow a request through your design and name the next single point of failure. After the load balancer and the pool, it is usually the database.</p>
-    </section>
-`,
+  lesson,
 
   // Lesson diagrams. `f` provides the engine's drawing helpers.
   drawFigures(f) {
@@ -293,16 +464,16 @@ export default {
     const f1 = $('figLb'); f1.textContent = ''; figDefs(f1);
     figNode(f1, 'users', 104, 50, 'Users', 'Browser + app');
     figNode(f1, 'dns', 104, 205, 'DNS', 'example.com?');
-    figNode(f1, 'lb', 320, 128, 'Load balancer', 'Public 203.0.113.10');
-    figNode(f1, 'web', 536, 50, 'Web server', 'Private 10.0.0.11');
-    figNode(f1, 'web', 536, 205, 'Web server', 'Private 10.0.0.12');
+    figNode(f1, 'lb', 320, 128, 'Load balancer', `Public ${LB_PUBLIC_IP}`);
+    figNode(f1, 'web', 536, 50, 'Web server', `Private ${WEB_PRIVATE_IPS[0]}`);
+    figNode(f1, 'web', 536, 205, 'Web server', `Private ${WEB_PRIVATE_IPS[1]}`);
     figArrow(f1, 104, 82, 104, 173, 'lookup', '1', 118, 132);
     figArrow(f1, 168, 82, 240, 96, 'HTTP', '2', 208, 70);
     figArrow(f1, 400, 96, 472, 82, 'forward', '3', 418, 72);
     figArrow(f1, 400, 160, 472, 173, 'forward', null, 372, 190);
 
     const f2 = $('figStandby'); f2.textContent = ''; figDefs(f2);
-    figNode(f2, 'users', 104, 128, 'Users', 'to 203.0.113.10');
+    figNode(f2, 'users', 104, 128, 'Users', `to ${LB_PUBLIC_IP}`);
     figNode(f2, 'lb', 320, 50, 'Load balancer', 'Active · has the IP');
     figNode(f2, 'lb', 320, 205, 'Load balancer', 'Standby · waiting');
     figNode(f2, 'web', 536, 128, 'Web servers', 'Private IPs');
