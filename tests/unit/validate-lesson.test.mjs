@@ -56,7 +56,9 @@ test('a missing kicker, title, promise, rules or minutes', () => {
   for (const key of ['kicker', 'title', 'promise', 'rules']) {
     assert.deepEqual(validateLesson(level((d) => { delete d.lesson[key]; })), [`the lesson needs a ${key}`]);
   }
-  assert.deepEqual(validateLesson(level((d) => { d.lesson.minutes = 0; })), ['the lesson needs its reading time in minutes']);
+  for (const minutes of [0, '5', NaN]) {
+    assert.deepEqual(validateLesson(level((d) => { d.lesson.minutes = minutes; })), ['the lesson needs its reading time in minutes']);
+  }
 });
 
 test('fewer than 5 or more than 8 steps', () => {
@@ -127,13 +129,19 @@ test('more than one check in a step, or fewer than 3 in the lesson', () => {
   assert.deepEqual(validateLesson(level((d) => { delete steps(d)[2].check; })), ['the lesson has 2 checks, fewer than 3']);
 });
 
-test('a check with too few or too many options, not exactly one right, or an option without a why', () => {
+test('a check with no kind or question', () => {
+  assert.deepEqual(validateLesson(level((d) => { steps(d)[0].check.kind = 'quiz'; })), ['step 1: the check kind must be guess or turn']);
+  assert.deepEqual(validateLesson(level((d) => { delete steps(d)[0].check.q; })), ['step 1: the check needs a question']);
+});
+
+test('a check with too few or too many options, not exactly one right, or an option without its text or a why', () => {
   const at = (edit) => validateLesson(level((d) => edit(steps(d)[0].check.options)));
   assert.deepEqual(at((o) => o.pop()), ['step 1: the check needs 2 or 3 options; it has 1']);
   assert.deepEqual(at((o) => o.push({ t: 'C', why: 'No.' })), []);
   assert.deepEqual(at((o) => o.push({ t: 'C', why: 'No.' }, { t: 'D', why: 'No.' })), ['step 1: the check needs 2 or 3 options; it has 4']);
   assert.deepEqual(at((o) => { o[1].right = true; }), ['step 1: the check has 2 right options, not exactly one']);
   assert.deepEqual(at((o) => { delete o[1].why; }), ['step 1: every check option needs a why']);
+  assert.deepEqual(at((o) => { o[1].t = ''; }), ['step 1: every check option needs its text']);
 });
 
 test('a mission or quiz question no step uses, an index that does not exist, or a missing list', () => {
@@ -145,5 +153,38 @@ test('a mission or quiz question no step uses, an index that does not exist, or 
 
 test('a recap bridge without one line per mission', () => {
   assert.deepEqual(validateLesson(level((d) => { d.lesson.recap.bridge.pop(); })), ['recap.bridge needs one line per mission (2); it has 1']);
-  assert.deepEqual(validateLesson(level((d) => { delete d.lesson.recap; })), ['recap.bridge needs one line per mission (2); it has none']);
+  assert.deepEqual(validateLesson(level((d) => { d.lesson.recap.bridge = 'One line.'; })), ['recap.bridge needs one line per mission (2); it has none']);
+});
+
+test('recap numbers missing, empty, or not [value, meaning] pairs', () => {
+  const msg = ['recap.numbers needs at least one [value, meaning] pair'];
+  assert.deepEqual(validateLesson(level((d) => { delete d.lesson.recap.numbers; })), msg);
+  assert.deepEqual(validateLesson(level((d) => { d.lesson.recap.numbers = []; })), msg);
+  assert.deepEqual(validateLesson(level((d) => { d.lesson.recap.numbers = [['2×']]; })), msg);
+  assert.deepEqual(validateLesson(level((d) => { delete d.lesson.recap; })), [...msg, 'recap.bridge needs one line per mission (2); it has none']);
+});
+
+test('a block not filled in as its type needs: each type names what is missing, and nothing throws', () => {
+  const at = (block) => validateLesson(level((d) => { steps(d)[0].body.push(block); }));
+  assert.deepEqual(at({ p: '' }), ['step 1: p block needs text']);
+  assert.deepEqual(at({ ul: 'one item' }), ['step 1: ul block needs a list of text items']);
+  assert.deepEqual(at({ ol: ['one', ''] }), ['step 1: ol block needs a list of text items']);
+  assert.deepEqual(at({ example: '1 + 1 = 2' }), ['step 1: example block needs a list of lines, and a note only if it is text']);
+  assert.deepEqual(at({ assume: 3 }), ['step 1: assume block needs text']);
+  const table = (t) => validateLesson(level((d) => { steps(d)[2].body[1] = t; }));
+  const tableMsg = ['step 3: table block needs a head and rows with a cell for each heading'];
+  assert.deepEqual(table({ table: { head: ['', 'B'], rows: [['1', '2']] } }), []); // an empty corner cell is fine
+  assert.deepEqual(table({ table: { head: ['A', 'B'], rows: [['1']] } }), tableMsg);
+  assert.deepEqual(table({ table: { head: ['A', 'B'], rows: [] } }), tableMsg);
+  assert.deepEqual(table({ table: { head: ['A', 'B'], rows: [['1', '2']] }, caption: '' }), tableMsg);
+  const code = (b) => validateLesson(level((d) => { steps(d)[4].body[1] = b; }));
+  assert.deepEqual(code({ code: '' }), ['step 5: code block needs the code as text']);
+  const figure = (edit) => validateLesson(level((d) => edit(steps(d)[0].body[0])));
+  const figureMsg = ['step 1: figure block needs an svg id, alt text and a caption'];
+  assert.deepEqual(figure((b) => { delete b.alt; }), figureMsg);
+  assert.deepEqual(figure((b) => { b.caption = ' '; }), figureMsg);
+  const types = 'p, ul, ol, table, code, example, figure, assume';
+  assert.deepEqual(at(null), [`step 1: a body block needs exactly one type from ${types}; it has keys none`]);
+  assert.deepEqual(at('text'), [`step 1: a body block needs exactly one type from ${types}; it has keys none`]);
+  assert.deepEqual(validateLesson(level((d) => { steps(d).push(null); })), ['step 6: is not a step object']);
 });
