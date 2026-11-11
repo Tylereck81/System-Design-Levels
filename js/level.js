@@ -8,9 +8,10 @@ export function setLevel(data, levelEntry) { level = data; entry = levelEntry; }
 // day: plays 24 hours of traffic in `secs` seconds; it counts when its outcome held all day.
 const EXP_KINDS = ['crash', 'spike', 'event', 'day'];
 
-/** Problems that would make a level misbehave silently. An empty list means the level is fine. */
+/** Problems that would make a level misbehave silently (a step lesson's own checks are in validate-lesson.js). An empty list means the level is fine. */
 export function validateLevel(data) {
   const problems = [], ids = new Set();
+  if ((data.lesson === undefined) === (data.lessonHtml === undefined)) problems.push('a level needs exactly one of lesson and lessonHtml');
   for (const e of data.experiments || []) {
     if (ids.has(e.id)) problems.push(`two experiments use the id "${e.id}"`);
     ids.add(e.id);

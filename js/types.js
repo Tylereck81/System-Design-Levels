@@ -198,6 +198,48 @@
  */
 
 /**
+ * One block of a lesson step's body. Exactly one of these keys names its type; js/validate-lesson.js lists them.
+ * Text may hold inline markup (`<b>`, `<code>`). `figure` names an svg the level's drawFigures draws; `example` is
+ * worked arithmetic, one line per step; `assume` states a rule of the game.
+ * @typedef {{ p: string } | { ul: string[] } | { ol: string[] }
+ *   | { table: { head: string[], rows: string[][], num?: boolean }, caption?: string }
+ *   | { code: string, caption?: string }
+ *   | { example: string[], note?: string }
+ *   | { figure: string, alt: string, caption: string }
+ *   | { assume: string }} LessonBlock
+ */
+
+/**
+ * One answer to a step's question; `right` marks the one right answer, `why` explains it.
+ * @typedef {{ t: string, why: string, right?: boolean }} CheckOption
+ */
+
+/**
+ * One step of a lesson: one idea, titled as a question.
+ * @typedef {object} LessonStep
+ * @property {string} title   a question
+ * @property {string} hook    the problem the step answers
+ * @property {{ kind: 'guess' | 'turn', q: string, options: CheckOption[] }} [check]
+ *   `guess`: asked before the explanation; `turn`: practice after it
+ * @property {LessonBlock[]} body
+ * @property {string} takeaway  one sentence
+ * @property {number[]} missions  indexes of the missions that use this step
+ * @property {number[]} quiz      indexes of the quiz questions that review this step
+ */
+
+/**
+ * A lesson as data: steps, then a recap that hands over to the missions.
+ * @typedef {object} Lesson
+ * @property {string} kicker @property {string} title
+ * @property {string} promise   what the player will know by the end
+ * @property {number} minutes   time to read it
+ * @property {LessonStep[]} steps
+ * @property {{ numbers: [string, string][], bridge: string[] }} recap
+ *   numbers worth remembering (value, what it is); `bridge` has one line per mission, in mission order
+ * @property {string} rules     the game's rules the lesson relies on, in one paragraph
+ */
+
+/**
  * A level file's default export.
  * @typedef {object} Level
  * @property {number | 'mock'} id
@@ -218,7 +260,8 @@
  * @property {Experiment[]} experiments
  * @property {Record<string, string | ((...args: any[]) => string)>} text  the engine's messages, in the level's words
  * @property {{ passScore: number, passText: string, failText: string | ((pass: number) => string), questions: Question[] }} quiz
- * @property {string} lessonHtml
+ * @property {Lesson} [lesson]     the lesson as steps; a level has this or `lessonHtml`, never both
+ * @property {string} [lessonHtml]  the lesson as one block of authored HTML
  * @property {(figures: Record<string, Function>) => void} [drawFigures]  draws the lesson's figures
  * @property {{ title: string, brief: string, checklist: string[] }} [mock]  the level as a mock interview problem
  * @property {{ problem: number, title: string, brief: string, checklist: string[] }} [interview]  set on a mock interview

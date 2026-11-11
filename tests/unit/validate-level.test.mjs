@@ -5,9 +5,10 @@ import assert from 'node:assert/strict';
 import { validateLevel } from '../../js/level.js';
 
 const DAY = Array(24).fill(1);
-/** A valid level: one experiment of each kind, each a goal of Mission 1; `change` edits a copy. */
+/** A valid level: an HTML lesson and one experiment of each kind, each a goal of Mission 1; `change` edits a copy. */
 function level(change = (d) => d) {
   const d = {
+    lessonHtml: '<p>The lesson.</p>',
     workload: { day: [...DAY] },
     experiments: [
       { id: 'crash', kind: 'crash', target: () => null },
@@ -25,7 +26,7 @@ const exp = (d, id) => d.experiments.find(e => e.id === id);
 
 test('a valid level, and one with no experiments, have no problems', () => {
   assert.deepEqual(validateLevel(level()), []);
-  assert.deepEqual(validateLevel({ missions: [{ goals: [{ type: 'served' }] }] }), []);
+  assert.deepEqual(validateLevel({ lessonHtml: '', missions: [{ goals: [{ type: 'served' }] }] }), []);
 });
 
 test('two experiments with the same id', () => {
@@ -59,4 +60,11 @@ test('a break-it goal with no matching experiment names its mission, counted fro
 test('several problems are all reported, in order', () => {
   const d = level(d => { exp(d, 'news').kind = 'flood'; d.missions[0].goals.push({ type: 'exp', id: 'outage' }); });
   assert.deepEqual(validateLevel(d), ['experiment "news" has unknown kind "flood"', 'Mission 1 goal "outage" has no matching experiment']);
+});
+
+test('a level with neither or both of lesson and lessonHtml', () => {
+  const msg = ['a level needs exactly one of lesson and lessonHtml'];
+  assert.deepEqual(validateLevel(level(d => { delete d.lessonHtml; })), msg);
+  assert.deepEqual(validateLevel(level(d => { d.lesson = { steps: [] }; })), msg);
+  assert.deepEqual(validateLevel(level(d => { delete d.lessonHtml; d.lesson = { steps: [] }; })), []);
 });

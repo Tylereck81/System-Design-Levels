@@ -1,9 +1,10 @@
-// The level data contract, checked in Node without a browser: every level file loads, passes validateLevel, has a
-// unique save key, and has a fair quiz; every mock interview is valid. Run with `npm run test:unit` (part of `npm test`).
+// The level data contract, checked in Node without a browser: every level file loads, passes validateLevel (and
+// validateLesson when its lesson is written as steps), has a unique save key, and has a fair quiz; every mock interview is valid. Run with `npm run test:unit` (part of `npm test`).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { LEVELS, MOCK_LEVELS } from '../../levels/index.js';
 import { validateLevel } from '../../js/level.js';
+import { validateLesson } from '../../js/validate-lesson.js';
 
 const QUESTIONS = 10;
 const OPTIONS = 4;
@@ -35,6 +36,7 @@ for (const { entry, data, error } of levels) {
   test(`Level ${entry.id}: loads, passes validateLevel and has its save versions`, () => {
     assert.ifError(error);
     assert.deepEqual(validateLevel(data), []);
+    if (data.lesson) assert.deepEqual(validateLesson(data), [], 'the step lesson passes validateLesson');
     assert.equal(data.saveKey, `sdl-level${entry.id}-v1`);
     assert.ok(isPositiveInteger(data.saveVersion), 'saveVersion is a positive integer');
     // quizVersion is optional: without it the quiz shares saveVersion (js/state.js).
@@ -63,11 +65,12 @@ for (const { entry, data, error } of levels) {
   });
 }
 
-test('every lesson shows the four interview steps once, with the minutes of a 45-minute interview', () => {
+test('every HTML lesson shows the four interview steps once, with the minutes of a 45-minute interview', () => {
   // Written out by hand: 5–8 + 10–12 + 15–20 + 5 minutes is 35–45, which fits in 45.
+  // A lesson written as steps teaches the interview once, in Level 1's last step, so it is not checked here.
   const headers = ['Step 1 · 5–8 min</span><b>Scope it</b>', 'Step 2 · 10–12 min</span><b>Sketch it</b>',
     'Step 3 · 15–20 min</span><b>Go deep</b>', 'Step 4 · 5 min</span><b>Stress it</b>'];
-  for (const { entry, data } of loaded) {
+  for (const { entry, data } of loaded.filter(({ data }) => data.lessonHtml !== undefined)) {
     assert.equal(data.lessonHtml.split('class="steps4"').length - 1, 1, `Level ${entry.id}: one step block`);
     for (const h of headers) assert.ok(data.lessonHtml.includes(h), `Level ${entry.id}: ${h}`);
   }
