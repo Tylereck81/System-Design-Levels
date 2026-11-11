@@ -2,7 +2,7 @@
 /** @import { Level, Lesson } from '../js/types.js' */
 // Level 1: One server to two tiers.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
-import { fmt } from '../js/format.js';
+import { fmt, percent, ms } from '../js/format.js';
 import { SIZES, T, COMPONENTS, SLOWDOWN_CAP_FROM, qmul } from '../js/engine/catalog.js';
 import { STEPS, INTERVIEW_MINUTES } from './mock-steps.js';
 import { servedGoal, latGoal } from './shared/goals.js';
@@ -22,9 +22,7 @@ const dbOf = (g) => { const web = webOf(g); return web ? g.next(web).find((n) =>
 
 // ---------------- Lesson ----------------
 // Small text helpers. Nothing here changes a number; they only format it.
-const percent = (share) => `${Math.round(share * 100)}%`; // 0.75 → "75%"
 const times = (busy) => `${Math.round(qmul(busy) * 10) / 10}×`; // how much longer a request takes: 0.75 → "4×"
-const ms = (value) => `${Math.round(value * 10) / 10} ms`; // 80 → "80 ms"
 const perUnit = (size) => `$${(Math.round((size.cost / size.cap) * 100) / 100).toFixed(2)}`; // S → "$0.20" per req/s
 
 // Step 3's example server: the M size's capacity, with 300 req/s arriving (our example load, not a game number).
