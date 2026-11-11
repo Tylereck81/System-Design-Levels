@@ -66,6 +66,7 @@ test.describe('Experiments', () => {
       const { validateLevel, level } = await import('/js/level.js');
       const ok = validateLevel(level);
       const bad = {
+        lessonHtml: '',
         experiments: [{ id: 'crash', kind: 'crash', target: () => null }, { id: 'crash', kind: 'flood' }],
         missions: [{ goals: [{ id: 'spike', type: 'exp' }] }],
       };
