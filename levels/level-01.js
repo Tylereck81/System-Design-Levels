@@ -4,7 +4,7 @@
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { fmt, percent, ms, rate } from '../js/format.js';
 import { SIZES, T, COMPONENTS, SLOWDOWN_CAP_FROM, qmul } from '../js/engine/catalog.js';
-import { STEPS, INTERVIEW_MINUTES } from './mock-steps.js';
+import { STEPS } from './mock-steps.js';
 import { servedGoal, latGoal } from './shared/goals.js';
 import { levelComplete } from './shared/text.js';
 import { failText, passText } from './shared/quiz.js';
@@ -14,6 +14,10 @@ const targets = { latencyMs: 150, servedPct: 99 };
 const address = '203.0.113.42';
 /** How many times normal traffic the spike experiment sends. */
 const spikeFactor = 10;
+/** Peak traffic of each mission, in req/s. */
+const traffic = [50, 150, 463];
+/** Seconds a mission's targets must hold. */
+const HOLD = T.hold;
 
 // The web server Users reach first, and the database it connects to (null when there is none).
 const webOf = (g) => g.entry.find((n) => n.type === 'web') || null;
@@ -25,18 +29,18 @@ const dbOf = (g) => { const web = webOf(g); return web ? g.next(web).find((n) =>
 const times = (busy) => `${Math.round(qmul(busy) * 10) / 10}×`; // how much longer a request takes: 0.75 → "4×"
 const perUnit = (size) => `$${(Math.round((size.cost / size.cap) * 100) / 100).toFixed(2)}`; // S → "$0.20" per req/s
 
-// Step 3's example server: the M size's capacity, with 300 req/s arriving (our example load, not a game number).
+// The busy-server screen's example server: the M size's capacity, with 300 req/s arriving (our example load, not a game number).
 const ex = { cap: SIZES.M.cap, load: 300 };
 ex.busy = ex.load / ex.cap;
 
-// Step 6's table: one row per server size, straight from the catalog.
+// The scaling screen's table: one row per server size, straight from the catalog.
 const sizeNames = Object.keys(SIZES);
 const largest = sizeNames[sizeNames.length - 1];
 const sizeRows = sizeNames.map((name) => {
   const size = SIZES[name];
   return [`${name} · ${size.cpu} vCPU${name === largest ? ' (largest)' : ''}`, `${fmt(size.cap)} req/s`, `$${size.cost}`, perUnit(size)];
 });
-const { S, L, XL } = SIZES;
+const { S, M, L, XL } = SIZES;
 
 // The web server's rule when it has no database server, and the two database types.
 const sharedCapacity = COMPONENTS.web.alone.capFactor;
@@ -47,256 +51,279 @@ const nosqlLookups = COMPONENTS.db.kinds.nosql.per;
 const capFrom = SLOWDOWN_CAP_FROM;
 const capTimes = `${qmul(1)}×`;
 
-// Step 8's interview timings, from the mock interview's steps: "Scope it 5–8 min, Sketch it 10–12, …".
-const minutes = (step) => (step.min === step.max ? `${step.min}` : `${step.min}–${step.max}`);
-const interviewSteps = STEPS.map((step, i) => `<b>${step.name}</b> ${minutes(step)}${i === 0 ? ' min' : ''}`).join(', ');
+// Debrief 1: Mission 1's server is an S that also runs the database. Its response time is the combined work time
+// slowed by how busy it is, plus the internet round trip (tests/integration/level-01.test.mjs checks the same 100 ms).
+const shared = { cap: S.cap * sharedCapacity, work: COMPONENTS.web.alone.base };
+const mission1Ms = shared.work * qmul(traffic[0] / shared.cap) + T.rtt;
+
+// The scaling screen's example sale: our example load, sent at the spike experiment's factor.
+const sale = { load: 300, factor: spikeFactor };
+
+// The wrap-up's interview loop: the mock interview's four steps, by name.
+const [scope, sketch, deep, stress] = STEPS.map((step) => `<b>${step.name}</b>`);
 
 /** @type {Lesson} */
 const lesson = {
-  kicker: 'Level 1 · Foundations',
-  title: 'One server to two tiers',
-  promise: `It is launch week for your shop, example.com. Everything runs on one $${S.cost} server. By the end of this level you will know why it gets slow, what to split off, how big to make it, and where a single machine stops.`,
-  minutes: 10,
-  steps: [
-    {
-      title: 'How does a phone find your server?',
-      hook: 'Someone types <b>example.com</b>. Their phone knows the name, but the internet delivers to numbers. Something has to turn the name into an address.',
-      check: {
-        kind: 'guess',
-        q: 'Once DNS has answered, where do the page requests travel?',
-        options: [
-          { t: 'To DNS, which forwards them to your server', why: 'DNS does not forward traffic. It answers one question, "where is example.com?", and steps out of the way.' },
-          { t: 'Straight to your server\'s IP address', right: true, why: 'DNS only hands back the address. Every page request then goes directly to your server.' },
-          { t: 'To DNS first on every request, then to your server', why: 'The device keeps the answer for a while, so it does not ask again on every request. And pages never pass through DNS at all.' },
-        ],
-      },
-      body: [
-        {
-          figure: 'figFlow',
-          alt: `The user's device asks DNS where the site is and gets back the IP address ${address}. It then sends HTTP requests straight to the web server at that address and gets HTML or JSON back.`,
-          caption: 'One lookup, then direct requests',
-        },
-        { ol: [
-          'The browser or app asks <b>DNS</b> where <code>example.com</code> is. DNS is usually a paid outside service, not something you host.',
-          `DNS returns an <b>IP address</b>, for example <code>${address}</code>.`,
-          'The device sends <b>HTTP requests</b> straight to that address: your web server.',
-          'The server sends back the page or the data.',
-        ] },
-        { p: 'The device keeps the DNS answer for a while, so the lookup is not repeated on every request.' },
-      ],
-      takeaway: 'DNS answers "where is it?" once, and your pages never travel through it.',
-      missions: [0],
-      quiz: [0],
-    },
-    {
-      title: 'What does the server send back?',
-      hook: 'Your shop has a website and a mobile app. Both ask the same server for product 42, but they need different things back.',
-      body: [
-        { ul: [
-          '<b>Browser:</b> it needs something to show, so the server returns an <b>HTML</b> page.',
-          '<b>Mobile app:</b> its screens are already built in. It only needs the data, so the server returns <b>JSON</b>: plain text that any language can read.',
-        ] },
-        { code: 'GET /products/42   → the app asks for product 42\n{\n  "id": 42,\n  "name": "Trail running shoes",\n  "priceCents": 8999,\n  "inStock": true\n}' },
-        { p: '<b>Words you will hear.</b> The <i>front end</i> runs on the user\'s device. The <i>back end</i> is your code on servers. This game calls that machine the <b>web server</b>; people also say app server or API server.' },
-      ],
-      takeaway: 'Browsers usually get HTML, and apps get JSON: just the data.',
-      missions: [0],
-      quiz: [1],
-    },
-    {
-      title: 'Why does a busy server get slow?',
-      hook: `Your server can handle ${fmt(ex.cap)} requests a second and it is getting ${fmt(ex.load)}. Nothing is failing. So why are people saying the site feels slow?`,
-      check: {
-        kind: 'guess',
-        q: `The server is ${percent(ex.busy)} busy. Compared with an idle server, how much longer does each request take?`,
-        options: [
-          { t: 'About 1.3× as long', why: 'It feels like a quarter of spare room should be plenty. But requests wait in line behind each other, and the wait grows much faster than the load.' },
-          { t: `About ${times(0.5)} as long`, why: `That is what happens at ${percent(0.5)} busy. At ${percent(ex.busy)} it is already worse.` },
-          { t: `About ${times(ex.busy)} as long`, right: true, why: `Time per request = base time ÷ (1 − busy). At ${percent(ex.busy)} busy that is 1 ÷ ${1 - ex.busy} = ${times(ex.busy)}.` },
-        ],
-      },
-      body: [
-        { p: 'Requests queue behind each other. Two numbers describe it: how <b>busy</b> the server is, and the <b>time per request</b>.' },
-        {
-          calc: {
-            formula: 'Busy = load ÷ capacity. Time per request = base time ÷ (1 − busy).',
-            rows: [
-              { label: 'How busy', work: `${rate(ex.load)} ÷ ${rate(ex.cap)}`, result: `${ex.busy}, or ${percent(ex.busy)} busy` },
-              { label: 'Time per request', work: `${ms(T.web)} ÷ (1 − ${ex.busy})`, result: ms(T.web * qmul(ex.busy)) },
-            ],
-            result: `The same ${ms(T.web)} of work now takes ${ms(T.web * qmul(ex.busy))}. At ${percent(0.9)} busy it would take ${ms(T.web * qmul(0.9))}.`,
-          },
-        },
-        {
-          figure: 'figQueue',
-          alt: `Time per request against how busy the server is. It climbs slowly at first, then steeply: ${times(0.5)} at ${percent(0.5)} busy, ${times(0.75)} at ${percent(0.75)}, ${times(0.9)} at ${percent(0.9)}, and it is capped at ${qmul(1)} times from ${percent(capFrom)}.`,
-          caption: 'Time per request against how busy the server is',
-        },
-        { assume: `This is the rule the game uses. It is a standard queueing result (M/M/1); real servers differ in detail but bend the same way. From ${percent(capFrom)} busy, a request takes at most ${capTimes} its base time; only load above 100% fails.` },
-      ],
-      takeaway: `Slow comes long before down: ${times(0.5)} at ${percent(0.5)} busy, ${times(0.75)} at ${percent(0.75)}, ${times(0.9)} at ${percent(0.9)}.`,
-      missions: [1, 2],
-      quiz: [],
-    },
-    {
-      title: 'Why give the database its own machine?',
-      hook: 'Traffic has tripled. Your one machine runs the code and the database, and every request needs both, so they fight over the same CPU and memory.',
-      body: [
-        {
-          figure: 'figTiers',
-          alt: `Before: users send HTTP requests to one machine that runs both the code and the data, at ${percent(sharedCapacity)} of its capacity. After: users send HTTP requests to the web server in the web tier, which sends queries to the database server in the data tier and gets rows back. Each tier can be scaled on its own.`,
-          caption: 'Before: one machine for code and data. After: a web tier and a data tier, each on its own machine',
-        },
-        { p: 'Put the database on its own server. Web servers answer requests (the <b>web tier</b>); the database server keeps the data (the <b>data tier</b>). Now each tier can <b>scale independently</b>: upgrade the one that is full and leave the other alone.' },
-        { p: 'What it does not fix: each tier is still one machine. You now have two single points of failure instead of one.' },
-        { assume: `Game rule: a server that runs both code and data handles ${percent(sharedCapacity)} of its listed capacity.` },
-      ],
-      takeaway: 'Two tiers let you grow the busy part without paying to grow the rest.',
-      missions: [1],
-      quiz: [2],
-    },
-    {
-      title: 'SQL or NoSQL?',
-      hook: 'A machine for the data means a choice you will be asked to defend in every interview: which kind of database runs on it?',
-      check: {
-        kind: 'guess',
-        q: 'An app saves each user\'s settings as one object. It always reads and writes the whole object by user ID, thousands of times a second, and needs it back in a few milliseconds. Which fits better?',
-        options: [
-          { t: 'A relational (SQL) database', why: 'It would work, but nothing here needs joins or links between records. This is a look-up by key at a very high rate.' },
-          { t: 'A key-value (NoSQL) store', right: true, why: 'Whole objects, fetched by key, very fast, at a very high rate, with no links between them: that is what key-value stores are built for.' },
-        ],
-      },
-      body: [
-        { table: { head: ['', 'Relational (SQL)', 'NoSQL'], rows: [
-          ['<b>Examples</b>', 'PostgreSQL, MySQL, SQL Server', 'Redis (key-value), MongoDB (document), Cassandra (wide-column), Neo4j (graph)'],
-          ['<b>Shape</b>', 'Tables with a fixed schema', 'Four families: key-value, document, wide-column, graph'],
-          ['<b>Joins</b>', 'Yes, across tables in one query', 'Usually not: the app fetches each piece itself'],
-        ] } },
-        { p: '<b>Start with relational.</b> Joins, transactions and decades of tooling cover most apps. Reach for NoSQL when you can name the reason:' },
-        { ul: [
-          'you always read and write a whole object at once;',
-          'you look things up by key and need answers in a few milliseconds, at very high request rates;',
-          'the data has outgrown what one relational setup can hold;',
-          'the records have no fixed shape, or few links between them.',
-        ] },
-        { assume: `Game rule: an order page needs a user, an order and its products. SQL fetches them in ${sqlQueries} query. NoSQL cannot join, so it needs ${nosqlLookups} lookups and fills up ${nosqlLookups / sqlQueries} times as fast.` },
-      ],
-      takeaway: 'Relational is the default: choose NoSQL only when you can say the reason out loud.',
-      missions: [1],
-      quiz: [3, 4],
-    },
-    {
-      title: 'A bigger machine, or more machines?',
-      hook: 'Launch day is coming and the server is nearly full. The fastest fix is to rent a bigger one. How far does that get you?',
-      body: [
-        { ul: [
-          '<b>Vertical scaling (scale up):</b> a machine with more CPU and RAM. Nothing in the design changes, so it is the right first move.',
-          '<b>Horizontal scaling (scale out):</b> more machines in a pool. That needs a load balancer, which is Level 2.',
-        ] },
-        { table: { head: ['Size (game)', 'Capacity', 'Cost / month', 'Cost per req/s'], num: true, rows: sizeRows } },
-        { p: 'Scaling up runs into two walls:' },
-        { ol: [
-          '<b>A ceiling.</b> The biggest machine you can rent is still one machine.',
-          '<b>No failover.</b> One server is one point of failure. When it stops, the site stops.',
-        ] },
-      ],
-      check: {
-        kind: 'turn',
-        q: 'Look at the table. Which size gives you the most capacity for each dollar?',
-        options: [
-          { t: 'S', right: true, why: `$${S.cost} ÷ ${fmt(S.cap)} = ${perUnit(S)} per req/s. Every step up costs more per unit: XL is $${XL.cost} ÷ ${fmt(XL.cap)} ≈ ${perUnit(XL)}.` },
-          { t: 'L', why: `$${L.cost} ÷ ${fmt(L.cap)} = ${perUnit(L)} per req/s. S is cheaper per unit at ${perUnit(S)}.` },
-          { t: 'XL, because bigger is better value', why: `The opposite: XL is $${XL.cost} ÷ ${fmt(XL.cap)} ≈ ${perUnit(XL)} per req/s, the most expensive per unit. You pay extra for size.` },
-        ],
-      },
-      takeaway: 'Scale up first, knowing it ends at the biggest machine and leaves you with one point of failure.',
-      missions: [2],
-      quiz: [5],
-    },
-    {
-      title: 'How much traffic is coming?',
-      hook: 'Marketing says "a million users". Servers are sized in requests per second. In an interview you have to turn one into the other, out loud.',
-      body: [
-        { p: 'Traffic is not flat, so plan for a <b>peak of about 2× the average</b>. Take a photo app with 40 million daily users, each loading 30 pages a day:' },
-        {
-          calc: {
-            formula: 'Requests per second = daily users × requests per user per day ÷ 86,400 (the seconds in a day).',
-            rows: [
-              { label: 'Requests a day', work: '40 million users × 30 requests a day', result: '1.2 billion requests a day' },
-              { label: 'Average', work: '1.2 billion requests ÷ 86,400 s', result: '13,900 req/s', approx: true },
-              { label: 'Peak', work: '13,900 req/s × 2', result: '28,000 req/s', approx: true },
-            ],
-            result: 'Plan for about 28,000 req/s at peak.',
-          },
-        },
-        { p: 'Round hard. For a first guess call a day 100,000 seconds: the answer comes out about 14% low, which is fine. Say each assumption, and put a unit on every number.' },
-        { assume: '"Peak is about 2× the average" is a rule of thumb, not a law. Say it as an assumption.' },
-      ],
-      check: {
-        kind: 'turn',
-        q: 'A recipe site has 5 million daily users, each making 10 requests a day. Roughly what is the peak?',
-        options: [
-          { t: 'About 580 req/s', why: 'That is the average: 50 million ÷ 86,400 ≈ 580. Double it for the peak.' },
-          { t: 'About 1,160 req/s', right: true, why: '5 million × 10 ÷ 86,400 ≈ 580 on average, × 2 ≈ 1,160 at peak.' },
-          { t: 'About 50 million req/s', why: 'That is requests per day. Divide by the 86,400 seconds in a day.' },
-        ],
-      },
-      takeaway: 'Daily users × requests each ÷ 86,400, then × 2 for the peak.',
-      missions: [2],
-      quiz: [6],
-    },
-    {
-      title: 'What do you carry into the interview?',
-      hook: `Nobody expects exact figures from memory. They expect you to know what is fast, what is slow, and what to do in the first ${STEPS[0].min} minutes.`,
-      body: [
-        { table: { head: ['Operation', 'Time'], num: true, rows: [
-          ['Read from main memory', '100 ns'],
-          ['Read 1 MB in a row from memory', '250 µs'],
-          ['Round trip inside one data center', '500 µs'],
-          ['Disk seek', '10 ms'],
-          ['Packet California → Netherlands → California', '150 ms'],
-        ] } },
-        { p: 'A disk seek costs as much as 100,000 memory reads, so keep hot data in memory. Crossing an ocean costs more than ten disk seeks, so keep users close to their data.' },
-        { p: '<b>Availability.</b> 99.9% sounds high, but it allows 8.77 hours of downtime a year. Each extra nine cuts that by 10×.' },
-        { p: `<b>The interview in four steps</b> (${INTERVIEW_MINUTES} minutes): ${interviewSteps}. Do not draw in the first minute: ask what it must do, for how many people, and how fast it will grow.` },
-      ],
-      check: {
-        kind: 'turn',
-        q: 'A provider promises 99.9% availability. About how much downtime does that allow in a 30-day month?',
-        options: [
-          { t: 'About 4 minutes', why: 'That is 99.99%, one more nine. At 99.9% the allowance is 10× larger.' },
-          { t: 'About 43 minutes', right: true, why: '30 days × 24 hours × 60 minutes = 43,200 minutes. 0.1% of 43,200 minutes ≈ 43 minutes.' },
-          { t: 'About 7 hours', why: 'That is 99%: 1% of 720 hours = 7.2 hours. 99.9% allows a tenth of that.' },
-        ],
-      },
-      takeaway: 'Know that memory beats disk and disk beats distance, and scope the problem before you draw.',
-      missions: [0, 1, 2],
-      quiz: [7, 8, 9],
-    },
-  ],
-  recap: {
-    numbers: [
-      ['86,400', 'seconds in a day'],
-      ['2×', 'peak vs average (rule of thumb)'],
-      [`${times(0.75)} at ${percent(0.75)}`, 'slowdown when busy'],
-      ['10 ms', 'one disk seek'],
-      ['8.77 h / year', 'downtime at 99.9%'],
-    ],
-    // One line per mission, in mission order. "Traffic triples" is checked against the missions in tests/unit/level-01-lesson.test.mjs.
-    bridge: [
-      'You connect Users to DNS and to one web server, then watch the lookup happen once and the requests go direct.',
-      'Traffic triples. You split off the database, pick its type, and find out which server is too busy to hit the response target.',
-      `You estimate the peak before Play unlocks, scale up to carry it, then crash the server and send ${spikeFactor}× traffic to hit both walls yourself.`,
+  intro: {
+    kicker: 'Level 1 · Part 1: Grow one app',
+    title: 'One server to two tiers',
+    // "nine times": tests/unit/level-01-lesson.test.mjs checks it against the missions' traffic.
+    story: `You are the only engineer at a small online shop, example.com. Today it runs on one $${S.cost} server. During this level its traffic grows nine times, and your job is to keep it fast.`,
+    picture: 'figBuilt',
+    alt: 'The finished design: Users look up example.com in DNS and send requests to the web server. The web server sends queries to the database.',
+    outcomes: [
+      'explain how a request finds your server',
+      'say why a busy server is slow before it is down',
+      'decide when to split off the database, and which kind to use',
+      'turn "a million users" into requests per second',
+      'name the two limits of one big machine',
     ],
   },
-  rules: `Web server work ${ms(T.web)}, database query ${ms(T.db)} (about one disk seek), internet round trip ${ms(T.rtt)}, round trip inside the data center ${ms(T.dc)}, DNS $${T.dns} a month. A NoSQL lookup takes ${ms(T.nosqlLookup)}. From ${percent(capFrom)} busy, a request takes at most ${capTimes} its base time; only load above 100% fails.`,
+  chapters: [
+    {
+      title: 'Go live',
+      mission: 0,
+      minutes: 5,
+      screens: [
+        {
+          title: 'How does a phone find your server?',
+          hook: 'Someone types <b>example.com</b>. Their phone knows the name, but the internet delivers to numbered addresses. Something has to turn the name into a number.',
+          check: {
+            kind: 'guess',
+            q: 'Once DNS has answered, where do the page requests travel?',
+            options: [
+              { t: 'To DNS, which forwards them to your server', why: 'DNS does not forward traffic. It answers one question, "where is example.com?", and steps out of the way.' },
+              { t: 'Straight to your server\'s address', right: true, why: 'DNS only hands back the address. Every request then goes directly to your server.' },
+              { t: 'To DNS first on every request, then to your server', why: 'The phone remembers the answer, so it does not ask again each time. And pages never pass through DNS.' },
+            ],
+          },
+          body: [
+            {
+              figure: 'figFlow',
+              alt: `The phone asks DNS where example.com is and gets back the IP address ${address}. It then sends requests straight to the web server at that address and gets the page or the data back.`,
+              caption: 'One lookup, then direct requests',
+            },
+            { ol: [
+              `The phone asks <b>DNS</b>: where is example.com? DNS is a service you rent ($${T.dns} a month in the game).`,
+              `DNS answers with an <b>IP address</b>, ${address}. The phone remembers it.`,
+              'Every request now goes <b>straight to your server</b> at that address, and the page or the data comes straight back.',
+            ] },
+          ],
+          takeaway: 'DNS answers "where is it?" once, and your pages never travel through it.',
+          uses: 'You connect Users to DNS and to a web server. Watch for one DNS lookup dot, then requests going direct.',
+          quiz: [0],
+        },
+        {
+          title: 'How do you know your design works?',
+          hook: 'In an interview you say "this design handles the load". In this game you have to prove it. Four of the numbers at the top of the Build screen tell you.',
+          body: [
+            { table: { head: ['Number', 'What it means', 'Goal in this level'], rows: [
+              ['<b>Traffic</b>', 'Requests arriving each second (req/s)', 'Set by the mission'],
+              ['<b>Served</b>', 'Share of requests that got an answer', `At least ${targets.servedPct}%`],
+              ['<b>Response</b>', 'Average time from tap to answer', `Under ${ms(targets.latencyMs)}`],
+              ['<b>Cost</b>', 'The monthly bill for everything on the canvas', 'The mission\'s budget'],
+            ] } },
+            { p: `Response time has two parts: the trip across the internet and back (${ms(T.rtt)} in the game), and the time your servers take. You control only the second part.` },
+          ],
+          takeaway: 'Served says it works, Response says it is fast, Cost says you can afford it.',
+          uses: `The mission passes when Served and Response hold their goals for ${HOLD} seconds after you press Play.`,
+          quiz: [1],
+        },
+      ],
+      // "triple" and "one request in three": tests/unit/level-01-lesson.test.mjs checks them against the missions.
+      debrief: {
+        saw: `One DNS lookup, then every request went straight to your server. One $${S.cost} machine ran your code and your data.`,
+        number: [`about ${ms(Math.round(mission1Ms))}`, `response time at ${rate(traffic[0])}`],
+        next: `Traffic is about to triple to ${rate(traffic[1])}. This machine can carry ${fmt(shared.cap)}. One request in three would fail.`,
+      },
+    },
+    {
+      title: 'Split the data',
+      mission: 1,
+      minutes: 8,
+      screens: [
+        {
+          title: 'Why is a busy server slow?',
+          hook: `A server can handle ${fmt(ex.cap)} requests a second and is getting ${fmt(ex.load)}. Nothing is failing. So why does the site feel slow?`,
+          check: {
+            kind: 'guess',
+            q: `The server is ${percent(ex.busy)} busy. Compared with an idle server, how long does each request take?`,
+            options: [
+              { t: 'About 1.3× as long', why: 'A quarter of spare room feels like plenty, but requests wait in line behind each other, and the wait grows much faster than the load.' },
+              { t: `About ${times(0.5)} as long`, why: `That is what happens at ${percent(0.5)} busy. At ${percent(ex.busy)} it is already worse.` },
+              { t: `About ${times(ex.busy)} as long`, right: true, why: `Time = work time ÷ (1 − busy). At ${percent(ex.busy)} busy that is 1 ÷ ${1 - ex.busy} = ${times(ex.busy)}.` },
+            ],
+          },
+          body: [
+            { p: 'Requests wait in line behind each other. The fuller the server, the longer the line. Requests fail only when the load is more than the capacity.' },
+            {
+              calc: {
+                formula: 'Busy = load ÷ capacity. Time = work time ÷ (1 − busy).',
+                rows: [
+                  { label: 'How busy?', work: `${rate(ex.load)} ÷ ${rate(ex.cap)}`, result: `${percent(ex.busy)} busy` },
+                  { label: 'How slow?', work: `${ms(T.web)} ÷ (1 − ${ex.busy})`, result: ms(T.web * qmul(ex.busy)) },
+                ],
+                result: `${ms(T.web)} of work now takes ${ms(T.web * qmul(ex.busy))}: ${times(ex.busy)} as long, and nothing has failed.`,
+              },
+            },
+            {
+              figure: 'figQueue',
+              alt: `Time per request against how busy the server is. It climbs slowly at first, then steeply: ${times(0.5)} at ${percent(0.5)} busy, ${times(0.75)} at ${percent(0.75)}, ${times(0.9)} at ${percent(0.9)}, and it is capped at ${qmul(1)} times from ${percent(capFrom)}.`,
+              caption: 'Time per request against how busy the server is',
+            },
+          ],
+          takeaway: `Slow comes long before down: ${times(0.5)} at ${percent(0.5)} busy, ${times(0.75)} at ${percent(0.75)}, ${times(0.9)} at ${percent(0.9)}.`,
+          uses: `The bar under each server shows how busy it is. Watch the response time when a bar passes ${percent(0.75)}.`,
+          quiz: [2, 3],
+        },
+        {
+          title: 'Why give the database its own machine?',
+          hook: 'Your one machine runs the code and the database. Every request needs both, so they share the same processor and memory.',
+          body: [
+            {
+              figure: 'figTiers',
+              alt: `Before: users send requests to one machine that runs both the code and the data, at ${percent(sharedCapacity)} of its capacity. After: users send requests to the web server in the web tier, which sends queries to the database server in the data tier and gets rows back. Each tier can be scaled on its own.`,
+              caption: 'Before: one machine for code and data. After: a web tier and a data tier, each on its own machine',
+            },
+            { p: 'Put the database on its own server. Now there is a <b>web tier</b>, which answers requests, and a <b>data tier</b>, which keeps the data. When one is full, you upgrade that one and leave the other alone.' },
+            { p: 'What it does not fix: each tier is still one machine. If either stops, the shop stops.' },
+            { assume: `Game rule: a server that runs both code and data handles ${percent(sharedCapacity)} of its listed capacity. An S server (${rate(S.cap)}) carries ${fmt(S.cap * sharedCapacity)}.` },
+          ],
+          takeaway: 'Two tiers let you grow the busy part without paying to grow the rest.',
+          uses: `Add a Database and connect it. An S web server gets its full ${rate(S.cap)} back.`,
+          quiz: [4, 5],
+        },
+        {
+          title: 'Which kind of database?',
+          hook: 'The shop stores users, products and orders. Every order links a user to products. Showing one order page means collecting all three.',
+          body: [
+            { table: { head: ['', 'Relational (SQL)', 'NoSQL'], rows: [
+              ['<b>How it stores data</b>', 'Tables that link to each other', 'Items you fetch by their key'],
+              ['<b>Linked data</b>', 'One query joins the tables', 'No joins: the app fetches each piece'],
+              ['<b>One order page</b>', `${sqlQueries} query`, `${nosqlLookups} lookups`],
+            ] } },
+            {
+              calc: {
+                formula: 'A shop showing 100 order pages a second:',
+                rows: [
+                  { label: 'With SQL', work: `100 pages/s × ${sqlQueries} query`, result: `${fmt(100 * sqlQueries)} queries/s` },
+                  { label: 'With NoSQL', work: `100 pages/s × ${nosqlLookups} lookups`, result: `${fmt(100 * nosqlLookups)} lookups/s` },
+                ],
+                result: `An S database carries ${fmt(S.cap)} a second. SQL fits. NoSQL is overloaded.`,
+              },
+            },
+          ],
+          check: {
+            kind: 'turn',
+            q: 'An app saves each user\'s settings as one object. It always reads and writes the whole object by user ID, thousands of times a second. Which fits better?',
+            options: [
+              { t: 'A relational (SQL) database', why: 'It would work, but nothing here needs joins. This is a look-up by key at a very high rate.' },
+              { t: 'A NoSQL key-value store', right: true, why: 'Whole objects, fetched by key, with no links between them: that is what key-value stores are built for.' },
+            ],
+          },
+          takeaway: 'Start with SQL, and pick NoSQL only when you can say the reason out loud.',
+          uses: 'You pick the database type for the shop\'s data. The Database\'s settings show what each choice costs.',
+          quiz: [6, 7],
+        },
+      ],
+      debrief: {
+        saw: `The database got its own server and the web server got its full capacity back. Where a server's bar passed ${percent(0.75)}, the response time climbed with nothing failing.`,
+        number: [`${times(0.75)} at ${percent(0.75)} busy`, 'the slowdown you had to design around'],
+        // "a million users": tests/unit/level-01-lesson.test.mjs checks it against Mission 3's story.
+        next: 'Marketing promises a million users on launch day. How many requests a second is that?',
+      },
+    },
+    {
+      title: 'Launch day',
+      mission: 2,
+      minutes: 12,
+      screens: [
+        {
+          title: 'How many requests is "a million users"?',
+          hook: 'Marketing counts users per day. Servers are sized in requests per second. In an interview you turn one into the other, out loud.',
+          body: [
+            { p: 'Traffic is not flat through the day, so plan for a peak of about twice the average. Take a photo app with 40 million daily users who each load 30 pages a day.' },
+            {
+              calc: {
+                formula: 'Peak = daily users × requests each ÷ 86,400 × 2 (86,400 is the seconds in a day).',
+                rows: [
+                  { label: 'Requests a day', work: '40 million users × 30 requests', result: '1.2 billion requests' },
+                  { label: 'Average', work: '1.2 billion requests ÷ 86,400 s', result: '13,900 req/s', approx: true },
+                  { label: 'Peak', work: '13,900 req/s × 2', result: '28,000 req/s', approx: true },
+                ],
+                result: 'Plan for about 28,000 requests a second.',
+              },
+            },
+            { assume: '"Peak is about twice the average" is a rule of thumb. In an interview, say it as an assumption.' },
+          ],
+          check: {
+            kind: 'turn',
+            q: 'A recipe site has 5 million daily users who each make 10 requests a day. Roughly what is the peak?',
+            options: [
+              { t: 'About 580 req/s', why: 'That is the average: 50 million ÷ 86,400 ≈ 580. Double it for the peak.' },
+              { t: 'About 1,160 req/s', right: true, why: '5 million × 10 ÷ 86,400 ≈ 580 on average, × 2 ≈ 1,160 at peak.' },
+              { t: 'About 50 million req/s', why: 'That is requests per day. Divide by the 86,400 seconds in a day.' },
+            ],
+          },
+          takeaway: 'Daily users × requests each ÷ 86,400, then × 2 for the peak.',
+          uses: 'Play stays locked until you estimate the launch-day peak yourself.',
+          quiz: [8],
+        },
+        {
+          title: 'A bigger machine, or more machines?',
+          hook: 'The server is nearly full and launch day is coming. The quickest fix is to rent a bigger one. How far does that get you?',
+          body: [
+            { p: '<b>Scaling up</b> (vertical scaling) means a bigger machine. Nothing else in the design changes, so it is the right first move. <b>Scaling out</b> (horizontal scaling) means more machines sharing the work. That needs a load balancer, which is Level 2.' },
+            { table: { head: ['Size', 'Capacity', 'Cost a month', 'Cost per req/s'], num: true, rows: sizeRows } },
+            { p: 'Bigger machines cost more for each request they carry.' },
+          ],
+          check: {
+            kind: 'turn',
+            q: `A shop at ${rate(sale.load)} runs a sale and gets ${sale.factor} times the traffic. Which single server carries it?`,
+            options: [
+              { t: 'L', why: `${sale.factor} times ${fmt(sale.load)} is ${rate(sale.load * sale.factor)}. L carries ${fmt(L.cap)}.` },
+              { t: 'XL', why: `XL carries ${rate(XL.cap)}, about half of the ${fmt(sale.load * sale.factor)} arriving.` },
+              { t: 'None of them', right: true, why: `${rate(sale.load * sale.factor)} is more than the largest machine can carry. One machine has a ceiling.` },
+            ],
+          },
+          takeaway: 'Scale up first, but it ends at the biggest machine, and one machine has no backup.',
+          uses: `After the targets pass, two Break it buttons let you crash the server and send ${spikeFactor} times the traffic.`,
+          quiz: [9],
+        },
+      ],
+    },
+  ],
+  wrap: {
+    picture: 'figBuiltEnd',
+    alt: 'The design you built: Users look up example.com in DNS and send requests to the web server. The web server sends queries to the database.',
+    say: [
+      `"A server gets slow long before it fails. At ${percent(0.75)} busy, requests take ${times(0.75)} as long."`,
+      '"I would split the web tier from the data tier so each grows on its own, and start with SQL."',
+      '"Peak traffic is daily users × requests each ÷ 86,400, times 2."',
+    ],
+    numbers: [
+      ['86,400', 'seconds in a day'],
+      ['2×', 'peak over average (rule of thumb)'],
+      [`${times(0.75)} at ${percent(0.75)}`, 'busy-server slowdown'],
+    ],
+    loop: `In Mission 3 you did the four steps of a design interview in order: ${scope} (you estimated the traffic), ${sketch} (you built the design), ${deep} (you tuned the sizes), ${stress} (you broke it). Every level from here repeats that loop.`,
+    broken: `When the web server crashed, the whole shop went down. At ${spikeFactor} times the traffic, no size was big enough. Level 2 fixes both with a load balancer and more servers.`,
+  },
+  rules: `Web server work ${ms(T.web)}, database query ${ms(T.db)}, internet round trip ${ms(T.rtt)}, round trip inside the data center ${ms(T.dc)}, DNS $${T.dns} a month. A NoSQL lookup takes ${ms(T.nosqlLookup)}. Time per request = work time ÷ (1 − busy), a standard queueing result (M/M/1); real servers differ in detail but bend the same way. From ${percent(capFrom)} busy, a request takes at most ${capTimes} its work time; only load above 100% fails.`,
 };
+
+// Quiz examples, with numbers different from the lesson's own examples (our example loads, not game numbers).
+const quizBusy = { cap: 500, load: 450, work: 15 };
+quizBusy.busy = quizBusy.load / quizBusy.cap;
+quizBusy.ms = Math.round(quizBusy.work * qmul(quizBusy.busy));
+const quizPages = 200;
 
 /** @type {Level} */
 export default {
   id: 1,
   saveKey: 'sdl-level1-v1',
   saveVersion: 2, // quiz options were reordered in v2, so older saved answers no longer line up
+  quizVersion: 3, // v3 replaced five questions and reordered them, so older saved answers no longer line up
   targets,
 
   components: {
@@ -339,7 +366,7 @@ export default {
 
   missions: [
     {
-      title: 'Hello, example.com', ref: 'Single server', qps: 50, budget: null,
+      title: 'Hello, example.com', ref: 'Single server', qps: traffic[0], budget: null,
       story: 'You just launched example.com and about 100,000 people use it each day. Everything runs on one server: your code and your data.',
       goals: [
         { id: 'dns', type: 'struct', text: 'Users can look up example.com in DNS', test: (g) => g.hasDNS },
@@ -350,7 +377,7 @@ export default {
       takeaway: 'One server ran everything. DNS returned the IP once, then HTTP requests went straight to your server.',
     },
     {
-      title: 'Separate the data tier', ref: 'Two tiers', qps: 150, budget: 150,
+      title: 'Separate the data tier', ref: 'Two tiers', qps: traffic[1], budget: 150,
       story: 'Traffic tripled: about 300,000 people a day, 150 requests per second at peak. Your one server runs both the code and the database, so they compete for the same CPU. The app stores users, products and orders, and every order links a user to products.',
       goals: [
         { id: 'tier', type: 'struct', text: 'Data lives on its own database server', test: (g) => !!dbOf(g) },
@@ -358,11 +385,11 @@ export default {
         servedGoal(targets), latGoal(targets),
         { id: 'cost', type: 'struct', text: 'Spend at most $150 per month', test: (g) => g.cost <= 150, val: (m, g) => '$' + g.cost },
       ],
-      hint: 'Add a Database, connect Web server → Database, and choose its type. If the response time is still too slow, read the log: a server at 75% busy makes each request take 4× longer. The web server\'s work (20 ms) is slower than a query (10 ms), so its waiting costs you more. Spend where it helps most.',
+      hint: 'Add a Database, connect Web server → Database, and choose its type. If the response time is still too slow, read the log: a server at 75% busy makes each request take 4× as long. The web server\'s work (20 ms) is slower than a query (10 ms), so its waiting costs you more. Spend where it helps most.',
       takeaway: 'Separate tiers scale independently. You also saw that a busy server gets slow long before it fails.',
     },
     {
-      title: 'Launch day', ref: 'Estimation', qps: 463, budget: 500,
+      title: 'Launch day', ref: 'Estimation', qps: traffic[2], budget: 500,
       gate: {
         lo: 370, hi: 560,
         prompt: '<b>Step 1: estimate before you build.</b> Peak QPS = DAU × requests per user per day ÷ 86,400, then × 2 for peak.',
@@ -429,16 +456,16 @@ export default {
     passText: passText(1, 'Load balancer and horizontal scaling'),
     failText,
     questions: [
-      { q: 'A user types api.example.com. What does DNS send back?', o: ['The HTML page for the site', 'A JSON response from the API', 'The IP address of the server', 'A cached copy of the data'], a: 2, e: `DNS turns a domain name into an IP address, for example ${address}. The device then sends HTTP requests straight to that IP. DNS never carries the page itself.`, r: 'DNS · RFC 1034' },
-      { q: 'The mobile app calls GET /products/42. What does the server usually return?', o: ['A JSON object', 'An HTML page', 'A SQL table', 'An image file'], a: 0, e: 'Mobile apps talk to the server over HTTP, and JSON is the common API response format because it is simple. Browsers usually receive HTML pages.', r: 'HTTP APIs and JSON' },
-      { q: 'Why move the database onto its own server?', o: ['So it can run a different OS', 'To remove every single point of failure', 'So every query returns instantly', 'So each tier can scale independently'], a: 3, e: 'Separating web traffic (web tier) from the database (data tier) lets you scale each one on its own. You still have single points of failure: now there are two.', r: 'Two-tier architecture' },
-      { q: 'Which of these is a reason to stay with a relational database?', o: ['The app needs very low latency', 'You need joins across many tables', 'The data is unstructured', 'You must store huge volumes of data'], a: 1, e: 'Joins are what relational databases do best, and most NoSQL databases do not offer them. Very low latency, data with no fixed shape and huge volume are all reasons to look at NoSQL.', r: 'Choosing a database' },
-      { q: 'NoSQL databases fall into four categories. Which list is right?', o: ['Tables, rows, indexes and views', 'Cache, queue, blob and log stores', 'Key-value, graph, column and document', 'Primary, replica, shard and backup stores'], a: 2, e: 'NoSQL databases are usually grouped into four families: key-value (Redis), document (MongoDB), wide-column (Cassandra) and graph (Neo4j).', r: 'Choosing a database' },
-      { q: 'Your only server is at its CPU limit, so you move to a bigger machine. What did you do, and what problem remains?', o: ['Vertical scaling; a size ceiling and no failover', 'Horizontal scaling; nothing remains', 'Sharding; joins across shards get harder', 'Vertical scaling; queries can no longer use SQL'], a: 0, e: 'Adding CPU and RAM to one server is vertical scaling (scale up). It is simple, but one machine can only get so big, and when it stops, the whole site stops.', r: 'Scaling up vs scaling out' },
-      { q: 'A music app has 30 million daily users, each making about 15 requests a day. Roughly what is the peak QPS?', o: ['~5,200', '~10,400', '~1,000', '~52,000'], a: 1, e: '30M × 15 ÷ 86,400 s ≈ 5,200 requests per second on average. Peak is about 2 × the average, so ≈ 10,400. Picking ~5,200 means you stopped at the average.', r: 'Estimating QPS' },
-      { q: 'Which of these takes the longest?', o: ['Main memory reference', 'Round trip within the same data center', 'Reading 1 MB sequentially from memory', 'Disk seek'], a: 3, e: 'Roughly: memory reference 100 ns, 1 MB from memory 250 µs, data-center round trip 500 µs, disk seek 10 ms. Memory is fast and disk is slow, so avoid disk seeks.', r: 'Latency · Dean 2009' },
-      { q: 'A provider promises 99.9% availability. About how much downtime is that per year?', o: ['3.65 days', '52.6 minutes', '8.77 hours', '5.26 minutes'], a: 2, e: '99.9% allows 1.44 minutes a day, which is 8.77 hours a year. 99% is 3.65 days, 99.99% is 52.6 minutes and 99.999% is 5.26 minutes.', r: 'Availability arithmetic' },
-      { q: 'The interviewer says "Design a news feed." What should you do first?', o: ['Ask about features, users and scale', 'Draw the complete architecture', 'Choose the database technology', 'Estimate five years of storage needs'], a: 0, e: 'Step 1 is to scope it (about 5–8 minutes). Designing before you know the features and the scale is a red flag, however good the design is.', r: 'Interview loop · Scope it' },
+      { q: 'A user types api.example.com. What does DNS send back?', o: ['The HTML page for the site', 'A JSON response from the API', 'The IP address of the server', 'A cached copy of the data'], a: 2, e: `DNS turns a domain name into an IP address, for example ${address}. The device then sends requests straight to that address. DNS never carries the page itself.`, r: 'How does a phone find your server?' },
+      { q: 'The dashboard shows Served at 92%. What happened to the other 8% of requests?', o: ['They failed: a server was overloaded or down', 'They are still waiting in line to be answered', 'They were answered from a cache', 'They will be counted in the next second'], a: 0, e: 'Served is the share of requests that got an answer. The other 8% failed: more load arrived than a server could carry, or a server was down. A slow answer still counts as served.', r: 'How do you know your design works?' },
+      { q: `A server with a capacity of ${rate(quizBusy.cap)} is getting ${rate(quizBusy.load)}. Each request needs ${ms(quizBusy.work)} of work. About how long does each request take?`, o: [ms(quizBusy.work), ms(Math.round(quizBusy.work / quizBusy.busy)), ms(quizBusy.ms), `${fmt(quizBusy.ms * 10)} ms`], a: 2, e: `${fmt(quizBusy.load)} ÷ ${fmt(quizBusy.cap)} = ${percent(quizBusy.busy)} busy. Time = ${ms(quizBusy.work)} ÷ (1 − ${quizBusy.busy}) = ${ms(quizBusy.work)} ÷ ${Math.round((1 - quizBusy.busy) * 10) / 10} = ${ms(quizBusy.ms)}, ten times the work time.`, r: 'Why is a busy server slow?' },
+      { q: 'In this game, when do requests to a server start to fail?', o: ['Once it is more than half busy', `As soon as it passes ${percent(0.75)} busy`, 'Never: requests only slow down', 'Above 100% of its capacity'], a: 3, e: `Up to its capacity a server answers every request, only more slowly as it fills up: ${times(0.75)} as long at ${percent(0.75)} busy. Requests fail only when the load is more than the capacity.`, r: 'Why is a busy server slow?' },
+      { q: 'Why move the database onto its own server?', o: ['So it can run a different OS', 'To remove every single point of failure', 'So every query returns instantly', 'So each tier can scale independently'], a: 3, e: 'Separating web traffic (web tier) from the database (data tier) lets you scale each one on its own. You still have single points of failure: now there are two.', r: 'Why give the database its own machine?' },
+      { q: `An M server (${rate(M.cap)}) runs your code and the database on the same machine. How much traffic can it carry in this game?`, o: [rate(M.cap), rate(M.cap * sharedCapacity), rate(M.cap * sharedCapacity / 2), rate(M.cap * 2)], a: 1, e: `A server that runs code and data together handles ${percent(sharedCapacity)} of its capacity: ${fmt(M.cap)} × ${percent(sharedCapacity)} = ${rate(M.cap * sharedCapacity)}. With the database on its own server, it gets the full ${rate(M.cap)} back.`, r: 'Why give the database its own machine?' },
+      { q: 'Which of these is a reason to stay with a relational database?', o: ['The app needs very low latency', 'You need joins across many tables', 'The data is unstructured', 'You must store huge volumes of data'], a: 1, e: 'Joins are what relational databases do best, and most NoSQL databases do not offer them. Very low latency, data with no fixed shape and huge volume are all reasons to look at NoSQL.', r: 'Which kind of database?' },
+      { q: `A NoSQL store serves ${quizPages} pages a second. It cannot join, so each page needs ${nosqlLookups} lookups. What load reaches the store?`, o: [`${quizPages} lookups/s`, `${Math.round(quizPages / nosqlLookups)} lookups/s`, `${quizPages * nosqlLookups} lookups/s`, `${quizPages + nosqlLookups} lookups/s`], a: 2, e: `${quizPages} pages/s × ${nosqlLookups} lookups = ${quizPages * nosqlLookups} lookups/s. Without joins, each piece is fetched on its own, so the store carries ${nosqlLookups} times the page rate.`, r: 'Which kind of database?' },
+      { q: 'A music app has 30 million daily users, each making about 15 requests a day. Roughly what is the peak QPS?', o: ['~52,000', '~10,400', '~1,000', '~5,200'], a: 1, e: '30 million × 15 ÷ 86,400 s ≈ 5,200 requests per second on average. Peak is about 2 × the average, so ≈ 10,400. Picking ~5,200 means you stopped at the average.', r: 'How many requests is "a million users"?' },
+      { q: 'Your only server is at its CPU limit, so you move to a bigger machine. What did you do, and what problem remains?', o: ['Vertical scaling; a size limit and no failover', 'Horizontal scaling; nothing remains', 'Sharding; joins across shards get harder', 'Vertical scaling; queries can no longer use SQL'], a: 0, e: 'Adding CPU and RAM to one server is vertical scaling (scale up). It is simple, but one machine can only get so big, and when it stops, the whole site stops.', r: 'A bigger machine, or more machines?' },
     ],
   },
 
@@ -454,7 +481,7 @@ export default {
     figArrow(f1, 246, 42, 404, 42, 'example.com?', '1', 272, 34);
     figArrow(f1, 404, 64, 246, 64, address, '2', 272, 84);
     figArrow(f1, 130, 84, 130, 173, 'HTTP request', '3', 40, 132);
-    figArrow(f1, 172, 173, 172, 84, 'HTML / JSON', '4', 202, 132);
+    figArrow(f1, 172, 173, 172, 84, 'page or data', '4', 202, 132);
 
     // Before: one machine runs code and data at part of its capacity. After: a web tier and a data tier.
     const f2 = $('figTiers'); f2.textContent = ''; f2.setAttribute('viewBox', '0 0 640 420'); figDefs(f2);
@@ -496,5 +523,19 @@ export default {
       figLabel(f3, X(u) - 10, Y(qmul(u)) - 10, `${Math.round(qmul(u) * 10) / 10}× at ${Math.round(u * 100)}%`, 'end', 'ch-pt-t');
     }
     figLabel(f3, X(0.5), 246, 'busy (load ÷ capacity)', 'middle', 'ch-t');
+
+    // The finished design, shown on the intro and again on the wrap-up: one drawing, two svgs.
+    const built = (svg) => {
+      svg.textContent = ''; svg.setAttribute('viewBox', '0 0 640 250'); figDefs(svg);
+      figNode(svg, 'users', 150, 52, 'Users', 'Browser + app');
+      figNode(svg, 'dns', 500, 52, 'DNS', 'Finds your server');
+      figNode(svg, 'web', 150, 205, 'Web server', 'Web tier');
+      figNode(svg, 'db', 500, 205, 'Database', 'Data tier');
+      figArrow(svg, 246, 52, 404, 52, 'lookup', null, 325, 44, 'middle');
+      figArrow(svg, 150, 84, 150, 173, 'requests', null, 162, 132);
+      figArrow(svg, 246, 205, 404, 205, 'queries', null, 325, 197, 'middle');
+    };
+    built($('figBuilt'));
+    built($('figBuiltEnd'));
   },
 };

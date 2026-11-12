@@ -6,6 +6,7 @@ import { test, expect } from '../fixtures.js';
 import { routeHash } from '../../js/route.js';
 import { LEVELS } from '../../levels/index.js';
 import { freshPage } from '../helpers.js';
+import { showEveryPage } from '../shared-checks.js';
 
 /** The visible HTML text under `selector` that is smaller than `min` px, as "tag.class size: text". */
 const smallText = (page, selector, min) => page.evaluate(({ selector, min }) => {
@@ -20,8 +21,12 @@ const smallText = (page, selector, min) => page.evaluate(({ selector, min }) => 
   return [...found];
 }, { selector, min });
 
-/** Shows every step of a step lesson with its explanation; a lesson written as one page needs nothing. */
+/**
+ * Shows the whole lesson: every step of a step lesson, or every page of a chapter lesson, with each explanation. A
+ * lesson written as one page needs nothing.
+ */
 async function showWholeLesson(page) {
+  if (await page.locator('#chapterLesson').count()) return showEveryPage(page);
   if (!(await page.locator('[data-act="all"]').count())) return;
   await page.click('[data-act="all"]');
   for (const skip of await page.locator('[data-act="reveal"]').all()) await skip.click();
@@ -90,14 +95,14 @@ test.describe('lesson type scale (Level 1)', () => {
 
 test.describe('a worked calculation (Level 1)', () => {
   const load = async () => (await LEVELS.find((l) => l.id === 1).load()).default.lesson;
-  /** Opens the first step with a calculation and returns the calculation and its box on the page. */
+  /** Opens the first chapter whose first screen has a calculation and returns the calculation and its box on the page. */
   async function openCalc(page) {
-    const lesson = await load(), s = lesson.steps.findIndex((step) => step.body.some((b) => 'calc' in b));
+    const lesson = await load(), c = lesson.chapters.findIndex((ch) => ch.screens[0].body.some((b) => 'calc' in b));
     await freshPage(page, routeHash(1, 'lesson'));
-    await page.click(`.dot[data-go="${s}"]`);
-    const step = page.locator(`.lstep[data-step="${s}"]`);
-    if (await step.locator('[data-act="reveal"]').count()) await step.locator('[data-act="reveal"]').click();
-    return { calc: lesson.steps[s].body.find((b) => 'calc' in b).calc, box: step.locator('.calc-box') };
+    await page.click(`.chapter[data-go="b${c}-0"]`);
+    const screen = page.locator(`[data-page="b${c}-0"]`);
+    if (await screen.locator('[data-act="reveal"]').count()) await screen.locator('[data-act="reveal"]').click();
+    return { calc: lesson.chapters[c].screens[0].body.find((b) => 'calc' in b).calc, box: screen.locator('.calc-box') };
   }
   /** Each row's three parts as rectangles: label, working, result. */
   const rowBoxes = (box) => box.locator('.calc-rows li').evaluateAll((rows) => rows.map((li) => [...li.children].map((part) => {

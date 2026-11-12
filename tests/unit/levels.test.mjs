@@ -11,9 +11,9 @@ const OPTIONS = 4;
 const PASS_SCORE = 8;
 const MAX_SAME_LETTER = 3; // no answer letter (A–D) is right more than 3 times
 // The right answer must not be the longest option, so length gives nothing away. When options tie for longest, the
-// first of them counts as the longest. The first three levels' quizzes are older and still have a few: these are their
+// first of them counts as the longest. The quizzes of Levels 2 and 3 are older and still have a few: these are their
 // exact counts, so fixing one of those quizzes means lowering its number here, and it can never go back up.
-const LONGEST_RIGHT_EXACT = { 1: 3, 2: 2, 3: 1 };
+const LONGEST_RIGHT_EXACT = { 2: 2, 3: 1 };
 
 /** Import a module; an error is returned instead of thrown, so it fails one test, by name, and the others still run. */
 const attempt = async (load) => { try { return { value: await load() }; } catch (error) { return { error }; } };

@@ -11,7 +11,7 @@ import { renderInspector } from './ui/inspector.js';
 import { switchMission, renderMission } from './ui/mission.js';
 import { paintControls, togglePlay } from './ui/controls.js';
 import { log } from './ui/log.js';
-import { drawFigures } from './ui/lesson.js';
+import { drawFigures, paintChapters } from './ui/lesson.js';
 import { quizScore, renderQuiz } from './ui/quiz.js';
 import { renderShell } from './ui/shell.js';
 import { entry, level } from './level.js';
@@ -73,7 +73,7 @@ function fixAddress(tab) {
 function afterChange(forceFit) {
   if (ui.connectFrom && !byId(ui.connectFrom)) ui.connectFrom = null;
   run.mdl = model();
-  renderPalette(); renderCanvas(forceFit); renderInspector(); renderHUD(); renderMission(); renderTabs(); setBanner();
+  renderPalette(); renderCanvas(forceFit); renderInspector(); renderHUD(); renderMission(); renderTabs(); setBanner(); paintChapters();
   save();
 }
 function afterDesignChange({ keepResults = false } = {}) {

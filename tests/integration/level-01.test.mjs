@@ -43,3 +43,17 @@ test('Mission 2: the same lone web server serves two thirds of the traffic', () 
   // 150 req/s on a capacity of 100 req/s: 100 / 150 = 66.7% served.
   assert.ok(Math.abs(L.model().servedPct - 200 / 3) < 1e-9);
 });
+
+test('the first debrief\'s numbers are what the simulation gives for Mission 1\'s design', () => {
+  const { debrief } = L.level.lesson.chapters[0];
+  // "about 100 ms": Mission 1's solution at 50 req/s (worked out in the response time test above).
+  L.place(L.design('9db8f413'), 0);
+  assert.equal(debrief.number[0], `about ${Math.round(L.model().latency)} ms`);
+  // "can carry 100", "one request in three would fail": the same design at Mission 2's 150 req/s serves
+  // 150 × 2/3 = 100 req/s and fails 1 − 2/3 = 1/3 of them.
+  L.place(L.design('9db8f413'), 1);
+  const served = L.model().servedPct / 100;
+  assert.equal(Math.round(L.level.missions[1].qps * served), 100);
+  assert.ok(Math.abs(1 - served - 1 / 3) < 1e-9);
+  assert.match(debrief.next, /can carry 100\. One request in three would fail\./);
+});

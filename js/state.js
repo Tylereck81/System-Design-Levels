@@ -1,7 +1,7 @@
 // Level data, game state and saved progress.
 import { level } from './level.js';
 import { readStorage, writeStorage } from './storage.js';
-import { SIZES, COMPONENTS, choiceOf, sizesOf } from './engine/catalog.js';
+import { SIZES, COMPONENTS, T, choiceOf, sizesOf } from './engine/catalog.js';
 
 export const TARGET_MS = level.targets.latencyMs;
 export const TARGET_SERVED = level.targets.servedPct;
@@ -29,7 +29,7 @@ export const EXPERIMENTS = level.experiments;
 export const WORKLOAD = level.workload || {};
 /** True while a mission's estimate hides its traffic (some estimates are about something else, such as memory). */
 export const trafficHidden = (M) => !!(M.gate && !S.est && M.gate.hidesTraffic !== false);
-export const HOLD = 4; // seconds the targets must hold
+export const HOLD = T.hold; // seconds the targets must hold
 
 /* ---------------- State ---------------- */
 export const LS_KEY = level.saveKey;

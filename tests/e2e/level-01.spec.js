@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures.js';
-import { registerCommonTests, registerLessonTests } from '../shared-checks.js';
+import { registerCommonTests, registerChapterLessonTests } from '../shared-checks.js';
 import {
   QUIZ_KEY_L1, freshPage, fastForward, playFor, state, nodeIds, model, logText,
   tap, dragBetween, openMission, buildBasic, trackErrors, reloadGame,
@@ -24,6 +24,7 @@ test.describe('Level 1 · full playthrough', () => {
     await expect(page.locator('#dotsG circle').first()).toBeAttached({ timeout: 5000 });
     await fastForward(page, 5);
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
+    await expect(page.locator('#doneText')).toHaveText('Mission 1 complete');
 
     // Mission 2: separate the data tier, pick SQL, upgrade the web server
     await page.click('#mission .complete button');
@@ -222,6 +223,14 @@ test.describe('Level 1 · robustness', () => {
     await reloadGame(page);
     expect(await state(page, () => window.__sdl.S.done)).toEqual([true, false, false]);
     expect(await state(page, () => window.__sdl.S.quiz)).toEqual({});
+    // a save from quiz version 2 keeps missions but drops its answers: version 3 replaced and reordered questions
+    await page.evaluate(() => localStorage.setItem('sdl-level1-v1', JSON.stringify({
+      nodes: [{ id: 'u', type: 'users', x: 380, y: 76 }], edges: [], mission: 1, v: 2, qv: 2,
+      done: [true, false, false], verified: [true, false, false], quiz: { 0: 2, 1: 0 }, tab: 'build',
+    })));
+    await reloadGame(page);
+    expect(await state(page, () => window.__sdl.S.done)).toEqual([true, false, false]);
+    expect(await state(page, () => window.__sdl.S.quiz)).toEqual({});
     expect(errors).toEqual([]);
   });
 
@@ -245,7 +254,7 @@ test.describe('Level 1 · teaching feedback', () => {
     await expect(chart.locator('text', { hasText: /^fail$/ })).toHaveCount(0);
     await expect(chart.locator('.ch-cap-t')).toHaveText('capped at 25× from 96%');
     await expect(chart).toHaveAttribute('aria-label', /capped at 25 times from 96%/);
-    await expect(page.locator('.assume').first()).toContainText('From 96% busy, a request takes at most 25× its base time; only load above 100% fails.');
+    await expect(page.locator('#lessonRules')).toContainText('From 96% busy, a request takes at most 25× its work time; only load above 100% fails.');
   });
 
   test('changing the design after verifying resets the check', async ({ page }) => {
@@ -446,6 +455,6 @@ test.describe('Level 1 · accessibility', () => {
   });
 });
 
-test.describe('Level 1 · step lesson', () => {
-  registerLessonTests({ level: 1 });
+test.describe('Level 1 · chapter lesson', () => {
+  registerChapterLessonTests({ level: 1 });
 });
