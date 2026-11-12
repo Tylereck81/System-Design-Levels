@@ -42,9 +42,12 @@ if (GI >= 0) $('view-build').append(box, ring);
 
 nextBtn.onclick = () => { acked.add(shown.k); paint(); };
 skipBtn.onclick = () => finish(true);
-// Escape skips the guide, unless it is cancelling a selection or a connection on the canvas (view/interaction.js).
+// Escape skips the guide, unless it is cancelling a selection or a connection on the canvas (view/interaction.js)
+// or is typed in a text field.
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && !box.hidden && (box.contains(/** @type {Node} */ (e.target)) || (!ui.sel && !ui.connectFrom))) finish(true);
+  const target = /** @type {HTMLElement} */ (e.target);
+  if (e.key !== 'Escape' || box.hidden || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+  if (box.contains(target) || (!ui.sel && !ui.connectFrom)) finish(true);
 }, true);
 
 /** What the steps read. */
