@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures.js';
-import { registerCommonTests, registerChapterLessonTests } from '../shared-checks.js';
+import { registerCommonTests, registerPageLessonTests } from '../shared-checks.js';
 import {
   QUIZ_KEY_L1, freshPage, fastForward, playFor, state, nodeIds, model, logText,
   tap, dragBetween, openMission, buildBasic, trackErrors, reloadGame,
@@ -455,6 +455,6 @@ test.describe('Level 1 · accessibility', () => {
   });
 });
 
-test.describe('Level 1 · chapter lesson', () => {
-  registerChapterLessonTests({ level: 1 });
+test.describe('Level 1 · one-page lesson', () => {
+  registerPageLessonTests({ level: 1 });
 });

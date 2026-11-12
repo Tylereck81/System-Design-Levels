@@ -247,38 +247,58 @@
  */
 
 /**
- * One briefing screen of a chapter: a step whose mission is its chapter's, plus the line that says how the idea is
- * used in that mission.
- * @typedef {Omit<LessonStep, 'missions'> & { uses: string }} BriefingScreen
- */
-
-/**
- * One chapter: the briefing for one mission, then a debrief once the mission is done.
- * @typedef {object} Chapter
+ * One section of a part: one idea, titled as a question or "How to …".
+ * @typedef {object} LessonSection
  * @property {string} title
- * @property {number} mission   index of its mission; chapter N is mission N
- * @property {number} minutes   time for the briefing and the mission
- * @property {BriefingScreen[]} screens
- * @property {{ saw: string, number: [string, string], next: string }} [debrief]
- *   what the player just saw, one number (value, what it is), and what breaks next; every chapter but the last has one
+ * @property {string} hook    the problem the section answers
+ * @property {LessonBlock[]} body
+ * @property {string} takeaway  one sentence: the section's "Remember" line
+ * @property {number[]} quiz      indexes of the quiz questions that review this section
  */
 
 /**
- * A lesson in chapters: an intro, one chapter per mission, then a wrap-up. The level's time is the sum of its
- * chapters' minutes. Progress through it comes from mission progress, so it adds no saved data.
- * @typedef {object} ChapterLesson
+ * A "Check yourself" question, shown with the others of its part after the part's sections. Not saved or scored.
+ * @typedef {{ q: string, options: CheckOption[] }} CheckQuestion
+ */
+
+/**
+ * A "New part" card: a component the level's components describe (`type`), introduced before the mission that uses it.
+ * The card shows the component's icon and name.
+ * @typedef {{ type: string, what: string, does: string, game: string }} NewPartCard
+ *   `what`: what it is; `does`: what it does; `game`: what it costs or carries in the game
+ */
+
+/**
+ * One part of a one-page lesson: what one mission needs, then that mission's card.
+ * @typedef {object} LessonPart
+ * @property {string} title
+ * @property {number} mission   index of its mission; part N is mission N
+ * @property {number} minutes   time for the reading and the mission
+ * @property {NewPartCard[]} [newParts]  shown before the sections
+ * @property {LessonSection[]} sections
+ * @property {CheckQuestion[]} [checks]  0 to 2 "Check yourself" questions
+ * @property {string[]} youWill  the mission card's list: what the player does or watches for
+ * @property {{ saw: string, number: [string, string], next: string }} [debrief]
+ *   the mission card once the mission is done: what the player saw, one number (value, what it is), and what breaks
+ *   next; every part but the last has one (the wrap-up follows the last)
+ */
+
+/**
+ * A lesson on one page: an intro, one part per mission, then a wrap-up. The level's time is the sum of its parts'
+ * minutes. A part's state comes from mission progress, so it adds no saved data.
+ * @typedef {object} PageLesson
  * @property {{ kicker: string, title: string, story: string, picture: string, alt: string, outcomes: string[] }} intro
  *   `picture` names an svg the level's drawFigures draws: the finished design
- * @property {Chapter[]} chapters
+ * @property {LessonPart[]} parts
  * @property {{ picture: string, alt: string, say: string[], numbers: [string, string][], broken: string, loop?: string }} wrap
- *   `say`: three things to say in an interview; `numbers`: values each taken from a briefing; `broken`: what is
+ *   `say`: three things to say in an interview; `numbers`: values each taught in a section; `broken`: what is
  *   still broken, leading to the next level; `loop`: an optional closing paragraph
  * @property {string} rules     the game's rules the lesson relies on, in one paragraph
  */
 
 /**
- * A lesson as data, in steps or in chapters. Levels move from steps to chapters one by one.
- * @typedef {StepLesson | ChapterLesson} Lesson
+ * A lesson as data, in steps or on one page. Levels move from steps to one page one by one.
+ * @typedef {StepLesson | PageLesson} Lesson
  */
 
 /**

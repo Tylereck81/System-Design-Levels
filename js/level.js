@@ -3,8 +3,8 @@ export let level = null;
 export let entry = null; // the level's entry in levels/index.js (id, title)
 
 export function setLevel(data, levelEntry) { level = data; entry = levelEntry; }
-/** True when the level's lesson is written in chapters: each mission then has a briefing and a debrief. */
-export const inChapters = () => !!level?.lesson && 'chapters' in level.lesson;
+/** True when the level's lesson is written on one page: one part per mission, each ending with its mission's card. */
+export const inParts = () => !!level?.lesson && 'parts' in level.lesson;
 
 // event: something happens (e.g. a price change); only its outcome is checked.
 // day: plays 24 hours of traffic in `secs` seconds; it counts when its outcome held all day.

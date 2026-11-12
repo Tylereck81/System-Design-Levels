@@ -45,7 +45,7 @@ test('Mission 2: the same lone web server serves two thirds of the traffic', () 
 });
 
 test('the first debrief\'s numbers are what the simulation gives for Mission 1\'s design', () => {
-  const { debrief } = L.level.lesson.chapters[0];
+  const { debrief } = L.level.lesson.parts[0];
   // "about 100 ms": Mission 1's solution at 50 req/s (worked out in the response time test above).
   L.place(L.design('9db8f413'), 0);
   assert.equal(debrief.number[0], `about ${Math.round(L.model().latency)} ms`);

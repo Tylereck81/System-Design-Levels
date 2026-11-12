@@ -161,25 +161,44 @@ table.t td.n { font-family: var(--f-mono); font-variant-numeric: tabular-nums; w
 .lesson .bridge li { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 0; }
 .bridge b { display: block; }
 .step-lesson .fig svg, .step-lesson table.t { min-width: 0; }
-/* Chapter lesson (js/ui/lesson.js): the intro with its chapter list, then one page at a time. */
-.chapter-lesson button { min-height: 44px; }
-.chapter-lesson .fig svg, .chapter-lesson table.t { min-width: 0; }
+/* One-page lesson (js/ui/lesson.js): the intro, the links to each part, the parts with their mission cards, the wrap-up. */
+.page-lesson button { min-height: 44px; }
+.page-lesson .fig svg, .page-lesson table.t { min-width: 0; }
 .lesson .lintro { border-top: 0; }
-.lintro > h2 { margin-top: 28px; }
 .intro-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 20px; align-items: start; }
 .intro-grid .fig { margin: 0; }
-.lesson .chapters { list-style: none; padding: 0; display: grid; gap: 8px; margin: 8px 0 16px; }
-.lesson .chapters li { margin: 0; max-width: none; }
-.chapter { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 12px; width: 100%; padding: 10px 14px; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; color: var(--ink); font: inherit; }
-.chapter:hover { border-color: var(--accent); }
-.chapter-name { font-weight: 600; }
-.chapter-meta { font: 14px var(--f-mono); color: var(--ink-2); }
-.uses { border-left: 3px solid var(--ok); padding: 4px 0 4px 12px; }
-.uses b { display: block; font: 500 14px var(--f-mono); letter-spacing: .07em; text-transform: uppercase; color: var(--ok); }
-.debrief-num { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.lintro .lesson-cta { border-top: 0; padding-top: 12px; }
+.onpage { padding: 12px 0; border-top: 1px solid var(--line); }
+.lesson .onpage ul { list-style: none; padding: 0; margin: 6px 0 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.lesson .onpage li { margin: 0; max-width: none; }
+.jump { padding: 0 14px; border: 1px solid var(--line); border-radius: 22px; background: var(--surface); color: var(--ink); font-size: 16px; }
+.jump:hover { border-color: var(--accent); }
+.part-state { font: 14px var(--f-mono); color: var(--ink-2); }
+.lpart h2:focus, .lwrap h2:focus, .mcard h3:focus, .lintro h1:focus { outline: none; }
+.lpart h2:focus-visible, .lwrap h2:focus-visible, .mcard h3:focus-visible, .lintro h1:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.lesson .lsec { border-top: 0; padding-block: 18px 0; }
+.lsec h3, .checks h3 { font-family: var(--f-display); font-size: 24px; line-height: 1.25; letter-spacing: -0.01em; margin: 0 0 4px; text-wrap: balance; }
+.lwrap h3 { font-size: 20px; margin: 20px 0 6px; }
+.checks { margin-top: 18px; }
+.newparts { display: grid; gap: 10px; margin: 14px 0 4px; }
+.newpart { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 12px; align-items: start; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.newpart-icon { width: 44px; height: auto; }
+.newpart-name { font-weight: 600; margin: 2px 0 6px; }
+.newpart dl { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; font-size: 16px; }
+.newpart dt { font: 500 14px var(--f-mono); color: var(--ink-3); padding-top: 2px; }
+.newpart dd { margin: 0; }
+.mcard { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 12px; padding: 14px 16px; margin: 22px 0 0; }
+.mcard.done { border-left-color: var(--ok); }
+.mcard h3 { font-family: var(--f-display); font-size: 24px; line-height: 1.25; margin: 2px 0 8px; }
+.mcard-will { font-weight: 600; margin: 0; }
+.mcard-complete { font-weight: 600; color: var(--ok); margin: 0 0 6px; }
+.mcard .btn { margin-top: 8px; }
+.debrief-num { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
 .debrief-num .label { display: block; }
 .debrief-num b { font: 600 22px var(--f-mono); margin-right: 6px; }
-.lintro .lesson-cta { border-top: 0; padding-top: 12px; }
+@media (max-width: 600px) {
+  .newpart dl { grid-template-columns: minmax(0, 1fr); }
+}
 /* Home page (the bare address): the course map. */
 .home { max-width: 760px; margin: 0 auto; font-size: 18px; line-height: 1.6; }
 .home h1 { font-family: var(--f-display); font-size: clamp(30px, 5vw, 44px); line-height: 1.05; letter-spacing: -0.025em; margin: 6px 0 12px; text-wrap: balance; }
@@ -202,12 +221,6 @@ table.t td.n { font-family: var(--f-mono); font-variant-numeric: tabular-nums; w
   .home-level { grid-template-columns: auto minmax(0, 1fr); }
   .home-state { grid-column: 2; white-space: normal; }
 }
-/* The Briefing dialog over the Build tab holds the chapter lesson while it is open; a briefing never goes back to the intro there. */
-.briefing-dialog { width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 32px); padding: 0 20px 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg); color: var(--ink); }
-.briefing-dialog::backdrop { background: rgb(0 0 0 / 0.45); }
-.dialog-bar { position: sticky; top: 0; display: flex; justify-content: flex-end; padding: 12px 0 4px; background: var(--bg); z-index: 1; }
-.briefing-dialog .lstep { border-top: 0; padding-top: 4px; }
-.briefing-dialog [data-go="intro"] { display: none; }
 @media (max-width: 700px) {
   .intro-grid { grid-template-columns: minmax(0, 1fr); }
 }

@@ -1,10 +1,10 @@
-// Lesson tab: a lesson written as steps or as chapters (`level.lesson`, see Lesson in types.js) or authored HTML
+// Lesson tab: a lesson written as steps or on one page (`level.lesson`, see Lesson in types.js) or authored HTML
 // (`level.lessonHtml`), and the helpers a level's diagrams are drawn with.
-import { level, inChapters } from '../level.js';
+import { level, inParts } from '../level.js';
 import { $, svgEl, html, raw, prependHtml, setHtml } from '../dom.js';
 import { hooks } from '../hooks.js';
 import { drawIcon } from '../view/icons.js';
-import { MISSIONS, QUIZ, S } from '../state.js';
+import { MISSIONS, S } from '../state.js';
 import { unlocked, switchMission } from './mission.js';
 import { log } from './log.js';
 
@@ -41,34 +41,48 @@ function calcHtml({ formula, rows, result }) {
 }
 const caption = (text) => (text ? html`<p class="assume">${raw(text)}</p>` : '');
 
-/** A step's or a screen's question (`s` keys its ids): "Guess first" comes before the explanation, "Your turn" after it. */
+/** A question, its options and the place its feedback goes; `key` keys its ids. */
+const questionHtml = (check, key) => html`<p class="check-q" id="q-${key}">${raw(check.q)}</p>
+    <div class="check-opts" role="group" aria-labelledby="q-${key}">${check.options.map((o, i) => html`
+      <button type="button" class="btn opt" data-act="answer" data-opt="${i}" aria-pressed="false">${raw(o.t)}</button>`)}</div>
+    <div class="check-fb" aria-live="polite"></div>`;
+
+/** A step's question (`s` keys its ids): "Guess first" comes before the explanation, "Your turn" after it. */
 function checkHtml(check, s) {
   const guess = check.kind === 'guess';
   return html`<div class="check">
     <p class="label">${guess ? 'Guess first' : 'Your turn'}</p>
-    <p class="check-q" id="q-${s}">${raw(check.q)}</p>
-    <div class="check-opts" role="group" aria-labelledby="q-${s}">${check.options.map((o, i) => html`
-      <button type="button" class="btn opt" data-act="answer" data-opt="${i}" aria-pressed="false">${raw(o.t)}</button>`)}</div>
-    <div class="check-fb" aria-live="polite"></div>
+    ${questionHtml(check, s)}
     ${guess ? html`<button type="button" class="btn sm" data-act="reveal">Skip the question and show me</button>` : ''}
   </div>`;
 }
 
 /**
- * What a step and a briefing screen share: the label, the title (heading `id`), the hook, the question (its ids keyed
- * by `key`) and the body a "Guess first" question hides until it is answered, ending with the takeaway and `after`.
+ * Marks the pressed option and explains it in its question's feedback; a wrong answer also shows the right one.
+ * `options` are the question's options (`CheckOption`).
  */
-function stepParts(step, { label, id, key, after = '' }) {
+function showAnswer(btn, options) {
+  const chosen = options[Number(btn.dataset.opt)], right = options.find((o) => o.right);
+  btn.parentElement.querySelectorAll('.opt').forEach((o) => o.setAttribute('aria-pressed', String(o === btn)));
+  setHtml(btn.closest('.check').querySelector('.check-fb'), chosen === right
+    ? html`<p><b>Right.</b> ${raw(chosen.why)}</p>`
+    : html`<p><b>Not quite.</b> ${raw(chosen.why)}</p><p>The right answer: <b>${raw(right.t)}</b>. ${raw(right.why)}</p>`);
+}
+
+/**
+ * A step: the label, the title (heading `st-<s>`), the hook, the question and the body a "Guess first" question hides
+ * until it is answered, ending with the takeaway.
+ */
+function stepParts(step, s, label) {
   const guess = step.check?.kind === 'guess';
   return html`<p class="label">${label}</p>
-    <h2 id="${id}" tabindex="-1">${raw(step.title)}</h2>
+    <h2 id="st-${s}" tabindex="-1">${raw(step.title)}</h2>
     <p class="hook">${raw(step.hook)}</p>
-    ${guess ? checkHtml(step.check, key) : ''}
+    ${guess ? checkHtml(step.check, s) : ''}
     <div class="lstep-body" tabindex="-1"${guess ? raw(' hidden') : ''}>
       ${step.body.map(blockHtml)}
-      ${step.check && !guess ? checkHtml(step.check, key) : ''}
+      ${step.check && !guess ? checkHtml(step.check, s) : ''}
       <p class="takeaway"><b>Remember</b> ${raw(step.takeaway)}</p>
-      ${after}
     </div>`;
 }
 /** Numbers worth remembering, as [value, what it is] pairs. */
@@ -79,7 +93,7 @@ const rulesHtml = (rules) => html`<button type="button" class="btn sm" data-act=
 
 function stepHtml(step, s, count) {
   return html`<section class="lstep" data-step="${s}" aria-labelledby="st-${s}"${s ? raw(' hidden') : ''}>
-    ${stepParts(step, { label: `Step ${s + 1} of ${count}`, id: `st-${s}`, key: s })}
+    ${stepParts(step, s, `Step ${s + 1} of ${count}`)}
     <div class="lstep-nav">
       ${s ? html`<button type="button" class="btn" data-go="${s - 1}">Back</button>` : ''}
       <button type="button" class="btn primary" data-go="${s + 1}">Next</button>
@@ -125,22 +139,17 @@ function lessonHtml(lesson) {
 }
 
 /**
- * Answers a question or skips it, and reveals the explanation it hides. `checkOf(section)` gives the check of the
- * `.lstep` the button is in. Returns true when the click was one of these.
+ * Answers a step's question or skips it, and reveals the explanation it hides. Returns true when the click was one
+ * of these.
  */
-function checkClick(btn, checkOf) {
+function checkClick(btn, lesson) {
   const sec = btn.closest('.lstep'), act = btn.dataset.act;
   if (act !== 'answer' && act !== 'reveal') return false;
   const body = sec.querySelector('.lstep-body'), skip = sec.querySelector('[data-act="reveal"]');
   body.hidden = false;
   if (skip) skip.hidden = true;
-  if (act === 'reveal') { body.focus(); return true; }
-  const { options } = checkOf(sec);
-  const chosen = options[Number(btn.dataset.opt)], right = options.find((o) => o.right);
-  btn.parentElement.querySelectorAll('.opt').forEach((o) => o.setAttribute('aria-pressed', String(o === btn)));
-  setHtml(sec.querySelector('.check-fb'), chosen === right
-    ? html`<p><b>Right.</b> ${raw(chosen.why)}</p>`
-    : html`<p><b>Not quite.</b> ${raw(chosen.why)}</p><p>The right answer: <b>${raw(right.t)}</b>. ${raw(right.why)}</p>`);
+  if (act === 'reveal') body.focus();
+  else showAnswer(btn, lesson.steps[Number(sec.dataset.step)].check.options);
   return true;
 }
 
@@ -170,7 +179,7 @@ function wireSteps(root, lesson) {
     const btn = /** @type {HTMLElement} */ (e.target).closest('button');
     if (!btn) return;
     if (btn.dataset.go) return go(Number(btn.dataset.go));
-    if (checkClick(btn, (sec) => lesson.steps[Number(sec.dataset.step)].check)) return;
+    if (checkClick(btn, lesson)) return;
     const act = btn.dataset.act;
     if (act === 'all') { all = !all; paint(); }
     else if (act === 'rules') toggleRules(btn);
@@ -179,91 +188,116 @@ function wireSteps(root, lesson) {
   paint();
 }
 
-/* ---------------- Chapter lesson ---------------- */
-// One page at a time: the intro (with the list of chapters), a briefing screen, a debrief, or the wrap-up. Every page
-// is in the document from the start (`hidden` when not shown), so the level's figures are drawn once. Page keys:
-// 'intro', 'b<chapter>-<screen>', 'd<chapter>', 'wrap'. Nothing here is saved: a chapter's state comes from mission
-// progress, and "briefing read" is remembered only until the page is reloaded.
+/* ---------------- One-page lesson ---------------- */
+// The intro, a line of links to each part, one part per mission (its sections, its questions, its mission card),
+// then the wrap-up, all on one page. Nothing here is saved: a part's state comes from mission progress.
 
-/** Chapters whose last briefing screen was shown since the page loaded. */
-const briefingRead = new Set();
-
-/** A chapter's state in words (never colour alone). */
-const chapterState = (c) => (S.done[c] ? 'Mission done' : briefingRead.has(c) ? 'Briefing read' : 'Not started');
-
-/** The heading id of a page. */
-const headingId = (key) => `lp-${key}`;
-
-/** A briefing screen's key, split into its chapter and screen numbers; null for any other page. */
-function screenOf(key) {
-  const m = /^b(\d+)-(\d+)$/.exec(key);
-  return m ? { c: Number(m[1]), s: Number(m[2]) } : null;
-}
+/** A mission's state in words (never colour alone). */
+const missionState = (i) => (S.done[i] ? 'Done' : 'Not started');
 
 function introHtml(lesson) {
-  const { intro, chapters } = lesson;
-  const minutes = chapters.reduce((n, c) => n + c.minutes, 0);
-  return html`<section class="lpage lintro" data-page="intro" aria-labelledby="${headingId('intro')}">
+  const { intro, parts } = lesson;
+  const minutes = parts.reduce((n, p) => n + p.minutes, 0);
+  return html`<section class="lintro" aria-labelledby="lp-intro">
     <p class="label">${raw(intro.kicker)} · about ${minutes} minutes</p>
-    <h1 id="${headingId('intro')}" tabindex="-1">${raw(intro.title)}</h1>
+    <h1 id="lp-intro" tabindex="-1">${raw(intro.title)}</h1>
     <div class="intro-grid">
       <div>
         <p class="lede">${raw(intro.story)}</p>
         <p class="label">By the end you can</p>
         <ul>${intro.outcomes.map((o) => html`<li>${raw(o)}</li>`)}</ul>
-        <button type="button" class="btn primary" data-go="b0-0">Start the first chapter <span aria-hidden="true">→</span></button>
       </div>
       <figure class="fig"><svg id="${intro.picture}" role="img" aria-label="${intro.alt}"></svg><figcaption>What you will build</figcaption></figure>
     </div>
-    <h2>Chapters</h2>
-    <ol class="chapters">${chapters.map((c, i) => html`<li><button type="button" class="chapter" data-go="b${i}-0">
-      <span class="chapter-name">${i + 1} · ${raw(c.title)}</span>
-      <span class="chapter-meta">${c.minutes} min · <span class="chapter-state" data-chapter="${i}">${chapterState(i)}</span></span></button></li>`)}
-      <li><button type="button" class="chapter" data-act="quiz"><span class="chapter-name">Quiz</span><span class="chapter-meta">${QUIZ.length} questions</span></button></li>
-    </ol>
     ${rulesHtml(lesson.rules)}
   </section>`;
 }
 
-/** Briefing screen `s` of chapter `c`: a step's parts, then the line on how the mission uses the idea. */
-function screenHtml(chapter, c, screen, s) {
-  const key = `b${c}-${s}`, last = s === chapter.screens.length - 1;
-  return html`<section class="lpage lstep" data-page="${key}" aria-labelledby="${headingId(key)}" hidden>
-    ${stepParts(screen, {
-      label: html`Chapter ${c + 1} · ${raw(chapter.title)} · briefing ${s + 1} of ${chapter.screens.length}`,
-      id: headingId(key), key,
-      after: html`<p class="uses"><b>In Mission ${c + 1}</b> ${raw(screen.uses)}</p>`,
-    })}
-    <div class="lstep-nav">
-      <button type="button" class="btn" data-go="${s ? `b${c}-${s - 1}` : 'intro'}">Back</button>
-      ${last
-        ? html`<button type="button" class="btn primary" data-act="mission" data-mission="${c}">Start mission ${c + 1} <span aria-hidden="true">→</span></button>`
-        : html`<button type="button" class="btn primary" data-go="b${c}-${s + 1}">Next</button>`}
+/** "On this page": a link to each part with its mission's state, and to the wrap-up. */
+function onPageHtml(parts) {
+  return html`<nav class="onpage" aria-labelledby="onpageLabel">
+    <p class="label" id="onpageLabel">On this page</p>
+    <ul>${parts.map((p, i) => html`<li><button type="button" class="jump" data-jump="lp-part-${i}">${i + 1} · ${raw(p.title)} · <span class="part-state" data-part="${i}">${missionState(i)}</span></button></li>`)}
+      <li><button type="button" class="jump" data-jump="lp-wrap">Wrap-up</button></li>
+    </ul>
+  </nav>`;
+}
+
+/** A "New part" card: the component's icon (drawn by `drawCardIcons`) and name, then three short lines. */
+function cardHtml(card) {
+  return html`<div class="newpart">
+    <svg class="newpart-icon" viewBox="-3 -3 36 30" aria-hidden="true" data-icon="${card.type}"></svg>
+    <div>
+      <p class="label">New part</p>
+      <p class="newpart-name">${level.components[card.type].name}</p>
+      <dl>
+        <dt>What it is</dt><dd>${raw(card.what)}</dd>
+        <dt>What it does</dt><dd>${raw(card.does)}</dd>
+        <dt>In the game</dt><dd>${raw(card.game)}</dd>
+      </dl>
     </div>
+  </div>`;
+}
+
+/** Section `s` of part `p`: its title, hook, body and Remember line. */
+const sectionHtml = (section, p, s) => html`<section class="lsec" aria-labelledby="lp-s${p}-${s}">
+    <h3 id="lp-s${p}-${s}">${raw(section.title)}</h3>
+    <p class="hook">${raw(section.hook)}</p>
+    <div class="lsec-body">
+      ${section.body.map(blockHtml)}
+      <p class="takeaway"><b>Remember</b> ${raw(section.takeaway)}</p>
+    </div>
+  </section>`;
+
+/** Part `p`'s questions, together, after its sections. */
+const checksHtml = (checks, p) => html`<div class="checks" aria-labelledby="lp-c${p}">
+    <h3 id="lp-c${p}">Check yourself</h3>
+    ${checks.map((check, q) => html`<div class="check" data-part="${p}" data-q="${q}">${questionHtml(check, `${p}-${q}`)}</div>`)}
+  </div>`;
+
+/**
+ * Part `p`'s mission card, in both of its states: what the mission asks with a Start button, and once the mission is
+ * done what it showed with a Replay button. `paintParts` shows the one that applies.
+ */
+function missionCardHtml(part, p) {
+  const n = p + 1, mission = level.missions[p], last = p === level.missions.length - 1;
+  const done = part.debrief
+    ? html`<p><b>What you saw.</b> ${raw(part.debrief.saw)}</p>
+      <p class="debrief-num"><span class="label">Your number</span> <b>${raw(part.debrief.number[0])}</b> ${raw(part.debrief.number[1])}</p>
+      <p><b>What breaks next.</b> ${raw(part.debrief.next)}</p>`
+    : last ? html`<p>The wrap-up below sums up the level.</p>` : '';
+  return html`<div class="mcard" data-part="${p}" aria-labelledby="lp-m${p}">
+    <p class="label">Mission ${n}</p>
+    <h3 id="lp-m${p}" tabindex="-1">${mission.title}</h3>
+    <div class="mcard-start">
+      <p class="mcard-will">You will</p>
+      <ul>${part.youWill.map((line) => html`<li>${raw(line)}</li>`)}</ul>
+      <button type="button" class="btn primary" data-act="mission" data-mission="${p}">Start Mission ${n} <span aria-hidden="true">→</span></button>
+    </div>
+    <div class="mcard-done" hidden>
+      <p class="mcard-complete"><span aria-hidden="true">✓</span> Mission ${n} complete</p>
+      ${done}
+      <button type="button" class="btn" data-act="mission" data-mission="${p}">Replay Mission ${n}</button>
+    </div>
+  </div>`;
+}
+
+function partHtml(part, p) {
+  return html`<section class="lpart" aria-labelledby="lp-part-${p}">
+    <p class="label">${part.minutes} min</p>
+    <h2 id="lp-part-${p}" tabindex="-1">Part ${p + 1} · ${raw(part.title)}</h2>
+    ${part.newParts?.length ? html`<div class="newparts">${part.newParts.map(cardHtml)}</div>` : ''}
+    ${part.sections.map((section, s) => sectionHtml(section, p, s))}
+    ${part.checks?.length ? checksHtml(part.checks, p) : ''}
+    ${missionCardHtml(part, p)}
   </section>`;
 }
 
-/** What chapter `c`'s mission showed, one number, and what breaks next; it leads to the next chapter. */
-function debriefHtml(chapters, c) {
-  const { saw, number: [value, meaning], next } = chapters[c].debrief, key = `d${c}`;
-  return html`<section class="lpage lstep debrief" data-page="${key}" aria-labelledby="${headingId(key)}" hidden>
-    <p class="label">Chapter ${c + 1} · ${raw(chapters[c].title)} · debrief</p>
-    <h2 id="${headingId(key)}" tabindex="-1">Mission ${c + 1} debrief</h2>
-    <p><b>What you just saw.</b> ${raw(saw)}</p>
-    <p class="debrief-num"><span class="label">Your number</span> <b>${raw(value)}</b> ${raw(meaning)}</p>
-    <p><b>What breaks next.</b> ${raw(next)}</p>
-    <div class="lstep-nav">
-      <button type="button" class="btn" data-go="intro">All chapters</button>
-      <button type="button" class="btn primary" data-go="b${c + 1}-0">Next: Chapter ${c + 2} · ${raw(chapters[c + 1].title)} <span aria-hidden="true">→</span></button>
-    </div>
-  </section>`;
-}
-
-/** The level's wrap-up, shown after the last mission: the intro's picture, three things to say, numbers to keep. */
+/** The level's wrap-up: the intro's picture, three things to say, numbers to keep, then the quiz. */
 function wrapHtml(wrap) {
-  return html`<section class="lpage lstep wrap" data-page="wrap" aria-labelledby="${headingId('wrap')}" hidden>
+  return html`<section class="lwrap" aria-labelledby="lp-wrap">
     <p class="label">Level ${level.id} · wrap-up</p>
-    <h2 id="${headingId('wrap')}" tabindex="-1">What you built</h2>
+    <h2 id="lp-wrap" tabindex="-1">What you built</h2>
     <figure class="fig"><svg id="${wrap.picture}" role="img" aria-label="${wrap.alt}"></svg></figure>
     <h3>Three things to say in an interview</h3>
     <ol>${wrap.say.map((line) => html`<li>${raw(line)}</li>`)}</ol>
@@ -272,43 +306,50 @@ function wrapHtml(wrap) {
     ${wrap.loop ? html`<p>${raw(wrap.loop)}</p>` : ''}
     <p><b>Still broken.</b> ${raw(wrap.broken)}</p>
     <div class="lstep-nav">
-      <button type="button" class="btn" data-go="intro">All chapters</button>
       <button type="button" class="btn primary" data-act="quiz">Take the quiz <span aria-hidden="true">→</span></button>
     </div>
   </section>`;
 }
 
-function chapterLessonHtml(lesson) {
-  const { chapters } = lesson;
-  return html`<div class="chapter-lesson" id="chapterLesson">
+const pageLessonHtml = (lesson) => html`<div class="page-lesson" id="pageLesson">
     ${introHtml(lesson)}
-    ${chapters.map((chapter, c) => html`${chapter.screens.map((screen, s) => screenHtml(chapter, c, screen, s))}${chapter.debrief ? debriefHtml(chapters, c) : ''}`)}
+    ${onPageHtml(lesson.parts)}
+    ${lesson.parts.map(partHtml)}
     ${wrapHtml(lesson.wrap)}
   </div>`;
+
+/** Draws each New part card's icon, as the Build screen's component list draws it. */
+function drawCardIcons(root) {
+  for (const svg of root.querySelectorAll('.newpart-icon')) drawIcon(/** @type {HTMLElement} */ (svg).dataset.icon, svg, 0, 0);
 }
 
-/** The rendered chapter lesson, the page it shows, and whether it is in the Briefing dialog. */
-const lessonView = { root: null, page: 'intro', inDialog: false };
+/** The rendered one-page lesson, and the missions it last showed as done (so a repaint touches only what changed). */
+const pageView = { root: null, painted: [] };
 
-/** Shows one page and, unless told not to, moves focus to its heading. */
-function showPage(key, focus = true) {
-  lessonView.page = key;
-  for (const page of lessonView.root.querySelectorAll('.lpage')) page.hidden = page.dataset.page !== key;
-  const screen = screenOf(key);
-  if (screen && screen.s === level.lesson.chapters[screen.c].screens.length - 1) briefingRead.add(screen.c);
-  paintChapters();
-  if (focus) $(headingId(key)).focus();
+/** Shows each part's state in the links and its mission card's state. main.js calls it after every change. */
+export function paintParts() {
+  if (!pageView.root) return;
+  MISSIONS.forEach((_, i) => {
+    const done = !!S.done[i];
+    if (pageView.painted[i] === done) return;
+    pageView.painted[i] = done;
+    pageView.root.querySelector(`.part-state[data-part="${i}"]`).textContent = missionState(i);
+    const card = pageView.root.querySelector(`.mcard[data-part="${i}"]`);
+    card.classList.toggle('done', done);
+    card.querySelector('.mcard-start').hidden = done;
+    card.querySelector('.mcard-done').hidden = !done;
+  });
 }
 
-/** Writes each chapter's state in the intro's list. main.js calls it after every change, so it follows mission progress. */
-export function paintChapters() {
-  if (!lessonView.root) return;
-  for (const state of lessonView.root.querySelectorAll('.chapter-state')) state.textContent = chapterState(Number(state.dataset.chapter));
+/** Scrolls the lesson to the heading with id `id` and moves focus to it. */
+function jumpTo(id) {
+  const heading = $(id);
+  heading.scrollIntoView({ block: 'start' });
+  heading.focus({ preventScroll: true });
 }
 
 /** Opens mission `i` on the Build tab; while it is still locked, the first mission not done opens instead, and the log says why. */
 function startMission(i) {
-  if (lessonView.inDialog) /** @type {HTMLDialogElement} */ ($('briefingDialog')).close();
   const open = unlocked(i) ? i : S.done.findIndex((done) => !done);
   const previous = i; // i is the asked-for mission's 0-based index, so the mission before it is number i
   if (open !== i) log(`Finish Mission ${previous} first. Mission ${open + 1} is open.`, 'warn');
@@ -316,81 +357,48 @@ function startMission(i) {
   hooks.setTab('build');
 }
 
-/** Opens the debrief of chapter `c` on the Lesson tab; after the last mission, that is the wrap-up. */
-function openDebrief(c) {
+/** Opens the Lesson tab at mission `i`'s card; after the last mission, at the wrap-up. */
+function openCard(i) {
   hooks.setTab('lesson');
-  showPage(c === MISSIONS.length - 1 ? 'wrap' : `d${c}`);
+  jumpTo(i === MISSIONS.length - 1 ? 'lp-wrap' : `lp-m${i}`);
 }
 
-/**
- * Opens chapter `c`'s briefing screens in a dialog over the Build tab. The lesson itself moves into the dialog while
- * it is open, so each figure stays one svg with one id, and moves back when it closes.
- */
-function openBriefing(c) {
-  const dialog = /** @type {HTMLDialogElement} */ ($('briefingDialog')) || briefingDialog();
-  lessonView.inDialog = true;
-  dialog.appendChild(lessonView.root);
-  showPage(`b${c}-0`, false);
-  dialog.showModal();
-}
-
-/** Creates the Briefing dialog. When it closes, the lesson goes back to its tab and focus to the Briefing link. */
-function briefingDialog() {
-  const dialog = document.createElement('dialog');
-  dialog.id = 'briefingDialog';
-  dialog.className = 'lesson briefing-dialog';
-  dialog.setAttribute('aria-label', 'Briefing');
-  setHtml(dialog, html`<div class="dialog-bar"><button type="button" class="btn sm" data-act="close">Close</button></div>`);
-  dialog.addEventListener('click', (e) => { if (/** @type {HTMLElement} */ (e.target).closest('[data-act="close"]')) dialog.close(); });
-  dialog.addEventListener('close', () => {
-    lessonView.inDialog = false;
-    $('view-lesson').prepend(lessonView.root);
-    showPage('intro', false);
-    $('mission').querySelector('[data-act="briefing"]')?.focus();
-  });
-  document.body.appendChild(dialog);
-  return dialog;
-}
-
-/** Wires a rendered chapter lesson, and the Debrief and Briefing buttons on the Build tab. */
-function wireChapters(root, lesson) {
-  const checkOf = (sec) => {
-    const { c, s } = screenOf(sec.dataset.page);
-    return lesson.chapters[c].screens[s].check;
-  };
+/** Wires a rendered one-page lesson, and the canvas's "Mission N complete" button on the Build tab. */
+function wireParts(root, lesson) {
   root.addEventListener('click', (e) => {
     const btn = /** @type {HTMLElement} */ (e.target).closest('button');
     if (!btn) return;
-    if (btn.dataset.go) return showPage(btn.dataset.go);
-    if (checkClick(btn, checkOf)) return;
     const act = btn.dataset.act;
-    if (act === 'mission') startMission(Number(btn.dataset.mission));
+    if (btn.dataset.jump) jumpTo(btn.dataset.jump);
+    else if (act === 'answer') {
+      const check = btn.closest('.check');
+      showAnswer(btn, lesson.parts[Number(check.dataset.part)].checks[Number(check.dataset.q)].options);
+    } else if (act === 'mission') startMission(Number(btn.dataset.mission));
     else if (act === 'quiz') hooks.setTab('quiz');
     else if (act === 'rules') toggleRules(btn);
   });
   $('view-build').addEventListener('click', (e) => {
-    const btn = /** @type {HTMLElement} */ (e.target).closest('[data-act="debrief"], [data-act="briefing"]');
-    if (!btn) return;
-    if (btn.dataset.act === 'debrief') openDebrief(S.mission);
-    else openBriefing(S.mission);
+    if (/** @type {HTMLElement} */ (e.target).closest('[data-act="debrief"]')) openCard(S.mission);
   });
 }
 
 /**
- * Fills the lesson tab. A step lesson or a chapter lesson also takes over the tab's start button as its "Skip to the
+ * Fills the lesson tab. A step lesson or a one-page lesson also takes over the tab's start button as its "Skip to the
  * missions".
  */
 export function renderLesson() {
   const view = $('view-lesson');
   if (!level.lesson) { prependHtml(view, raw(level.lessonHtml)); return; } // a lesson is authored markup
-  const chapters = inChapters();
-  prependHtml(view, chapters ? chapterLessonHtml(level.lesson) : lessonHtml(level.lesson));
+  const onePage = inParts();
+  prependHtml(view, onePage ? pageLessonHtml(level.lesson) : lessonHtml(level.lesson));
   const cta = view.querySelector('.lesson-cta');
   $('startBuild').firstChild.textContent = 'Skip to the missions ';
-  if (!chapters) { $('lessonBar').appendChild(cta); wireSteps($('stepLesson'), level.lesson); return; }
-  lessonView.root = $('chapterLesson');
-  lessonView.root.querySelector('.lintro').appendChild(cta);
-  wireChapters(lessonView.root, level.lesson);
+  if (!onePage) { $('lessonBar').appendChild(cta); wireSteps($('stepLesson'), level.lesson); return; }
+  pageView.root = $('pageLesson');
+  pageView.root.querySelector('.lintro').appendChild(cta);
+  drawCardIcons(pageView.root);
+  wireParts(pageView.root, level.lesson);
+  paintParts();
 }
 
 /* ---------------- Diagram helpers ---------------- */

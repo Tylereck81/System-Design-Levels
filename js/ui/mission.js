@@ -8,7 +8,7 @@ import { paintControls } from './controls.js';
 import { log } from './log.js';
 import { hooks } from '../hooks.js';
 import { anyOn } from '../engine/experiments.js';
-import { level, inChapters } from '../level.js';
+import { level, inParts } from '../level.js';
 import { renderMock, stressOpen } from './mock.js';
 
 export const unlocked = (i) => i === 0 || S.done[i - 1];
@@ -36,8 +36,8 @@ export function renderMission() { keepFocus($('missionCard'), buildMission, () =
 function buildMission() {
   renderMissionTabs();
   const M = MISSIONS[S.mission], i = S.mission;
-  // The canvas says when the open mission is complete, with a button to its debrief (chapter lessons only).
-  $('doneBanner').hidden = !(inChapters() && S.done[i]);
+  // The canvas says when the open mission is complete, with a button to its card in the lesson (one-page lessons only).
+  $('doneBanner').hidden = !(inParts() && S.done[i]);
   $('doneText').textContent = `Mission ${i + 1} complete`;
   const box = $('mission'); box.textContent = '';
   if (level.interview) {
@@ -50,11 +50,6 @@ function buildMission() {
   }
   box.appendChild(el('p', 'label', `Mission ${i + 1} of ${MISSIONS.length} · ${M.ref}`));
   box.appendChild(el('h2', null, M.title));
-  if (inChapters()) {
-    const brief = el('button', 'linkbtn', 'Briefing'); brief.type = 'button'; brief.dataset.act = 'briefing'; brief.dataset.focusKey = 'briefing';
-    brief.setAttribute('aria-label', `Briefing for Mission ${i + 1}`);
-    box.appendChild(brief);
-  }
   box.appendChild(el('p', 'story', M.story));
   const facts = el('div', 'facts');
   const trafficTxt = trafficHidden(M) ? '?' : fmt(M.qps);
