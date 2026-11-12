@@ -1,6 +1,7 @@
 // Level data, game state and saved progress.
 import { level } from './level.js';
 import { readStorage, writeStorage } from './storage.js';
+import { saveShapeOk } from './save-shape.js';
 import { SIZES, COMPONENTS, T, choiceOf, sizesOf } from './engine/catalog.js';
 
 export const TARGET_MS = level.targets.latencyMs;
@@ -67,14 +68,10 @@ export const qsel = {};         // quiz selection before "Check"
 export const run = { queues: {}, playing: false, t: 0, on: {}, hold: 0, dnsDone: false, dnsFlying: false, spawnAcc: 0, mdl: null, uiAcc: 1, expT: {}, active: new Set(), relog: new Set(), everPlayed: false, errored: false };
 
 export function validState(src) {
-  if (!src || typeof src !== 'object' || !Array.isArray(src.nodes) || !Array.isArray(src.edges)) return false;
-  if (!src.nodes.some(n => n?.type === 'users')) return false;
-  const okNode = (n) => n && typeof n.id === 'string' && TYPES[n.type] && Number.isFinite(n.x) && Number.isFinite(n.y) && (n.size == null || SIZES[n.size]);
-  if (!src.nodes.every(okNode)) return false;
-  const ids = new Set(src.nodes.map(n => n.id));
-  if (!src.edges.every(e => e && ids.has(e.from) && ids.has(e.to))) return false;
-  if (!Number.isInteger(src.mission) || src.mission < 0 || src.mission >= MISSIONS.length) return false;
-  return true;
+  if (!saveShapeOk(src)) return false;
+  // and what only this level knows
+  if (!src.nodes.every(n => TYPES[n.type] && (n.size == null || SIZES[n.size]))) return false;
+  return src.mission < MISSIONS.length;
 }
 /** The saved state as stored, or null when there is none. A save that isn't JSON is discarded with a warning. */
 function readSave() {

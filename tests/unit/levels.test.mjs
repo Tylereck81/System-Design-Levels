@@ -2,7 +2,7 @@
 // validateLesson when its lesson is written as data, in steps or chapters), has a unique save key, and has a fair quiz; every mock interview is valid. Run with `npm run test:unit` (part of `npm test`).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { LEVELS, MOCK_LEVELS } from '../../levels/index.js';
+import { LEVELS, MOCK_LEVELS, PARTS, TOTAL_LEVELS, saveKeyOf } from '../../levels/index.js';
 import { validateLevel } from '../../js/level.js';
 import { validateLesson, lessonWarnings } from '../../js/validate-lesson.js';
 
@@ -41,6 +41,11 @@ for (const { entry, data, error } of levels) {
       for (const warning of lessonWarnings(data)) t.diagnostic(`lesson warning: ${warning}`); // advice; it never fails a level
     }
     assert.equal(data.saveKey, `sdl-level${entry.id}-v1`);
+    assert.equal(saveKeyOf(entry.id), data.saveKey, 'the home page reads progress under the level\'s own key');
+    assert.ok(typeof entry.line === 'string' && entry.line.length > 0 && entry.line.length <= 80, 'a one-line description of at most 80 characters');
+    // The home page shows minutes only for a lesson in chapters, where they are the sum of the chapters' minutes.
+    const chapterMinutes = data.lesson?.chapters?.reduce((n, c) => n + c.minutes, 0);
+    assert.equal(entry.minutes, chapterMinutes, 'the index\'s minutes match the chapters (or both are absent)');
     assert.ok(isPositiveInteger(data.saveVersion), 'saveVersion is a positive integer');
     // quizVersion is optional: without it the quiz shares saveVersion (js/state.js).
     if (data.quizVersion !== undefined) assert.ok(isPositiveInteger(data.quizVersion), 'quizVersion is a positive integer');
@@ -109,4 +114,11 @@ test('save keys are unique', () => {
   // A missing key fails its level's own test, so only the keys that exist are compared.
   const keys = [...loaded, ...mocks].map(({ data }) => data?.saveKey).filter((k) => typeof k === 'string');
   assert.equal(new Set(keys).size, keys.length);
+});
+
+test('the parts cover every level once, in order', () => {
+  assert.equal(LEVELS.length, TOTAL_LEVELS);
+  assert.deepEqual(LEVELS.map((l) => l.id), Array.from({ length: TOTAL_LEVELS }, (_, i) => i + 1));
+  const covered = PARTS.flatMap((p) => Array.from({ length: p.last - p.first + 1 }, (_, i) => p.first + i));
+  assert.deepEqual(covered, LEVELS.map((l) => l.id));
 });

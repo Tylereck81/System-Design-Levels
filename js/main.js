@@ -59,6 +59,7 @@ document.querySelector('.tabs').addEventListener('keydown', (e) => {
 });
 window.addEventListener('hashchange', () => {
   const r = parseRoute(location.hash);
+  if (r.level === 'home') { location.reload(); return; } // e.g. Back to the home page
   const target = r.level === 'mock' ? MOCK.id : (LEVELS.find(l => l.id === r.level) || LEVELS[0]).id; // an unknown level means Level 1
   if (target !== entry.id) { location.reload(); return; } // another level: start again with its file
   const tab = TABS.includes(r.tab) ? r.tab : S.tab;

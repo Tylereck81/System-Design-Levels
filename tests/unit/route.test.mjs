@@ -10,10 +10,15 @@ test('Level 1 short form: the hash is the tab', () => {
   assert.deepEqual(parseRoute('#quiz'), { level: 1, tab: 'quiz' });
 });
 
-test('no hash means Level 1 with no tab', () => {
-  assert.deepEqual(parseRoute(''), { level: 1, tab: null });
-  assert.deepEqual(parseRoute('#'), { level: 1, tab: null });
-  assert.deepEqual(parseRoute(undefined), { level: 1, tab: null });
+test('no hash means the home page', () => {
+  assert.deepEqual(parseRoute(''), { level: 'home', tab: null });
+  assert.deepEqual(parseRoute('#'), { level: 'home', tab: null });
+  assert.deepEqual(parseRoute('#/'), { level: 'home', tab: null });
+  assert.deepEqual(parseRoute(undefined), { level: 'home', tab: null });
+});
+
+test('an unknown short address still means Level 1', () => {
+  assert.deepEqual(parseRoute('#xyz'), { level: 1, tab: 'xyz' });
 });
 
 test('#level-N/tab, with or without a tab', () => {

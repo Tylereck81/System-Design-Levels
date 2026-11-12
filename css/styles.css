@@ -57,7 +57,8 @@ button { cursor: pointer; }
 
 /* Header */
 .top { display: flex; align-items: center; gap: 12px 18px; flex-wrap: wrap; padding-block: 4px 14px; border-bottom: 1px solid var(--line); margin-bottom: 20px; }
-.brand { font-family: var(--f-display); font-weight: 700; font-size: 18px; letter-spacing: -0.015em; white-space: nowrap; }
+.brand { font-family: var(--f-display); font-weight: 700; font-size: 18px; letter-spacing: -0.015em; white-space: nowrap; color: var(--ink); text-decoration: none; }
+a.btn { color: var(--ink); text-decoration: none; }
 .lvl { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .chip { font: 500 13px/1 var(--f-mono); color: var(--accent); background: var(--accent-soft); padding: 5px 8px; border-radius: 999px; white-space: nowrap; }
 .lvl-name { font-weight: 600; font-size: 14px; color: var(--ink-2); }
@@ -188,6 +189,27 @@ table.t td.n { font-family: var(--f-mono); font-variant-numeric: tabular-nums; w
 .debrief-num .label { display: block; }
 .debrief-num b { font: 600 22px var(--f-mono); margin-right: 6px; }
 .lintro .lesson-cta { border-top: 0; padding-top: 12px; }
+/* Home page (the bare address): the course map. */
+.home { max-width: 760px; margin: 0 auto; font-size: 18px; line-height: 1.6; }
+.home h1 { font-family: var(--f-display); font-size: clamp(30px, 5vw, 44px); line-height: 1.05; letter-spacing: -0.025em; margin: 6px 0 12px; text-wrap: balance; }
+.home .lede { font-size: 20px; color: var(--ink-2); margin: 0 0 18px; }
+.home h2 { font-family: var(--f-display); font-size: 24px; line-height: 1.2; letter-spacing: -0.015em; margin: 0 0 4px; }
+.home section { padding-block: 22px; border-top: 1px solid var(--line); }
+.home .btn { font-size: 16px; }
+.home-steps { padding-left: 22px; margin: 8px 0 0; }
+.home-part-meta { font: 500 14px var(--f-mono); color: var(--ink-3); margin: 0 0 10px; }
+.home-levels { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.home-level { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 4px 12px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; color: var(--ink); text-decoration: none; }
+.home-level:hover { border-color: var(--accent); }
+.home-level-name { display: block; font-weight: 600; }
+.home-level-line { display: block; font-size: 16px; color: var(--ink-2); }
+.home-state { font: 14px var(--f-mono); color: var(--ink-2); white-space: nowrap; }
+.home-state[data-state="done"] { color: var(--ok); }
+.home-state-icon { margin-right: 6px; }
+@media (max-width: 600px) {
+  .home-level { grid-template-columns: auto minmax(0, 1fr); }
+  .home-state { grid-column: 2; white-space: normal; }
+}
 /* The Briefing dialog over the Build tab holds the chapter lesson while it is open; a briefing never goes back to the intro there. */
 .briefing-dialog { width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 32px); padding: 0 20px 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg); color: var(--ink); }
 .briefing-dialog::backdrop { background: rgb(0 0 0 / 0.45); }

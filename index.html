@@ -13,7 +13,7 @@
 <body>
 <div class="app" id="app">
   <header class="top">
-    <div class="brand">System Design Levels</div>
+    <a class="brand" href="./">System Design Levels</a>
     <div class="lvl-wrap">
       <button class="lvl" id="lvlBtn" type="button" aria-expanded="false" aria-controls="lvlMenu"><span class="chip" id="lvlChip"></span><span class="lvl-name" id="lvlName"></span><span class="lvl-caret" aria-hidden="true">▾</span></button>
       <div class="lvl-menu" id="lvlMenu" hidden>
@@ -29,6 +29,9 @@
   </header>
 
   <main>
+  <!-- ================= HOME (the bare address; js/home.js) ================= -->
+  <div class="home" id="view-home" hidden></div>
+
   <!-- ================= LESSON ================= -->
   <div class="lesson" id="view-lesson" role="tabpanel" aria-labelledby="tab-lesson">
 

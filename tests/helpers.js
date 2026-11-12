@@ -7,8 +7,8 @@ import { expect } from '@playwright/test';
 
 export const QUIZ_KEY_L1 = [2, 0, 2, 3, 3, 1, 1, 2, 1, 0];
 
-/** Open the game with empty saved progress. */
-export async function freshPage(page, hash = '') {
+/** Open the game with empty saved progress, on Level 1's lesson unless `hash` names another page ('' is the home page). */
+export async function freshPage(page, hash = '#lesson') {
   await installCapture(page);
   // Each test gets a new browser context, so a page that has not opened anything yet has no saved data and the game
   // loads once. Otherwise clear it on the game's own page first.
@@ -20,7 +20,7 @@ export async function freshPage(page, hash = '') {
     await page.goto('about:blank');
   }
   await page.goto('/' + hash);
-  await page.waitForFunction(() => !!window.__sdl);
+  await page.waitForFunction(() => !!window.__sdl || document.getElementById('view-home')?.hidden === false); // a level, or the home page
 }
 
 /** Reload the page and wait until the game has started (it loads its level file first). */
