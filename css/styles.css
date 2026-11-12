@@ -403,7 +403,8 @@ details.hint p { margin: 8px 0 0; color: var(--ink-2); }
 @media (max-width: 1180px) {
   .build-grid {
     --sheet: min(42vh, 340px); /* the sheet's greatest height */
-    grid-template-columns: minmax(0, 1fr) 320px;
+    --mission-w: 320px;
+    grid-template-columns: minmax(0, 1fr) var(--mission-w);
     grid-template-areas: "controls controls" "pal pal" "hud mission" "canvas mission" "legend mission" "log mission";
     grid-template-rows: auto auto auto auto auto 1fr;
     row-gap: 10px;
@@ -418,8 +419,9 @@ details.hint p { margin: 8px 0 0; color: var(--ink-2); }
   .legend { grid-area: legend; }
   .log { grid-area: log; align-self: start; }
   .mission-card { grid-area: mission; align-self: start; }
-  /* It stops short of the mission column, and the page gains room below so everything can scroll clear of it. */
-  .insp-card { position: fixed; z-index: 40; left: 0; right: 352px; bottom: 0; max-height: var(--sheet); overflow: auto; padding-top: 0; border-radius: 14px 14px 0 0; border-bottom: 0; box-shadow: 0 -8px 24px rgba(0,0,0,.18); padding-bottom: max(16px, env(safe-area-inset-bottom, 0px)); }
+  /* It stops short of the mission column (its width, the column gap and the page margin), and the page gains room
+     below so everything can scroll clear of it. */
+  .insp-card { position: fixed; z-index: 40; left: 0; right: calc(var(--mission-w) + 32px); bottom: 0; max-height: var(--sheet); overflow: auto; padding-top: 0; border-radius: 14px 14px 0 0; border-bottom: 0; box-shadow: 0 -8px 24px rgba(0,0,0,.18); padding-bottom: max(16px, env(safe-area-inset-bottom, 0px)); }
   .insp-head { position: sticky; top: 0; z-index: 1; background: var(--surface); padding-block: 12px 8px; }
   .insp-close { display: inline-flex; }
   .seg { grid-template-columns: repeat(4, 1fr); }
