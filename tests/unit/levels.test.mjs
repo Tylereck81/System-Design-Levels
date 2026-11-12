@@ -1,5 +1,5 @@
 // The level data contract, checked in Node without a browser: every level file loads, passes validateLevel (and
-// validateLesson when its lesson is written as steps), has a unique save key, and has a fair quiz; every mock interview is valid. Run with `npm run test:unit` (part of `npm test`).
+// validateLesson when its lesson is written as data, in steps or chapters), has a unique save key, and has a fair quiz; every mock interview is valid. Run with `npm run test:unit` (part of `npm test`).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { LEVELS, MOCK_LEVELS } from '../../levels/index.js';
@@ -37,7 +37,7 @@ for (const { entry, data, error } of levels) {
     assert.ifError(error);
     assert.deepEqual(validateLevel(data), []);
     if (data.lesson) {
-      assert.deepEqual(validateLesson(data), [], 'the step lesson passes validateLesson');
+      assert.deepEqual(validateLesson(data), [], 'the lesson passes validateLesson');
       for (const warning of lessonWarnings(data)) t.diagnostic(`lesson warning: ${warning}`); // advice; it never fails a level
     }
     assert.equal(data.saveKey, `sdl-level${entry.id}-v1`);

@@ -235,8 +235,8 @@
  */
 
 /**
- * A lesson as data: steps, then a recap that hands over to the missions.
- * @typedef {object} Lesson
+ * A lesson as steps, all read before the missions, then a recap that hands over to them.
+ * @typedef {object} StepLesson
  * @property {string} kicker @property {string} title
  * @property {string} promise   what the player will know by the end
  * @property {number} minutes   time to read it
@@ -244,6 +244,41 @@
  * @property {{ numbers: [string, string][], bridge: string[] }} recap
  *   numbers worth remembering (value, what it is); `bridge` has one line per mission, in mission order
  * @property {string} rules     the game's rules the lesson relies on, in one paragraph
+ */
+
+/**
+ * One briefing screen of a chapter: a step whose mission is its chapter's, plus the line that says how the idea is
+ * used in that mission.
+ * @typedef {Omit<LessonStep, 'missions'> & { uses: string }} BriefingScreen
+ */
+
+/**
+ * One chapter: the briefing for one mission, then a debrief once the mission is done.
+ * @typedef {object} Chapter
+ * @property {string} title
+ * @property {number} mission   index of its mission; chapter N is mission N
+ * @property {number} minutes   time for the briefing and the mission
+ * @property {BriefingScreen[]} screens
+ * @property {{ saw: string, number: [string, string], next: string }} [debrief]
+ *   what the player just saw, one number (value, what it is), and what breaks next; every chapter but the last has one
+ */
+
+/**
+ * A lesson in chapters: an intro, one chapter per mission, then a wrap-up. The level's time is the sum of its
+ * chapters' minutes. Progress through it comes from mission progress, so it adds no saved data.
+ * @typedef {object} ChapterLesson
+ * @property {{ kicker: string, title: string, story: string, picture: string, alt: string, outcomes: string[] }} intro
+ *   `picture` names an svg the level's drawFigures draws: the finished design
+ * @property {Chapter[]} chapters
+ * @property {{ picture: string, alt: string, say: string[], numbers: [string, string][], broken: string, loop?: string }} wrap
+ *   `say`: three things to say in an interview; `numbers`: values each taken from a briefing; `broken`: what is
+ *   still broken, leading to the next level; `loop`: an optional closing paragraph
+ * @property {string} rules     the game's rules the lesson relies on, in one paragraph
+ */
+
+/**
+ * A lesson as data, in steps or in chapters. Levels move from steps to chapters one by one.
+ * @typedef {StepLesson | ChapterLesson} Lesson
  */
 
 /**
@@ -267,7 +302,7 @@
  * @property {Experiment[]} experiments
  * @property {Record<string, string | ((...args: any[]) => string)>} text  the engine's messages, in the level's words
  * @property {{ passScore: number, passText: string, failText: string | ((pass: number) => string), questions: Question[] }} quiz
- * @property {Lesson} [lesson]     the lesson as steps; a level has this or `lessonHtml`, never both
+ * @property {Lesson} [lesson]     the lesson as data; a level has this or `lessonHtml`, never both
  * @property {string} [lessonHtml]  the lesson as one block of authored HTML
  * @property {(figures: Record<string, Function>) => void} [drawFigures]  draws the lesson's figures
  * @property {{ title: string, brief: string, checklist: string[] }} [mock]  the level as a mock interview problem
