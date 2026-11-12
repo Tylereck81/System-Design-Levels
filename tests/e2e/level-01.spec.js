@@ -262,7 +262,7 @@ test.describe('Level 1 · teaching feedback', () => {
     await expect(chart.locator('text', { hasText: /^fail$/ })).toHaveCount(0);
     await expect(chart.locator('.ch-cap-t')).toHaveText('capped at 25× from 96%');
     await expect(chart).toHaveAttribute('aria-label', /capped at 25 times from 96%/);
-    await expect(page.locator('#lessonRules')).toContainText('From 96% busy, a request takes at most 25× its work time; only load above 100% fails.');
+    await expect(page.locator('#pageLesson .lsec').filter({ hasText: 'Why is a busy server slow?' })).toContainText('Requests fail only when the load is more than the capacity.');
   });
 
   test('changing the design after verifying resets the check', async ({ page }) => {

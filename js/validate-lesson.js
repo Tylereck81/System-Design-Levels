@@ -442,7 +442,7 @@ function pageLessonProblems(level) {
   const questions = { count: level.quiz?.questions?.length ?? 0, used: new Set() };
   const sections = parts.flatMap((p) => (Array.isArray(p?.sections) ? p.sections : []));
   const problems = [];
-  if (!isText(lesson.rules)) problems.push('the lesson needs its rules');
+  if (lesson.rules !== undefined) problems.push('a lesson on one page has no rules');
   if (parts.length !== missions) problems.push(`the lesson has ${parts.length} parts; it needs one per mission (${missions})`);
 
   // The intro and the wrap-up each name a picture, so the level's drawFigures is always run.

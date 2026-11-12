@@ -162,11 +162,11 @@ export function registerPageLessonTests({ level }) {
         await expect(sections.nth(s)).toBeVisible();
       }
     }
-    // With every mission done, nothing is hidden but the game rules, each mission card's Start state and the lock
-    // lines, and there is no page-by-page navigation.
+    // With every mission done, nothing is hidden but each mission card's Start state and the lock lines, and there is
+    // no page-by-page navigation and no Game rules button.
     const hidden = await root.locator('[hidden]').evaluateAll((els) => els.map((e) => e.id || e.className));
-    expect(hidden).toEqual(['lessonRules', ...lesson.parts.flatMap((_, i) => (i ? ['part-lock', 'mcard-start'] : ['mcard-start'])), 'part-lock']);
-    await expect(root.locator('[data-go], [data-act="reveal"]')).toHaveCount(0);
+    expect(hidden).toEqual([...lesson.parts.flatMap((_, i) => (i ? ['part-lock', 'mcard-start'] : ['mcard-start'])), 'part-lock']);
+    await expect(root.locator('[data-go], [data-act="reveal"], [data-act="rules"]')).toHaveCount(0);
   });
 
   test('one-page lesson: each link opens its part, and says its mission\'s state in words', async ({ page }) => {
@@ -456,7 +456,6 @@ export function registerPageLessonTests({ level }) {
     const lesson = await load();
     await page.setViewportSize({ width: 360, height: 780 });
     await freshPage(page, routeHash(level, 'lesson'));
-    await page.click('#pageLesson [data-act="rules"]');
     await finishMissions(page, lesson.parts.map(() => true), 0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
   });
@@ -489,10 +488,9 @@ export function registerPageLessonTests({ level }) {
     for (const colorScheme of ['light', 'dark']) {
       test.describe(`one-page lesson at ${width} px (${colorScheme})`, () => {
         test.use({ colorScheme, viewport: { width, height: 844 } });
-        test('axe finds no violations with a question answered, a mission done and the game rules shown; no sideways scroll', async ({ page }) => {
+        test('axe finds no violations with a question answered and a mission done; no sideways scroll', async ({ page }) => {
           const lesson = await load();
           await freshPage(page, routeHash(level, 'lesson'));
-          await page.click('#pageLesson [data-act="rules"]');
           await finishMissions(page, lesson.parts.map((_, i) => i === 0), 1);
           await page.locator('.checks .opt').first().click();
           const results = await new AxeBuilder({ page }).include('#view-lesson').setLegacyMode().analyze();

@@ -49,9 +49,8 @@ const sharedCapacity = COMPONENTS.web.alone.capFactor;
 const sqlQueries = COMPONENTS.db.kinds.sql.per;
 const nosqlLookups = COMPONENTS.db.kinds.nosql.per;
 
-// The slowdown cap: where it starts, and what qmul returns for a full server.
+// Where the slowdown cap starts.
 const capFrom = SLOWDOWN_CAP_FROM;
-const capTimes = `${qmul(1)}×`;
 
 // Debrief 1: Mission 1's server is an S that also runs the database. Its response time is the combined work time
 // slowed by how busy it is, plus the internet round trip (tests/integration/level-01.test.mjs checks the same 100 ms).
@@ -376,7 +375,6 @@ const lesson = {
     loop: `<b>You just ran an interview.</b> In Mission 3 you did the four steps of a design interview in order: ${scope} (you estimated the traffic), ${sketch} (you built the design), ${deep} (you tuned the sizes), ${stress} (you broke it). Every level from here repeats that loop.`,
     broken: `When the web server crashed, the whole shop went down. At ${spikeFactor} times the traffic, no size was big enough. Level 2 fixes both with a load balancer and more servers.`,
   },
-  rules: `Web server work ${ms(T.web)}, database query ${ms(T.db)}, internet round trip ${ms(T.rtt)}, round trip inside the data center ${ms(T.dc)}, DNS $${T.dns} a month. A NoSQL lookup takes ${ms(T.nosqlLookup)}. Time per request = work time ÷ (1 − busy), a standard queueing result (M/M/1); real servers differ in detail but bend the same way. From ${percent(capFrom)} busy, a request takes at most ${capTimes} its work time; only load above 100% fails.`,
 };
 
 // Quiz examples, with numbers different from the lesson's own examples (our example loads, not game numbers).

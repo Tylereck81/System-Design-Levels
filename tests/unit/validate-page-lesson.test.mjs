@@ -61,7 +61,6 @@ function level(change = (d) => d) {
         picture: 'figOne', alt: 'Users, then a web server.', say: ['Say one.', 'Say two.', 'Say three.'],
         numbers: [['2×', 'peak over average'], ['12 apples', 'apples in two boxes']], broken: 'One server can still fail.',
       },
-      rules: 'Requests take 10 ms.',
     },
   };
   change(d);
@@ -97,8 +96,8 @@ test('a lesson with both steps and parts, or that is not an object', () => {
   assert.deepEqual(at((d) => { d.lesson = null; }), ['the lesson must be an object']);
 });
 
-test('a lesson without its rules', () => {
-  assert.deepEqual(at((d) => { delete lesson(d).rules; }), ['the lesson needs its rules']);
+test('a lesson with rules: a lesson on one page has none', () => {
+  assert.deepEqual(at((d) => { lesson(d).rules = 'Requests take 10 ms.'; }), ['a lesson on one page has no rules']);
 });
 
 test('an intro that is missing, or without its kicker or title', () => {

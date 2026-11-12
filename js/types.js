@@ -298,7 +298,6 @@
  * @property {{ picture: string, alt: string, say: string[], numbers: [string, string][], broken: string, loop?: string }} wrap
  *   `say`: three things to say in an interview; `numbers`: values each taught in a section; `broken`: what is
  *   still broken, leading to the next level; `loop`: an optional closing paragraph
- * @property {string} rules     the game's rules the lesson relies on, in one paragraph
  */
 
 /**
