@@ -43,6 +43,8 @@ test.describe('First-mission guide', () => {
       expect(box.height, `${name} is at least 44 px tall`).toBeGreaterThanOrEqual(44);
     }
     await expectClear(page, '#missionCard');
+    // It jumps to each new spot: sliding there would pass over what it points at.
+    expect(await note(page).evaluate((e) => getComputedStyle(e).transitionDuration)).toBe('0s');
     await expect(page.locator('#guideShow')).toHaveCount(0); // the guide is already showing
   });
 
