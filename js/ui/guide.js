@@ -159,9 +159,6 @@ function place(target) {
   if (hasT) Object.assign(ring.style, { left: t.left - 4 + 'px', top: t.top - 4 + 'px', width: t.width + 8 + 'px', height: t.height + 8 + 'px' });
 }
 
-/** True while the guide is running (not finished or skipped). */
-export const guideOn = () => on;
-
 /** "Reset level progress": forgets that the guide was finished, so it shows again. */
 export function resetGuide() {
   if (GI < 0) return;

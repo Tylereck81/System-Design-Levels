@@ -72,6 +72,12 @@ test.describe('First-mission guide', () => {
     await expect(note(page)).toContainText('This box edits the part you selected');
     await page.keyboard.press('Escape');
     await expect(note(page)).toContainText('Change a part. Click the Web server on the canvas.');
+    // Selecting an arrow is not selecting the Web server.
+    const edge = await page.evaluate(() => window.__sdl.S.edges[0].id);
+    await tap(page, `[data-edge="${edge}"] .edge-line`);
+    await expect(page.locator(`[data-edge="${edge}"]`)).toHaveClass(/sel/);
+    await expect(note(page)).toContainText('Click the Web server on the canvas.');
+    await page.keyboard.press('Escape'); // clears the arrow's selection, so the guide stays
     await expectClear(page, `[data-node="${ids.web}"]`);
     await tap(page, `[data-node="${ids.web}"]`);
     await expect(note(page)).toContainText('This box edits the part you selected: its size and its connections.');
@@ -137,6 +143,14 @@ test.describe('First-mission guide', () => {
     expect(await stored(page)).toBe('finished');
     await page.locator('#guideShow').click();
     await expectStep(page, 1); // a new page has not read step 1 yet
+  });
+
+  test('Escape on the page skips the guide when nothing is selected', async ({ page }) => {
+    await openGuide(page);
+    await page.locator('body').click({ position: { x: 5, y: 5 } }); // focus on the page, not the note
+    await page.keyboard.press('Escape');
+    await expect(note(page)).toBeHidden();
+    expect(await stored(page)).toBe('finished');
   });
 
   test('"Reset level progress" brings the guide back', async ({ page }) => {
