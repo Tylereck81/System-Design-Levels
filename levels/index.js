@@ -1,6 +1,6 @@
 // Playable levels. Each entry loads its level file only when that level is opened.
 // `line` is the home page's one-line description. `minutes` is the level's time, given only once its lesson is written
-// in chapters (it is the sum of the chapters' minutes; tests/unit/levels.test.mjs checks it).
+// on one page (it is the sum of its parts' minutes; tests/unit/levels.test.mjs checks it).
 export const TOTAL_LEVELS = 21;
 
 export const LEVELS = [

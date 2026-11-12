@@ -29,11 +29,11 @@ const dbOf = (g) => { const web = webOf(g); return web ? g.next(web).find((n) =>
 const times = (busy) => `${Math.round(qmul(busy) * 10) / 10}×`; // how much longer a request takes: 0.75 → "4×"
 const perUnit = (size) => `$${(Math.round((size.cost / size.cap) * 100) / 100).toFixed(2)}`; // S → "$0.20" per req/s
 
-// The busy-server screen's example server: the M size's capacity, with 300 req/s arriving (our example load, not a game number).
+// The busy-server section's example server: the M size's capacity, with 300 req/s arriving (our example load, not a game number).
 const ex = { cap: SIZES.M.cap, load: 300 };
 ex.busy = ex.load / ex.cap;
 
-// The scaling screen's table: one row per server size, straight from the catalog.
+// The scaling section's table: one row per server size, straight from the catalog.
 const sizeNames = Object.keys(SIZES);
 const largest = sizeNames[sizeNames.length - 1];
 const sizeRows = sizeNames.map((name) => {
@@ -56,7 +56,7 @@ const capTimes = `${qmul(1)}×`;
 const shared = { cap: S.cap * sharedCapacity, work: COMPONENTS.web.alone.base };
 const mission1Ms = shared.work * qmul(traffic[0] / shared.cap) + T.rtt;
 
-// The scaling screen's example sale: our example load, sent at the spike experiment's factor.
+// The scaling section's example sale: our example load, sent at the spike experiment's factor.
 const sale = { load: 300, factor: spikeFactor };
 
 // The wrap-up's interview loop: the mock interview's four steps, by name.
@@ -79,24 +79,15 @@ const lesson = {
       'name the two limits of one big machine',
     ],
   },
-  chapters: [
+  parts: [
     {
       title: 'Go live',
       mission: 0,
       minutes: 5,
-      screens: [
+      sections: [
         {
           title: 'How does a phone find your server?',
           hook: 'Someone types <b>example.com</b>. Their phone knows the name, but the internet delivers to numbered addresses. Something has to turn the name into a number.',
-          check: {
-            kind: 'guess',
-            q: 'Once DNS has answered, where do the page requests travel?',
-            options: [
-              { t: 'To DNS, which forwards them to your server', why: 'DNS does not forward traffic. It answers one question, "where is example.com?", and steps out of the way.' },
-              { t: 'Straight to your server\'s address', right: true, why: 'DNS only hands back the address. Every request then goes directly to your server.' },
-              { t: 'To DNS first on every request, then to your server', why: 'The phone remembers the answer, so it does not ask again each time. And pages never pass through DNS.' },
-            ],
-          },
           body: [
             {
               figure: 'figFlow',
@@ -110,7 +101,6 @@ const lesson = {
             ] },
           ],
           takeaway: 'DNS answers "where is it?" once, and your pages never travel through it.',
-          uses: 'You connect Users to DNS and to a web server. Watch for one DNS lookup dot, then requests going direct.',
           quiz: [0],
         },
         {
@@ -126,9 +116,22 @@ const lesson = {
             { p: `Response time has two parts: the trip across the internet and back (${ms(T.rtt)} in the game), and the time your servers take. You control only the second part.` },
           ],
           takeaway: 'Served says it works, Response says it is fast, Cost says you can afford it.',
-          uses: `The mission passes when Served and Response hold their goals for ${HOLD} seconds after you press Play.`,
           quiz: [1],
         },
+      ],
+      checks: [
+        {
+          q: 'Once DNS has answered, where do the page requests travel?',
+          options: [
+            { t: 'To DNS, which forwards them to your server', why: 'DNS does not forward traffic. It answers one question, "where is example.com?", and steps out of the way.' },
+            { t: 'Straight to your server\'s address', right: true, why: 'DNS only hands back the address. Every request then goes directly to your server.' },
+            { t: 'To DNS first on every request, then to your server', why: 'The phone remembers the answer, so it does not ask again each time. And pages never pass through DNS.' },
+          ],
+        },
+      ],
+      youWill: [
+        'You connect Users to DNS and to a web server. Watch for one DNS lookup dot, then requests going direct.',
+        `The mission passes when Served and Response hold their goals for ${HOLD} seconds after you press Play.`,
       ],
       // "triple" and "one request in three": tests/unit/level-01-lesson.test.mjs checks them against the missions.
       debrief: {
@@ -141,19 +144,10 @@ const lesson = {
       title: 'Split the data',
       mission: 1,
       minutes: 8,
-      screens: [
+      sections: [
         {
           title: 'Why is a busy server slow?',
           hook: `A server can handle ${fmt(ex.cap)} requests a second and is getting ${fmt(ex.load)}. Nothing is failing. So why does the site feel slow?`,
-          check: {
-            kind: 'guess',
-            q: `The server is ${percent(ex.busy)} busy. Compared with an idle server, how long does each request take?`,
-            options: [
-              { t: 'About 1.3× as long', why: 'A quarter of spare room feels like plenty, but requests wait in line behind each other, and the wait grows much faster than the load.' },
-              { t: `About ${times(0.5)} as long`, why: `That is what happens at ${percent(0.5)} busy. At ${percent(ex.busy)} it is already worse.` },
-              { t: `About ${times(ex.busy)} as long`, right: true, why: `Time = work time ÷ (1 − busy). At ${percent(ex.busy)} busy that is 1 ÷ ${1 - ex.busy} = ${times(ex.busy)}.` },
-            ],
-          },
           body: [
             { p: 'Requests wait in line behind each other. The fuller the server, the longer the line. Requests fail only when the load is more than the capacity.' },
             {
@@ -173,7 +167,6 @@ const lesson = {
             },
           ],
           takeaway: `Slow comes long before down: ${times(0.5)} at ${percent(0.5)} busy, ${times(0.75)} at ${percent(0.75)}, ${times(0.9)} at ${percent(0.9)}.`,
-          uses: `The bar under each server shows how busy it is. Watch the response time when a bar passes ${percent(0.75)}.`,
           quiz: [2, 3],
         },
         {
@@ -190,7 +183,6 @@ const lesson = {
             { assume: `Game rule: a server that runs both code and data handles ${percent(sharedCapacity)} of its listed capacity. An S server (${rate(S.cap)}) carries ${fmt(S.cap * sharedCapacity)}.` },
           ],
           takeaway: 'Two tiers let you grow the busy part without paying to grow the rest.',
-          uses: `Add a Database and connect it. An S web server gets its full ${rate(S.cap)} back.`,
           quiz: [4, 5],
         },
         {
@@ -213,18 +205,31 @@ const lesson = {
               },
             },
           ],
-          check: {
-            kind: 'turn',
-            q: 'An app saves each user\'s settings as one object. It always reads and writes the whole object by user ID, thousands of times a second. Which fits better?',
-            options: [
-              { t: 'A relational (SQL) database', why: 'It would work, but nothing here needs joins. This is a look-up by key at a very high rate.' },
-              { t: 'A NoSQL key-value store', right: true, why: 'Whole objects, fetched by key, with no links between them: that is what key-value stores are built for.' },
-            ],
-          },
           takeaway: 'Start with SQL, and pick NoSQL only when you can say the reason out loud.',
-          uses: 'You pick the database type for the shop\'s data. The Database\'s settings show what each choice costs.',
           quiz: [6, 7],
         },
+      ],
+      checks: [
+        {
+          q: `The server is ${percent(ex.busy)} busy. Compared with an idle server, how long does each request take?`,
+          options: [
+            { t: 'About 1.3× as long', why: 'A quarter of spare room feels like plenty, but requests wait in line behind each other, and the wait grows much faster than the load.' },
+            { t: `About ${times(0.5)} as long`, why: `That is what happens at ${percent(0.5)} busy. At ${percent(ex.busy)} it is already worse.` },
+            { t: `About ${times(ex.busy)} as long`, right: true, why: `Time = work time ÷ (1 − busy). At ${percent(ex.busy)} busy that is 1 ÷ ${1 - ex.busy} = ${times(ex.busy)}.` },
+          ],
+        },
+        {
+          q: 'An app saves each user\'s settings as one object. It always reads and writes the whole object by user ID, thousands of times a second. Which fits better?',
+          options: [
+            { t: 'A relational (SQL) database', why: 'It would work, but nothing here needs joins. This is a look-up by key at a very high rate.' },
+            { t: 'A NoSQL key-value store', right: true, why: 'Whole objects, fetched by key, with no links between them: that is what key-value stores are built for.' },
+          ],
+        },
+      ],
+      youWill: [
+        `The bar under each server shows how busy it is. Watch the response time when a bar passes ${percent(0.75)}.`,
+        `Add a Database and connect it. An S web server gets its full ${rate(S.cap)} back.`,
+        'You pick the database type for the shop\'s data. The Database\'s settings show what each choice costs.',
       ],
       debrief: {
         saw: `The database got its own server and the web server got its full capacity back. Where a server's bar passed ${percent(0.75)}, the response time climbed with nothing failing.`,
@@ -237,7 +242,7 @@ const lesson = {
       title: 'Launch day',
       mission: 2,
       minutes: 12,
-      screens: [
+      sections: [
         {
           title: 'How many requests is "a million users"?',
           hook: 'Marketing counts users per day. Servers are sized in requests per second. In an interview you turn one into the other, out loud.',
@@ -256,17 +261,7 @@ const lesson = {
             },
             { assume: '"Peak is about twice the average" is a rule of thumb. In an interview, say it as an assumption.' },
           ],
-          check: {
-            kind: 'turn',
-            q: 'A recipe site has 5 million daily users who each make 10 requests a day. Roughly what is the peak?',
-            options: [
-              { t: 'About 580 req/s', why: 'That is the average: 50 million ÷ 86,400 ≈ 580. Double it for the peak.' },
-              { t: 'About 1,160 req/s', right: true, why: '5 million × 10 ÷ 86,400 ≈ 580 on average, × 2 ≈ 1,160 at peak.' },
-              { t: 'About 50 million req/s', why: 'That is requests per day. Divide by the 86,400 seconds in a day.' },
-            ],
-          },
           takeaway: 'Daily users × requests each ÷ 86,400, then × 2 for the peak.',
-          uses: 'Play stays locked until you estimate the launch-day peak yourself.',
           quiz: [8],
         },
         {
@@ -277,19 +272,31 @@ const lesson = {
             { table: { head: ['Size', 'Capacity', 'Cost a month', 'Cost per req/s'], num: true, rows: sizeRows } },
             { p: 'Bigger machines cost more for each request they carry.' },
           ],
-          check: {
-            kind: 'turn',
-            q: `A shop at ${rate(sale.load)} runs a sale and gets ${sale.factor} times the traffic. Which single server carries it?`,
-            options: [
-              { t: 'L', why: `${sale.factor} times ${fmt(sale.load)} is ${rate(sale.load * sale.factor)}. L carries ${fmt(L.cap)}.` },
-              { t: 'XL', why: `XL carries ${rate(XL.cap)}, about half of the ${fmt(sale.load * sale.factor)} arriving.` },
-              { t: 'None of them', right: true, why: `${rate(sale.load * sale.factor)} is more than the largest machine can carry. One machine has a ceiling.` },
-            ],
-          },
           takeaway: 'Scale up first, but it ends at the biggest machine, and one machine has no backup.',
-          uses: `After the targets pass, two Break it buttons let you crash the server and send ${spikeFactor} times the traffic.`,
           quiz: [9],
         },
+      ],
+      checks: [
+        {
+          q: 'A recipe site has 5 million daily users who each make 10 requests a day. Roughly what is the peak?',
+          options: [
+            { t: 'About 580 req/s', why: 'That is the average: 50 million ÷ 86,400 ≈ 580. Double it for the peak.' },
+            { t: 'About 1,160 req/s', right: true, why: '5 million × 10 ÷ 86,400 ≈ 580 on average, × 2 ≈ 1,160 at peak.' },
+            { t: 'About 50 million req/s', why: 'That is requests per day. Divide by the 86,400 seconds in a day.' },
+          ],
+        },
+        {
+          q: `A shop at ${rate(sale.load)} runs a sale and gets ${sale.factor} times the traffic. Which single server carries it?`,
+          options: [
+            { t: 'L', why: `${sale.factor} times ${fmt(sale.load)} is ${rate(sale.load * sale.factor)}. L carries ${fmt(L.cap)}.` },
+            { t: 'XL', why: `XL carries ${rate(XL.cap)}, about half of the ${fmt(sale.load * sale.factor)} arriving.` },
+            { t: 'None of them', right: true, why: `${rate(sale.load * sale.factor)} is more than the largest machine can carry. One machine has a ceiling.` },
+          ],
+        },
+      ],
+      youWill: [
+        'Play stays locked until you estimate the launch-day peak yourself.',
+        `After the targets pass, two Break it buttons let you crash the server and send ${spikeFactor} times the traffic.`,
       ],
     },
   ],
