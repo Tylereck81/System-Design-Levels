@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures.js';
-import { registerCommonTests } from '../shared-checks.js';
+import { registerCommonTests, registerLessonTests } from '../shared-checks.js';
 import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, openMission, pressEnterOn } from '../helpers.js';
 
 // Level 2: load balancer and horizontal scaling.
@@ -461,4 +461,8 @@ test.describe('Level 2 · layout and accessibility', () => {
       build: async (page) => { await build(page, { webs: ['S', 'S', 'S', 'S'], lbs: 2 }); await page.click('#playBtn'); await playFor(page, 0.5); },
     },
   });
+});
+
+test.describe('Level 2 · step lesson', () => {
+  registerLessonTests({ level: 2 });
 });
