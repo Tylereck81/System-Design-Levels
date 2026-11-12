@@ -5,7 +5,6 @@ import { LEVELS, PARTS, TOTAL_LEVELS, MOCK_LEVELS, saveKeyOf } from '../levels/i
 import { readStorage } from './storage.js';
 import { routeHash } from './route.js';
 import { progressOf, nextStep } from './progress.js';
-import { renderPicker } from './ui/picker.js';
 
 // State is told by word and icon, never by colour alone.
 const STATE = {
@@ -40,15 +39,17 @@ function partHtml(part, n) {
 }
 
 setHtml($('view-home'), html`
-  <h1 id="homeTitle">Learn system design by building it.</h1>
+  <h1 id="homeTitle">System Design Levels</h1>
+  <p class="home-tagline">Ace your interview.</p>
   <p class="lede">Build an architecture, send traffic through it, and break it. ${TOTAL_LEVELS} levels, from one server to video and file sync.</p>
   <p><a class="btn primary" id="homeContinue" href="${next.href}">${anyStarted ? 'Continue' : 'Start'}: ${next.label} <span aria-hidden="true">→</span></a></p>
   <section class="home-how" aria-labelledby="howTitle">
     <h2 id="howTitle">How a level works</h2>
     <ol class="home-steps">
-      <li><b>Learn a little.</b> A short lesson on the idea each mission needs.</li>
-      <li><b>Build it.</b> Drag parts onto the canvas and press Play.</li>
-      <li><b>Break it.</b> Crash a server or send a traffic spike, and see what holds.</li>
+      <li>Read a part of the lesson.</li>
+      <li>Do its mission.</li>
+      <li>Come back and read on.</li>
+      <li>Take the quiz.</li>
     </ol>
   </section>
   ${PARTS.map((part, i) => partHtml(part, i + 1))}
@@ -61,9 +62,9 @@ setHtml($('view-home'), html`
 $('view-home').hidden = false;
 $('view-lesson').hidden = true;
 document.querySelector('.tabs').hidden = true;
-$('lvlChip').textContent = 'Levels';
-$('lvlName').textContent = 'Choose a level';
-document.querySelector('.brand').setAttribute('aria-current', 'page');
-renderPicker(null);
+// The header shows only the product name: no way home from home, and no level to name.
+$('homeBtn').hidden = true;
+$('lvlTitle').hidden = true;
+$('brand').hidden = false;
 // Any other address opens a level: start again so boot.js loads its file.
 window.addEventListener('hashchange', () => location.reload());

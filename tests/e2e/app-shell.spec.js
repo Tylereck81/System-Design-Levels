@@ -4,37 +4,25 @@ import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
 import { freshPage, reloadGame, trackErrors, buildBasic, playFor } from '../helpers.js';
 
-test.describe('App shell · level picker, routing, saved progress', () => {
-  test('the header names the level; the picker lists playable levels and closes with Esc or a click outside', async ({ page }) => {
+test.describe('App shell · header, routing, saved progress', () => {
+  test('the header starts with a Home button, then names the level as plain text; Home works by keyboard', async ({ page }) => {
     const errors = trackErrors(page);
     await freshPage(page);
+    const first = page.locator('header.top > :not([hidden])').first();
+    await expect(first).toHaveAttribute('id', 'homeBtn');
+    await expect(first).toHaveText('← Home'); // a visible word, not only an icon
+    await expect(first).toHaveAttribute('href', './');
+    await expect(first.locator('[aria-hidden="true"]')).toHaveText('←');
+    await expect(first).toHaveAccessibleName('Home');
     await expect(page.locator('#lvlChip')).toHaveText('Level 1 / 21');
     await expect(page.locator('#lvlName')).toHaveText('One server to two tiers');
-    await expect(page.locator('#lvlMenu')).toBeHidden();
+    await expect(page.locator('#lvlTitle button, #lvlTitle a')).toHaveCount(0); // plain text, no menu
+    await expect(page.locator('#brand')).toBeHidden();
 
-    await page.click('#lvlBtn');
-    await expect(page.locator('#lvlMenu')).toBeVisible();
-    await expect(page.locator('#lvlBtn')).toHaveAttribute('aria-expanded', 'true');
-    const current = page.locator('#lvlList a[aria-current="page"]');
-    await expect(current).toHaveText(/Level 1\s*One server to two tiers/);
-    await expect(current).toBeFocused();
-
-    await page.keyboard.press('Escape');
-    await expect(page.locator('#lvlMenu')).toBeHidden();
-    await expect(page.locator('#lvlBtn')).toBeFocused();
-
-    await page.click('#lvlBtn');
-    await page.mouse.click(700, 600);
-    await expect(page.locator('#lvlMenu')).toBeHidden();
+    await page.locator('#homeBtn').focus(); // not Tab: WebKit, like Safari, skips links on Tab by default
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#view-home')).toBeVisible();
     expect(errors).toEqual([]);
-  });
-
-  test('picking a level from the picker opens its lesson', async ({ page }) => {
-    await freshPage(page, '#quiz');
-    await page.click('#lvlBtn');
-    await page.click('#lvlList a[aria-current="page"]');
-    await expect(page.locator('#view-lesson')).toBeVisible();
-    await expect(page.locator('#lvlMenu')).toBeHidden();
   });
 
   test('routes: Level 1 keeps #lesson / #build / #quiz, and #level-1/<tab> works too', async ({ page }) => {
@@ -93,10 +81,9 @@ test.describe('App shell · level picker, routing, saved progress', () => {
   });
 
   for (const colorScheme of ['light', 'dark']) {
-    test(`open picker has no accessibility violations (${colorScheme})`, async ({ page }) => {
+    test(`the level header has no accessibility violations (${colorScheme})`, async ({ page }) => {
       await page.emulateMedia({ colorScheme });
       await freshPage(page);
-      await page.click('#lvlBtn');
       const results = await new AxeBuilder({ page }).setLegacyMode().analyze();
       expect(results.violations.map((v) => `${v.id} (${v.nodes.length})`)).toEqual([]);
     });
@@ -119,13 +106,14 @@ test.describe('App shell · level picker, routing, saved progress', () => {
     expect(errors).toEqual([]);
   });
 
-  test('phone: the open picker fits the screen', async ({ page }) => {
+  test('phone: the level header fits 360 px, Home and the tabs in full', async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 740 });
     await freshPage(page);
-    await page.click('#lvlBtn');
-    const box = await page.locator('#lvlMenu').boundingBox();
-    expect(box.x).toBeGreaterThanOrEqual(0);
-    expect(box.x + box.width).toBeLessThanOrEqual(360);
+    for (const sel of ['#homeBtn', '#lvlChip', '.tabs']) {
+      const box = await page.locator(sel).boundingBox();
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(360);
+    }
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
   });
 });
