@@ -5,7 +5,7 @@ import { installCapture } from './snapshot/capture.js';
 
 import { expect } from '@playwright/test';
 
-export const QUIZ_KEY_L1 = [2, 0, 3, 1, 2, 0, 1, 3, 2, 0];
+export const QUIZ_KEY_L1 = [2, 0, 2, 3, 3, 1, 1, 2, 1, 0];
 
 /** Open the game with empty saved progress. */
 export async function freshPage(page, hash = '') {

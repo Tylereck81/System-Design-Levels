@@ -40,6 +40,7 @@ export const T = {
   keyLimit: 1, // requests a second an API key may send on average (60 a minute)
   burst: 12, // requests a real user sends in burstSecs seconds while typing a search
   burstSecs: 2, // seconds of that burst
+  hold: 4, // seconds a mission's targets must hold before it counts
 };
 /** How busy a server is (load ÷ capacity) when the slowdown stops growing and is held at its cap. */
 export const SLOWDOWN_CAP_FROM = 0.96;

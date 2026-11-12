@@ -169,6 +169,34 @@ table.t td.n { font-family: var(--f-mono); font-variant-numeric: tabular-nums; w
 .lesson .bridge li { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 0; }
 .bridge b { display: block; }
 .step-lesson .fig svg, .step-lesson table.t { min-width: 0; }
+/* Chapter lesson (js/ui/lesson.js): the intro with its chapter list, then one page at a time. */
+.chapter-lesson button { min-height: 44px; }
+.chapter-lesson .fig svg, .chapter-lesson table.t { min-width: 0; }
+.lesson .lintro { border-top: 0; }
+.lintro > h2 { margin-top: 28px; }
+.intro-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.intro-grid .fig { margin: 0; }
+.lesson .chapters { list-style: none; padding: 0; display: grid; gap: 8px; margin: 8px 0 16px; }
+.lesson .chapters li { margin: 0; max-width: none; }
+.chapter { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 12px; width: 100%; padding: 10px 14px; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; color: var(--ink); font: inherit; }
+.chapter:hover { border-color: var(--accent); }
+.chapter-name { font-weight: 600; }
+.chapter-meta { font: 14px var(--f-mono); color: var(--ink-2); }
+.uses { border-left: 3px solid var(--ok); padding: 4px 0 4px 12px; }
+.uses b { display: block; font: 500 14px var(--f-mono); letter-spacing: .07em; text-transform: uppercase; color: var(--ok); }
+.debrief-num { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.debrief-num .label { display: block; }
+.debrief-num b { font: 600 22px var(--f-mono); margin-right: 6px; }
+.lintro .lesson-cta { border-top: 0; padding-top: 12px; }
+/* The Briefing dialog over the Build tab holds the chapter lesson while it is open; a briefing never goes back to the intro there. */
+.briefing-dialog { width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 32px); padding: 0 20px 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg); color: var(--ink); }
+.briefing-dialog::backdrop { background: rgb(0 0 0 / 0.45); }
+.dialog-bar { position: sticky; top: 0; display: flex; justify-content: flex-end; padding: 12px 0 4px; background: var(--bg); z-index: 1; }
+.briefing-dialog .lstep { border-top: 0; padding-top: 4px; }
+.briefing-dialog [data-go="intro"] { display: none; }
+@media (max-width: 700px) {
+  .intro-grid { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* ---------- Build ---------- */
 /* Desktop: components and the selected one's settings on the left, canvas in the middle, the mission alone on the
@@ -216,6 +244,9 @@ body:has(#cv.compact) .zoom { display: none; }
 #cv .node, #cv .handle, #cv .edge { touch-action: none; }
 .banner { position: absolute; left: 12px; right: 12px; top: 12px; padding: 9px 12px; border-radius: 9px; font-size: 13.5px; background: var(--bad-soft); color: var(--bad); border: 1px solid var(--bad); pointer-events: none; }
 .banner.info { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+/* A complete mission: at the bottom right, so it never covers the hints above, and clickable. */
+.banner.done { top: auto; bottom: 12px; left: auto; display: flex; align-items: center; gap: 10px; background: var(--ok-soft); color: var(--ok); border-color: var(--ok); font-weight: 600; pointer-events: auto; }
+.banner.done[hidden] { display: none; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--ink-3); padding: 0 4px; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
 .legend i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
