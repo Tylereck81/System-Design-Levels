@@ -86,7 +86,7 @@ function stepParts(step, s, label) {
 }
 /** Numbers worth remembering, as [value, what it is] pairs. */
 const numbersHtml = (numbers) => html`<dl class="recap-nums">${numbers.map(([value, meaning]) => html`<div><dt>${raw(value)}</dt><dd>${raw(meaning)}</dd></div>`)}</dl>`;
-/** The "Game rules" button and the rules it shows. */
+/** The step lesson's "Game rules" button and the rules it shows. */
 const rulesHtml = (rules) => html`<button type="button" class="btn sm" data-act="rules" aria-expanded="false" aria-controls="lessonRules">Game rules</button>
     <p class="assume" id="lessonRules" hidden>${raw(rules)}</p>`;
 
@@ -217,7 +217,6 @@ function introHtml(lesson) {
     <p class="label">By the end you can</p>
     <ul>${intro.outcomes.map((o) => html`<li>${raw(o)}</li>`)}</ul>
     <figure class="fig"><svg id="${intro.picture}" role="img" aria-label="${intro.alt}"></svg><figcaption>What you will build</figcaption></figure>
-    ${rulesHtml(lesson.rules)}
   </section>`;
 }
 
@@ -423,7 +422,6 @@ function wireParts(root, lesson) {
       showAnswer(btn, lesson.parts[Number(check.dataset.part)].checks[Number(check.dataset.q)].options);
     } else if (act === 'mission') startMission(Number(btn.dataset.mission));
     else if (act === 'quiz') hooks.setTab('quiz');
-    else if (act === 'rules') toggleRules(btn);
   });
   $('view-build').addEventListener('click', (e) => {
     const btn = /** @type {HTMLElement} */ (e.target).closest('[data-act]');
