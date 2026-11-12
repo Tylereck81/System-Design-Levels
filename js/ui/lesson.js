@@ -373,13 +373,14 @@ function paintCard(i, done) {
 /** Shows each part locked or open, its state in the links and its mission card's state. main.js calls it after every change. */
 export function paintParts() {
   if (!pageView.root) return;
-  const sections = pageView.root.querySelectorAll('.lpart, .lwrap');
-  sections.forEach((sec, p) => {
-    const open = partOpen(p), done = !!S.done[p], state = !open ? 'locked' : done ? 'done' : 'open';
+  // In page order: part p is index p, and the wrap-up, after the last part, is index MISSIONS.length.
+  pageView.root.querySelectorAll('.lpart, .lwrap').forEach((sec, p) => {
+    const wrap = sec.classList.contains('lwrap'), open = partOpen(p), done = !wrap && !!S.done[p];
+    const state = !open ? 'locked' : done ? 'done' : 'open';
     if (pageView.painted[p] === state) return;
     pageView.painted[p] = state;
     paintLock(sec, open);
-    if (p === MISSIONS.length) { sec.querySelector('h2').textContent = open ? WRAP_TITLE.open : WRAP_TITLE.locked; return; }
+    if (wrap) { sec.querySelector('h2').textContent = open ? WRAP_TITLE.open : WRAP_TITLE.locked; return; }
     pageView.root.querySelector(`.part-state[data-part="${p}"]`).textContent = partState(p);
     paintCard(p, done);
   });
