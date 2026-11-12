@@ -201,7 +201,7 @@ table.t td.n { font-family: var(--f-mono); font-variant-numeric: tabular-nums; w
 .mcard-will { font-weight: 600; margin: 0; }
 .mcard-complete { font-weight: 600; color: var(--ok); margin: 0 0 6px; }
 .mcard .btn { margin-top: 8px; }
-.mcard-wait { margin: 10px 0 0; color: var(--ink-2); }
+.part-lock { margin: 4px 0 0; color: var(--ink-2); }
 .debrief-num { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
 .debrief-num .label { display: block; }
 .debrief-num b { font: 600 22px var(--f-mono); margin-right: 6px; }

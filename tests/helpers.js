@@ -29,6 +29,18 @@ export async function reloadGame(page) {
   await page.waitForFunction(() => !!window.__sdl);
 }
 
+/**
+ * Setup only, for a level whose lesson is on one page: marks missions done (and checked) as a finished mission leaves
+ * them, with mission `open` the Build tab's mission; the finished ones and `open` count as opened from the lesson. Done
+ * missions open the lesson's parts after them.
+ */
+export const finishMissions = (page, done, open) => page.evaluate(({ done, open }) => {
+  const { S } = window.__sdl;
+  done.forEach((d, i) => { S.done[i] = d; S.verified[i] = d; S.opened[i] = d || i === open; });
+  S.mission = open;
+  window.__sdl.afterChange();
+}, { done, open });
+
 /** Advance the simulation by `secs` simulated seconds without waiting in real time. */
 export async function fastForward(page, secs) {
   await page.evaluate((n) => { for (let i = 0; i < n; i++) window.__sdl.step(0.02); }, Math.round(secs * 50));
