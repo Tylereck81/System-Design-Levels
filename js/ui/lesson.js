@@ -4,9 +4,8 @@ import { level, inParts } from '../level.js';
 import { $, svgEl, html, raw, prependHtml, setHtml } from '../dom.js';
 import { hooks } from '../hooks.js';
 import { drawIcon } from '../view/icons.js';
-import { MISSIONS, S } from '../state.js';
-import { unlocked, switchMission } from './mission.js';
-import { log } from './log.js';
+import { MISSIONS, S, mayOpen } from '../state.js';
+import { openFromLesson } from './mission.js';
 
 /* ---------------- Step lesson ---------------- */
 // All steps are in the page from the start; the ones not shown are `hidden`, so their figures can still be drawn.
@@ -190,7 +189,8 @@ function wireSteps(root, lesson) {
 
 /* ---------------- One-page lesson ---------------- */
 // The intro, a line of links to each part, one part per mission (its sections, its questions, its mission card),
-// then the wrap-up, all on one page. Nothing here is saved: a part's state comes from mission progress.
+// then the wrap-up, all on one page. Nothing here is saved: a part's state comes from mission progress, and a mission
+// card's Start button is what opens its mission (`S.opened`, see missionOpen in state.js).
 
 /** A mission's state in words (never colour alone). */
 const missionState = (i) => (S.done[i] ? 'Done' : 'Not started');
@@ -256,8 +256,9 @@ const checksHtml = (checks, p) => html`<div class="checks" aria-labelledby="lp-c
   </div>`;
 
 /**
- * Part `p`'s mission card, in both of its states: what the mission asks with a Start button, and once the mission is
- * done what it showed with a Replay button. `paintParts` shows the one that applies. Only the last part may have no
+ * Part `p`'s mission card, in both of its states: what the mission asks with a Start button (available once the
+ * mission before it is done, and until then saying so), and once the mission is done what it showed with a Replay
+ * button. `paintParts` shows the one that applies. Only the last part may have no
  * debrief (validate-lesson.js), and the wrap-up follows it.
  */
 function missionCardHtml(part, p) {
@@ -273,7 +274,8 @@ function missionCardHtml(part, p) {
     <div class="mcard-start">
       <p class="mcard-will">You will</p>
       <ul>${part.youWill.map((line) => html`<li>${raw(line)}</li>`)}</ul>
-      <button type="button" class="btn primary" data-act="mission" data-mission="${p}">Start Mission ${n} <span aria-hidden="true">→</span></button>
+      ${p ? html`<p class="mcard-wait" id="lp-wait${p}">Finish Mission ${p} first.</p>` : ''}
+      <button type="button" class="btn primary" data-act="mission" data-mission="${p}"${p ? raw(` aria-describedby="lp-wait${p}"`) : ''}>Start Mission ${n} <span aria-hidden="true">→</span></button>
     </div>
     <div class="mcard-done" hidden>
       <p class="mcard-complete"><span aria-hidden="true">✓</span> Mission ${n} complete</p>
@@ -324,21 +326,24 @@ function drawCardIcons(root) {
   for (const svg of root.querySelectorAll('.newpart-icon')) drawIcon(/** @type {HTMLElement} */ (svg).dataset.icon, svg, 0, 0);
 }
 
-/** The rendered one-page lesson, and the missions it last showed as done (so a repaint touches only what changed). */
+/** The rendered one-page lesson, and each mission card's state it last showed (so a repaint touches only what changed). */
 const pageView = { root: null, painted: [] };
 
 /** Shows each part's state in the links and its mission card's state. main.js calls it after every change. */
 export function paintParts() {
   if (!pageView.root) return;
   MISSIONS.forEach((_, i) => {
-    const done = !!S.done[i];
-    if (pageView.painted[i] === done) return;
-    pageView.painted[i] = done;
+    const done = !!S.done[i], ready = mayOpen(i), state = done ? 'done' : ready ? 'ready' : 'wait';
+    if (pageView.painted[i] === state) return;
+    pageView.painted[i] = state;
     pageView.root.querySelector(`.part-state[data-part="${i}"]`).textContent = missionState(i);
     const card = pageView.root.querySelector(`.mcard[data-part="${i}"]`);
     card.classList.toggle('done', done);
     card.querySelector('.mcard-start').hidden = done;
     card.querySelector('.mcard-done').hidden = !done;
+    /** @type {HTMLButtonElement} */ (card.querySelector('.mcard-start [data-act="mission"]')).disabled = !ready;
+    const wait = card.querySelector('.mcard-wait');
+    if (wait) /** @type {HTMLElement} */ (wait).hidden = ready;
   });
 }
 
@@ -349,22 +354,25 @@ function jumpTo(id) {
   heading.focus({ preventScroll: true });
 }
 
-/** Opens mission `i` on the Build tab; while it is still locked, the first mission not done opens instead, and the log says why. */
+/** A card's Start or Replay button: opens mission `i` on the Build tab (the button is disabled until it may open). */
 function startMission(i) {
-  const open = unlocked(i) ? i : S.done.findIndex((done) => !done);
-  const previous = i; // i is the asked-for mission's 0-based index, so the mission before it is number i
-  if (open !== i) log(`Finish Mission ${previous} first. Mission ${open + 1} is open.`, 'warn');
-  if (open !== S.mission) switchMission(open);
-  hooks.setTab('build');
+  if (openFromLesson(i)) hooks.setTab('build');
 }
 
-/** Opens the Lesson tab at mission `i`'s card; after the last mission, at the wrap-up. */
-function openCard(i) {
+/** Opens the Lesson tab at the heading with id `id`. */
+function openLessonAt(id) {
   hooks.setTab('lesson');
-  jumpTo(i === MISSIONS.length - 1 ? 'lp-wrap' : `lp-m${i}`);
+  jumpTo(id);
 }
 
-/** Wires a rendered one-page lesson, and the canvas's "Mission N complete" button on the Build tab. */
+/** The Build tab's buttons into the lesson, keyed by their `data-act`; each gets the mission the button names. */
+const TO_LESSON = {
+  debrief: (i) => openLessonAt(S.done[i] && i === MISSIONS.length - 1 ? 'lp-wrap' : `lp-m${i}`), // "Back to the lesson"
+  'lesson-mission': (i) => openLessonAt(`lp-m${i}`), // a locked mission's "Go to Part N"
+  'lesson-part': (i) => openLessonAt(`lp-part-${i}`), // "Read Part N again"
+};
+
+/** Wires a rendered one-page lesson, and the Build tab's buttons that lead into it. */
 function wireParts(root, lesson) {
   root.addEventListener('click', (e) => {
     const btn = /** @type {HTMLElement} */ (e.target).closest('button');
@@ -379,7 +387,9 @@ function wireParts(root, lesson) {
     else if (act === 'rules') toggleRules(btn);
   });
   $('view-build').addEventListener('click', (e) => {
-    if (/** @type {HTMLElement} */ (e.target).closest('[data-act="debrief"]')) openCard(S.mission);
+    const btn = /** @type {HTMLElement} */ (e.target).closest('[data-act]');
+    const go = btn && TO_LESSON[/** @type {HTMLElement} */ (btn).dataset.act];
+    if (go) go(S.mission);
   });
 }
 

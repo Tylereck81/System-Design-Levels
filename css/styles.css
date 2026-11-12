@@ -193,6 +193,7 @@ table.t td.n { font-family: var(--f-mono); font-variant-numeric: tabular-nums; w
 .mcard-will { font-weight: 600; margin: 0; }
 .mcard-complete { font-weight: 600; color: var(--ok); margin: 0 0 6px; }
 .mcard .btn { margin-top: 8px; }
+.mcard-wait { margin: 10px 0 0; color: var(--ink-2); }
 .debrief-num { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
 .debrief-num .label { display: block; }
 .debrief-num b { font: 600 22px var(--f-mono); margin-right: 6px; }
@@ -297,6 +298,9 @@ body:has(#cv.compact) .zoom { display: none; }
 .mtabs button:disabled { opacity: .55; cursor: not-allowed; }
 .mission h2 { font-family: var(--f-display); font-size: 22px; letter-spacing: -0.015em; margin: 4px 0 6px; line-height: 1.15; }
 .mission .story { font-size: 14px; color: var(--ink-2); margin: 0 0 12px; }
+.mission > .linkbtn { display: block; margin: -4px 0 12px; }
+.mission > .linkbtn:hover { color: var(--accent); }
+.mission .locked { font-size: 14px; color: var(--ink-2); margin: 0 0 12px; }
 .facts { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 6px; margin-bottom: 14px; }
 .facts div { background: var(--surface-2); border-radius: 8px; padding: 7px 9px; }
 .facts b { display: block; font: 500 14px var(--f-mono); font-variant-numeric: tabular-nums; }

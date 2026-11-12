@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures.js';
-import { freshPage, buildBasic, center } from '../helpers.js';
+import { freshPage, openMission, buildBasic, center } from '../helpers.js';
 
 // The desktop canvas: a wider view and zoom from 100% out to 70%. The layout around it is in build-layout.spec.js.
 
@@ -74,6 +74,7 @@ test.describe('Canvas · dots while paused', () => {
   async function pausedWithDots(page) {
     await page.setViewportSize({ width: 1440, height: 900 });
     await freshPage(page, '#level-1/build');
+    await openMission(page, 0);
     const ids = await buildBasic(page);
     await page.click('#playBtn');
     await page.waitForFunction(() => document.querySelectorAll('#dotsG circle:not(.fail)').length >= 3, null, { timeout: 8000 });

@@ -101,6 +101,7 @@ export async function openMission(page, i, { estimate = false } = {}) {
     const S = window.__sdl.S;
     for (let j = 0; j < k; j++) { S.done[j] = true; S.verified[j] = true; }
     S.mission = k;
+    if (S.opened) for (let j = 0; j <= k; j++) S.opened[j] = true; // a one-page lesson opens missions from their cards
     if (est) S.est = true;
     window.__sdl.afterChange(true);
   }, [i, estimate]);

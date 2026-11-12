@@ -1,5 +1,5 @@
 // Level data, game state and saved progress.
-import { level } from './level.js';
+import { level, inParts } from './level.js';
 import { readStorage, writeStorage } from './storage.js';
 import { saveShapeOk } from './save-shape.js';
 import { SIZES, COMPONENTS, T, choiceOf, sizesOf } from './engine/catalog.js';
@@ -45,11 +45,21 @@ export const fresh = () => ({
   done: MISSIONS.map(() => false), verified: MISSIONS.map(() => false),
   est: false, estVal: '', exp: MISSIONS.map((_, i) => noResults(i)),
   quiz: {}, tab: 'lesson', v: level.saveVersion, qv: QUIZ_VERSION,
+  // A one-page lesson opens each mission from its card: which ones the player has opened. Other levels save no such
+  // field, so a level's saves first have it once its lesson is on one page (load migrates the ones without it).
+  ...(inParts() ? { opened: MISSIONS.map(() => false) } : {}),
 });
 /** True when mission i's break-it goal `id` has passed. */
 export const expPassed = (id, i = S.mission) => !!(S.exp[i] && S.exp[i][id]);
 /** Forget the break-it results of every mission not finished yet (after a design change, as for verification). */
 export function clearOpenResults() { S.exp = S.exp.map((r, i) => (S.done[i] ? r : noResults(i))); }
+/** True when mission i may be opened: it is the first, or the one before it is done. */
+export const mayOpen = (i) => i === 0 || !!S.done[i - 1];
+/**
+ * True when mission i can be played on the Build tab; the only place this rule lives. With a one-page lesson, once
+ * the player has pressed its Start button in the lesson; otherwise once it may be opened.
+ */
+export const missionOpen = (i) => (inParts() ? !!S.opened[i] : mayOpen(i));
 /** The saved state. One object for the page's life: replaceState swaps its contents, so references to it stay valid. */
 export const S = fresh();
 /** Replace the saved state's contents with `next`'s, keeping the same object. */
@@ -89,6 +99,9 @@ export function load(data) {
   replaceState(Object.assign(f, src));
   const bools = (a) => MISSIONS.map((_, i) => !!(Array.isArray(a) && a[i]));
   S.done = bools(src.done); S.verified = bools(src.verified);
+  // A save from before missions opened from the lesson: every mission that could be opened then counts as opened.
+  if (inParts()) S.opened = Array.isArray(src.opened) ? bools(src.opened) : MISSIONS.map((_, i) => mayOpen(i));
+  else delete S.opened;
   // Results per mission. An older save kept one result per experiment for the whole level: it belongs to the
   // mission that was open. A finished mission keeps all its goals passed.
   const old = src.exp && typeof src.exp === 'object' && !Array.isArray(src.exp);

@@ -67,6 +67,13 @@ test('loading or resetting keeps the same state object, so every module holding 
   assert.equal(S.mission, 0);
 });
 
+test('without a one-page lesson nothing about opened missions is saved: a mission opens when the one before it is done', () => {
+  assert.equal('opened' in fresh(), false);
+  startFrom({ ...plain(fresh()), done: [true, false, false], opened: [false, false, false] });
+  assert.equal('opened' in S, false);
+  assert.deepEqual([0, 1, 2].map((i) => state.missionOpen(i)), [true, true, false]);
+});
+
 test('a save from before per-mission results is migrated to version 2', () => {
   const old = { ...plain(fresh()), v: 1, mission: 1, done: [true, false, false], verified: [true, false, false],
     exp: { 'crash-replica': true, 'crash-primary': true }, quiz: { 0: 1 } };

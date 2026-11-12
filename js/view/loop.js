@@ -10,11 +10,13 @@ import { renderHUD, setBanner } from '../ui/hud.js';
 import { paintInspectorLive } from '../ui/inspector.js';
 import { renderMission, paintGoals } from '../ui/mission.js';
 import { paintControls } from '../ui/controls.js';
+import { paintParts } from '../ui/lesson.js';
 import { log, observe } from '../ui/log.js';
 import { hooks } from '../hooks.js';
 
 /** @type {import('../engine/sim.js').Report} */
-const report = { log, progress() { renderMission(); hooks.renderTabs(); } };
+// Progress (a mission checked or done) shows on the Build tab, in the tab labels and on the lesson's mission cards.
+const report = { log, progress() { renderMission(); hooks.renderTabs(); paintParts(); } };
 
 /** Stops the run and clears the dots. `full` also rewinds the clock (see resetRun). */
 export function stopRun(full) {

@@ -329,7 +329,7 @@ const quizPages = 200;
 export default {
   id: 1,
   saveKey: 'sdl-level1-v1',
-  saveVersion: 2, // quiz options were reordered in v2, so older saved answers no longer line up
+  saveVersion: 3, // 2: quiz options reordered; 3: which missions were opened from the lesson (`opened`)
   quizVersion: 3, // v3 replaced five questions and reordered them, so older saved answers no longer line up
   targets,
 

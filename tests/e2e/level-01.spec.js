@@ -10,7 +10,14 @@ test.describe('Level 1 · full playthrough', () => {
     const errors = trackErrors(page);
     await freshPage(page);
     await expect(page.locator('#figFlow .node-box')).toHaveCount(3);
-    await page.click('#startBuild');
+    // Each mission opens from its card in the lesson, and a finished one leads back there.
+    const start = async (n) => {
+      await page.click('#doneBanner [data-act="debrief"]');
+      await expect(page.locator(`#lp-m${n - 2}`)).toBeFocused();
+      await page.getByRole('button', { name: `Start Mission ${n}` }).click();
+      await expect(page.locator('#view-build')).toBeVisible();
+    };
+    await page.getByRole('button', { name: 'Start Mission 1' }).click();
 
     // Mission 1: add DNS + web server, connect by dragging from the + handle
     await page.click('.pal-item[data-type="dns"]');
@@ -27,7 +34,7 @@ test.describe('Level 1 · full playthrough', () => {
     await expect(page.locator('#doneText')).toHaveText('Mission 1 complete');
 
     // Mission 2: separate the data tier, pick SQL, upgrade the web server
-    await page.click('#mission .complete button');
+    await start(2);
     await page.click('.pal-item[data-type="db"]');
     ids = await nodeIds(page);
     await dragBetween(page, `[data-handle="${ids.web}"] .hv`, `[data-node="${ids.db}"] .node-box`);
@@ -43,7 +50,7 @@ test.describe('Level 1 · full playthrough', () => {
     expect(await state(page, () => window.__sdl.S.done[1])).toBe(true);
 
     // Mission 3: estimate, scale both tiers to L, then break it
-    await page.click('#mission .complete button');
+    await start(3);
     await expect(page.locator('#playBtn')).toBeDisabled();
     await page.fill('#estIn', '231');
     await page.click('#estBtn');
@@ -166,6 +173,7 @@ test.describe('Level 1 · robustness', () => {
 
   test('Delete and Backspace remove a component only when focus is on the canvas or the page', async ({ page, browserName }) => {
     await freshPage(page, '#build');
+    await openMission(page, 0);
     const ids = await buildBasic(page);
     const has = (type) => page.evaluate((t) => window.__sdl.S.nodes.some((n) => n.type === t), type);
     // Keyboard: select the web server, move to a mission tab, press Backspace: nothing is deleted.
@@ -300,6 +308,7 @@ test.describe('Level 1 · teaching feedback', () => {
 
   test('legend, story numbers and limit messages are right', async ({ page }) => {
     await freshPage(page, '#build');
+    await openMission(page, 0);
     const legend = await page.locator('.legend').innerText();
     for (const word of ['Request', 'Response', 'Failed', 'DNS lookup']) expect(legend).toContain(word);
     expect(await page.content()).toContain('about 100,000 people');
@@ -360,6 +369,7 @@ test.describe('Level 1 · layout', () => {
 test.describe('Level 1 · accessibility', () => {
   test('keyboard only: build and finish Mission 1, move nodes, switch tabs', async ({ page }) => {
     await freshPage(page, '#build');
+    await openMission(page, 0);
     await page.focus('.pal-item[data-type="dns"]');
     await page.keyboard.press('Enter');
     await page.focus('.pal-item[data-type="web"]');
@@ -390,6 +400,7 @@ test.describe('Level 1 · accessibility', () => {
   test('keyboard only: Missions 2 and 3 keep focus on a control after every action', async ({ page }) => {
     await freshPage(page, '#build');
     await openMission(page, 1);
+    await page.evaluate(() => { window.__sdl.S.opened[2] = true; }); // so Mission 2's "Mission 3 →" button opens it
     const ids = await buildBasic(page, { db: false });
     const focused = () => page.evaluate(() => {
       const a = document.activeElement;
@@ -442,6 +453,7 @@ test.describe('Level 1 · accessibility', () => {
     level: 1,
     onTab: {
       build: async (page) => {
+        await openMission(page, 0);
         await buildBasic(page);
         await page.click('#playBtn');
         await playFor(page, 0.5);
