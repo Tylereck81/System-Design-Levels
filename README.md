@@ -24,7 +24,7 @@ npm test
 
 | Path | What it is |
 |---|---|
-| `index.html` | The app shell: header with level picker, tabs, build area |
+| `index.html` | The app shell: header with the Home button and level name, tabs, build area |
 | `js/boot.js` | Entry point: loads the level named in the URL, then starts the game |
 | `js/main.js` | Start-up, tab routing and re-rendering after a change |
 | `js/state.js` | Game state and saved progress |

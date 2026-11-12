@@ -57,20 +57,11 @@ button { cursor: pointer; }
 
 /* Header */
 .top { display: flex; align-items: center; gap: 12px 18px; flex-wrap: wrap; padding-block: 4px 14px; border-bottom: 1px solid var(--line); margin-bottom: 20px; }
-.brand { font-family: var(--f-display); font-weight: 700; font-size: 18px; letter-spacing: -0.015em; white-space: nowrap; color: var(--ink); text-decoration: none; }
+.brand { font-family: var(--f-display); font-weight: 700; font-size: 18px; letter-spacing: -0.015em; white-space: nowrap; }
 a.btn { color: var(--ink); text-decoration: none; }
-.lvl { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.lvl { display: flex; align-items: center; gap: 8px; min-width: 0; margin: 0; }
 .chip { font: 500 13px/1 var(--f-mono); color: var(--accent); background: var(--accent-soft); padding: 5px 8px; border-radius: 999px; white-space: nowrap; }
 .lvl-name { font-weight: 600; font-size: 14px; color: var(--ink-2); }
-.lvl-wrap { position: relative; min-width: 0; }
-button.lvl { background: none; border: 0; font: inherit; color: inherit; cursor: pointer; padding: 4px 6px; margin: -4px -6px; border-radius: 8px; }
-button.lvl:hover, button.lvl[aria-expanded="true"] { background: var(--surface-2); }
-.lvl-caret { font-size: 13px; color: var(--ink-3); }
-.lvl-menu { position: absolute; top: calc(100% + 8px); left: -6px; z-index: 30; width: min(300px, calc(100vw - 32px)); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 8px 24px rgba(20, 24, 32, 0.14); padding: 10px; }
-.lvl-menu ul { list-style: none; margin: 6px 0 0; padding: 0; }
-.lvl-menu a { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 8px; color: var(--ink); text-decoration: none; font-weight: 600; font-size: 14px; }
-.lvl-menu a:hover { background: var(--surface-2); }
-.lvl-menu a[aria-current="page"] { background: var(--accent-soft); }
 .tabs { margin-left: auto; display: flex; gap: 2px; background: var(--surface-2); padding: 3px; border-radius: 10px; }
 .tabs button { border: 0; background: transparent; padding: 7px 14px; border-radius: 8px; font-size: 14px; font-weight: 500; color: var(--ink-2); display: flex; gap: 7px; align-items: center; }
 .tabs button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
@@ -192,6 +183,7 @@ table.t td.n { font-family: var(--f-mono); font-variant-numeric: tabular-nums; w
 /* Home page (the bare address): the course map. */
 .home { max-width: 760px; margin: 0 auto; font-size: 18px; line-height: 1.6; }
 .home h1 { font-family: var(--f-display); font-size: clamp(30px, 5vw, 44px); line-height: 1.05; letter-spacing: -0.025em; margin: 6px 0 12px; text-wrap: balance; }
+.home-tagline { font-family: var(--f-display); font-weight: 600; font-size: clamp(22px, 3.5vw, 28px); line-height: 1.2; letter-spacing: -0.015em; color: var(--ink-2); margin: -4px 0 14px; }
 .home .lede { font-size: 20px; color: var(--ink-2); margin: 0 0 18px; }
 .home h2 { font-family: var(--f-display); font-size: 24px; line-height: 1.2; letter-spacing: -0.015em; margin: 0 0 4px; }
 .home section { padding-block: 22px; border-top: 1px solid var(--line); }
@@ -523,11 +515,6 @@ details.hint p { margin: 8px 0 0; color: var(--ink-2); }
   .pal-item svg { grid-row: auto; }
   .pal-item .ps { display: none; }
   .lvl-name { display: none; }
-  /* The level button may sit beside the title or wrap under it, so the list opens under the button from the page's
-     left margin (the header places it), wherever the button is. */
-  .top { position: relative; }
-  .lvl-wrap { position: static; }
-  .lvl-menu { top: auto; left: 0; margin-top: 8px; }
 }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; scroll-behavior: auto !important; }

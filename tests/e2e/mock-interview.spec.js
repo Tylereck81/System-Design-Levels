@@ -41,12 +41,16 @@ test.describe('Mock interview · the page', () => {
     expect(errors).toEqual([]);
   });
 
-  test('the level menu offers the mock interview, and levels keep their quiz', async ({ page }) => {
+  test('home offers the mock interview, its header starts with Home, and levels keep their quiz', async ({ page }) => {
     await page.goto('/#level-14/lesson');
     await page.waitForFunction(() => !!window.__sdl);
-    await expect(page.locator('#lvlList a[href="#mock/lesson"]')).toContainText('Mock interview');
     await expect(page.locator('#tab-quiz')).toBeVisible();
     await expect(page.locator('#lvlChip')).toHaveText('Level 14 / 21');
+    await page.goto('/');
+    await page.click('#view-home a[href="#mock/lesson"]');
+    await page.waitForFunction(() => !!window.__sdl);
+    await expect(page.locator('#lvlChip')).toHaveText('Mock interview');
+    await expect(page.locator('header.top > :not([hidden])').first()).toHaveAttribute('id', 'homeBtn');
   });
 
   test('with no saved problem, one of Levels 14–21 is picked and kept', async ({ page }) => {
