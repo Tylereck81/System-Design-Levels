@@ -1,7 +1,7 @@
 // The home page: what the game is, how a level works, and the course map with each level's state from its save.
 // Loaded by boot.js for the bare address instead of a level; it reads saves but never writes one.
 import { $, html, setHtml } from './dom.js';
-import { LEVELS, PARTS, TOTAL_LEVELS, saveKeyOf } from '../levels/index.js';
+import { LEVELS, PARTS, TOTAL_LEVELS, MOCK_LEVELS, saveKeyOf } from '../levels/index.js';
 import { readStorage } from './storage.js';
 import { routeHash } from './route.js';
 import { progressOf, nextStep } from './progress.js';
@@ -54,7 +54,7 @@ setHtml($('view-home'), html`
   ${PARTS.map((part, i) => partHtml(part, i + 1))}
   <section class="home-part" aria-labelledby="mockTitle">
     <h2 id="mockTitle">Mock interview</h2>
-    <p>A random problem from Part 3 on a blank canvas, against a 45-minute clock.</p>
+    <p>A random problem from levels ${MOCK_LEVELS[0]} to ${MOCK_LEVELS.at(-1)} on a blank canvas, against a 45-minute clock.</p>
     <p><a class="btn" href="${routeHash('mock', 'lesson')}">Open the mock interview</a></p>
   </section>`);
 

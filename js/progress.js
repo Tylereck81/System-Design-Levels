@@ -1,5 +1,6 @@
 // Course progress for the home page, read from each level's own save without loading the level. Pure.
 import { routeHash } from './route.js';
+import { saveShapeOk } from './save-shape.js';
 
 /**
  * @typedef {object} LevelProgress
@@ -17,8 +18,8 @@ import { routeHash } from './route.js';
 export function progressOf(text) {
   let src;
   try { src = text ? JSON.parse(text) : null; } catch { src = null; }
-  const list = src && typeof src === 'object' && Array.isArray(src.done) && Array.isArray(src.nodes) ? src.done : null;
-  if (!list || !list.length) return { state: 'new', done: 0, total: 0 };
+  const list = saveShapeOk(src) && Array.isArray(src.done) && src.mission < src.done.length ? src.done : null;
+  if (!list) return { state: 'new', done: 0, total: 0 };
   const done = list.filter(Boolean).length; // as state.js load() reads it
   return { state: done === list.length ? 'done' : 'started', done, total: list.length };
 }

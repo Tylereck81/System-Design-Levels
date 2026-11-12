@@ -3,7 +3,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { progressOf, nextStep } from '../../js/progress.js';
 
-const save = (done) => JSON.stringify({ nodes: [], edges: [], mission: 0, done });
+const USERS = [{ id: 'u', type: 'users', x: 380, y: 76 }];
+const save = (done, more = {}) => JSON.stringify({ nodes: USERS, edges: [], mission: 0, done, ...more });
 const NEW = { state: 'new', done: 0, total: 0 };
 
 test('no save, or one the level would not load, is not started', () => {
@@ -15,6 +16,11 @@ test('no save, or one the level would not load, is not started', () => {
   assert.deepEqual(progressOf(JSON.stringify({ done: [true] })), NEW); // no nodes: the level starts fresh
   assert.deepEqual(progressOf(JSON.stringify({ nodes: [], done: 'yes' })), NEW);
   assert.deepEqual(progressOf(save([])), NEW);
+  // The checks the level makes without knowing its components (js/save-shape.js), as state.js validState makes them.
+  assert.deepEqual(progressOf(save([true], { nodes: [] })), NEW); // no Users node
+  assert.deepEqual(progressOf(save([true], { edges: [{ from: 'u', to: 'gone' }] })), NEW);
+  assert.deepEqual(progressOf(save([true, false], { mission: 2 })), NEW); // no such mission
+  assert.deepEqual(progressOf(save([true, false], { mission: -1 })), NEW);
 });
 
 test('a save with some missions done is in progress, with the count', () => {
