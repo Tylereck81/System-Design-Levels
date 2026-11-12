@@ -15,7 +15,7 @@ const save = (done, mission = 0) => ({ nodes: [{ id: 'u', type: 'users', x: 380,
 const level = (page, id) => page.locator('.home-level').nth(id - 1);
 
 test.describe('Home page', () => {
-  test('the bare address opens home: the pitch, three steps, 21 levels in three parts, and the mock interview', async ({ page }) => {
+  test('the bare address opens home: the name and tagline, four steps, 21 levels in three parts, and the mock interview', async ({ page }) => {
     const errors = trackErrors(page);
     await freshPage(page, '');
     await expect(page.locator('#homeTitle')).toHaveText('System Design Levels');
