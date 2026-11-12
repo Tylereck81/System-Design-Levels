@@ -5,24 +5,41 @@ import { TYPES, OK_PAIRS, pairKey, nameOf, lowerName, edgeInfo, MISSIONS, S, ui,
 import { T, COMPONENTS, choiceOf, sizesOf } from '../engine/catalog.js';
 import { roleOf, runsAlone, holdsSessions, scales, dayCopies, serverSpec, isEdge, isClustered, costOf, monthlyFileGB, kindRows } from '../engine/components.js';
 import { ringBox, paintRing } from './ring-view.js';
-import { tryConnect, disconnect, removeSel, promote } from '../view/interaction.js';
+import { tryConnect, disconnect, removeSel, promote, deselect } from '../view/interaction.js';
 import { log } from './log.js';
 import { hooks } from '../hooks.js';
 import { trafficFactor, downIds } from '../engine/experiments.js';
 import { graph, isStandby } from '../engine/model.js';
 
+/** The node the inspector showed last: when the inspector closes, keyboard focus goes back to it. */
+let shownNode = null;
+
 export function renderInspector() {
-  keepFocus($('insp'), buildInspector, () => { const b = $('insp'); b.tabIndex = -1; return b; });
+  keepFocus($('insp'), buildInspector, focusAfterLoss);
+}
+/**
+ * Where focus goes when the control that had it is gone: the inspector itself while it is open; once it has closed,
+ * the component it was showing, or the first component if that one was removed.
+ */
+function focusAfterLoss() {
+  const box = $('insp');
+  if (!$('inspCard').hidden) { box.tabIndex = -1; return box; }
+  const nodes = $('nodesG');
+  return (shownNode && nodes.querySelector(`[data-node="${CSS.escape(shownNode)}"]`)) || nodes.querySelector('[data-node]');
 }
 function buildInspector() {
   const box = $('insp'); box.textContent = '';
-  box.appendChild(el('p', 'label', 'Inspector'));
   if (ui.sel?.kind === 'node' && !byId(ui.sel.id)) ui.sel = null;
   if (ui.sel?.kind === 'edge' && !S.edges.some(x => x.id === ui.sel.id)) ui.sel = null;
-  if (!ui.sel) {
-    box.appendChild(el('p', 'empty', 'Select a component on the canvas (click it, or Tab to it and press Enter) to see what it does, change its size and manage its connections.'));
-    return;
-  }
+  $('inspCard').hidden = !ui.sel; // with nothing selected the card is hidden; the component list carries the hint
+  if (!ui.sel) return;
+  shownNode = ui.sel.kind === 'node' ? ui.sel.id : null;
+  const head = el('div', 'insp-head');
+  head.appendChild(el('p', 'label', 'Inspector'));
+  // Shown where the inspector is a sheet over the page (narrow screens); Escape does the same everywhere.
+  const close = el('button', 'btn sm insp-close', 'Close'); close.type = 'button'; close.dataset.focusKey = 'close'; close.onclick = deselect;
+  head.appendChild(close);
+  box.appendChild(head);
   if (ui.sel.kind === 'edge') {
     const e = S.edges.find(x => x.id === ui.sel.id);
     const a = byId(e.from), b = byId(e.to), info = edgeInfo(a, b);

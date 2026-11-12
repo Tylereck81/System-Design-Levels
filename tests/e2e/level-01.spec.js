@@ -425,7 +425,7 @@ test.describe('Level 1 · accessibility', () => {
     await page.locator('#insp').getByRole('button', { name: 'Remove DNS' }).focus();
     await page.keyboard.press('Enter');
     expect(await state(page, () => window.__sdl.S.nodes.some((n) => n.type === 'dns'))).toBe(false);
-    expect(await focused()).toBe('insp'); // the button is gone, so the inspector itself takes focus
+    expect(await focused()).toBe('u'); // nothing is selected now, so the inspector closed: the first component takes focus
     await press('#mtabs button:first-child', 'mtab-0');
   });
 

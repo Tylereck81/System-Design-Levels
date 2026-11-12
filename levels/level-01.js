@@ -345,7 +345,7 @@ export default {
       story: 'Traffic tripled: about 300,000 people a day, 150 requests per second at peak. Your one server runs both the code and the database, so they compete for the same CPU. The app stores users, products and orders, and every order links a user to products.',
       goals: [
         { id: 'tier', type: 'struct', text: 'Data lives on its own database server', test: (g) => !!dbOf(g) },
-        { id: 'kind', type: 'struct', text: 'Pick the right database type for this data', test: (g) => dbOf(g)?.kind === 'sql' },
+        { id: 'kind', type: 'struct', text: 'Pick the right database type for this data (select the Database, then Database type)', test: (g) => dbOf(g)?.kind === 'sql' },
         servedGoal(targets), latGoal(targets),
         { id: 'cost', type: 'struct', text: 'Spend at most $150 per month', test: (g) => g.cost <= 150, val: (m, g) => '$' + g.cost },
       ],
