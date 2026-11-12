@@ -46,7 +46,7 @@
 :root[data-theme="dark"] {
   --bg: #0E1116; --surface: #161A21; --surface-2: #1E232C; --ink: #E7EAF0; --ink-2: #A8B0BD; --ink-3: #8E97A7;
   --line: #2A303A; --grid: #2C333E; --accent: #7F9DFF; --accent-soft: #1F2A47; --on-accent: #0E1116;
-    --mission: #5CC8D6; --mission-soft: #12323A;
+  --mission: #5CC8D6; --mission-soft: #12323A;
   --ok: #45C08A; --ok-soft: #14301F; --warn: #E3A846; --warn-soft: #362812; --bad: #F2705F; --bad-soft: #3A1916;
   --web: #6DBB5B; --data: #5A8EE8; --data-top: #8FB3F2; --ext: #98A1B1; --dns-dot: #E59A45; --dot-ok: #45C08A; --dot-bad: #F2705F;
   color-scheme: dark;
@@ -166,8 +166,8 @@ table.t td.n { font-family: var(--f-mono); font-variant-numeric: tabular-nums; w
 .bridge b { display: block; }
 .step-lesson .fig svg, .step-lesson table.t { min-width: 0; }
 /* One-page lesson (js/ui/lesson.js): the intro, the links to each part, the parts with their mission cards, the wrap-up.
-   One column: text, boxes and pictures share both edges. By the 24em rule above, 30em holds at most 75 characters
-   (540 px at 18 px). */
+   One column: text, boxes and pictures share both edges. 30em (540 px at 18 px) is the 24em rule above scaled from 60
+   to 75 characters; tests/e2e/text-size.spec.js measures it. */
 .page-lesson { max-width: 30em; margin-inline: auto; }
 .page-lesson p, .page-lesson li { max-width: none; }
 .page-lesson button { min-height: 44px; }
