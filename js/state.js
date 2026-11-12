@@ -100,7 +100,8 @@ export function load(data) {
   const bools = (a) => MISSIONS.map((_, i) => !!(Array.isArray(a) && a[i]));
   S.done = bools(src.done); S.verified = bools(src.verified);
   // A save from before missions opened from the lesson: every mission that could be opened then counts as opened.
-  if (inParts()) S.opened = Array.isArray(src.opened) ? bools(src.opened) : MISSIONS.map((_, i) => mayOpen(i));
+  // A finished mission was opened, whatever the save says.
+  if (inParts()) S.opened = (Array.isArray(src.opened) ? bools(src.opened) : MISSIONS.map((_, i) => mayOpen(i))).map((o, i) => o || S.done[i]);
   else delete S.opened;
   // Results per mission. An older save kept one result per experiment for the whole level: it belongs to the
   // mission that was open. A finished mission keeps all its goals passed.

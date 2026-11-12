@@ -57,7 +57,9 @@ test('an older save with nothing done opens Mission 1 only; opened that is not a
   assert.deepEqual(S.opened, [true, true, false]);
 });
 
-test('opened is a list of exactly one true or false per mission', () => {
+test('opened is a list of exactly one true or false per mission, and a finished mission is always opened', () => {
   startFrom({ ...plain(fresh()), opened: [1, 0, 'x', true] });
   assert.deepEqual(S.opened, [true, false, true]);
+  startFrom({ ...plain(fresh()), done: [true, true, false], opened: [false, false, false] });
+  assert.deepEqual(S.opened, [true, true, false]);
 });
