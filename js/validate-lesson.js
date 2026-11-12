@@ -118,7 +118,8 @@ function textProblems(step, limits) {
   if (limits.howTo) {
     if (!title.endsWith('?') && !title.startsWith('How to ')) problems.push('the title must be a question ending in "?" or start with "How to "');
   } else if (!title.endsWith('?')) problems.push('the title must be a question ending in "?"');
-  if (!isText(step.hook)) problems.push('needs a hook');
+  if (step.hook === undefined && limits.optionalHook) { /* a section may open with its body */ }
+  else if (!isText(step.hook)) problems.push('needs a hook');
   else if (limits.hookWords && wordCount(step.hook) > limits.hookWords) problems.push(`the hook has ${wordCount(step.hook)} words, more than ${limits.hookWords}`);
   if (!isText(step.takeaway)) problems.push('needs a takeaway');
   else if (!isOneSentence(step.takeaway)) problems.push('the takeaway must be one sentence');
@@ -294,18 +295,39 @@ function introProblems(intro, drawn) {
   return prefixed('intro', problems);
 }
 
+/** Problems with a section's own text: its title, its hook when it has one, its body and its Remember line. */
+function sectionTextProblems(section, drawn) {
+  const L = PAGE_LIMITS, hook = isText(section.hook) ? wordCount(section.hook) : 0;
+  return [...textProblems(section, { takeawayWords: L.takeawayWords, howTo: true, optionalHook: true }),
+    ...bodyProblems(section.body, drawn, { max: L.sectionWords, counted: hook, what: 'the hook and body' })];
+}
+
 /** Problems with one section. Quiz question indexes it names are added to `questions.used`. */
 function sectionProblems(section, drawn, questions) {
   if (!isObject(section)) return ['is not a section object'];
-  const L = PAGE_LIMITS, hook = isText(section.hook) ? wordCount(section.hook) : 0;
-  const problems = [...textProblems(section, { takeawayWords: L.takeawayWords, howTo: true }),
-    ...bodyProblems(section.body, drawn, { max: L.sectionWords, counted: hook, what: 'the hook and body' })];
+  const problems = sectionTextProblems(section, drawn);
   for (const old of ['check', 'uses', 'missions']) if (old in section) problems.push(`has ${old}, which a section does not take; remove it`);
   return [...problems, ...indexProblems(section.quiz, questions.count, 'quiz question', questions.used)];
 }
 
-/** Problems with a part's New part cards: each names a component of the level, with three short lines. */
-function cardProblems(cards, components) {
+/**
+ * Problems with "Start here", the block before the first part: its time, and one section's text. It prepares no quiz
+ * question, so it takes no `quiz`.
+ */
+function startProblems(start, drawn) {
+  if (start === undefined) return [];
+  if (!isObject(start)) return ['start: is not an object'];
+  const problems = sectionTextProblems(start, drawn);
+  if (!(Number.isFinite(start.minutes) && start.minutes > 0)) problems.push('needs its time in minutes');
+  if ('quiz' in start) problems.push('has quiz, which Start here does not take; remove it');
+  return prefixed('start', problems);
+}
+
+/**
+ * Problems with a part's New part cards: each names a component of the level, with three short lines, and `before`,
+ * when it is there, is the index of one of the part's `sections` (there are `sectionCount`).
+ */
+function cardProblems(cards, components, sectionCount) {
   if (cards === undefined) return [];
   if (!Array.isArray(cards)) return ['newParts must be a list of cards'];
   const L = PAGE_LIMITS, problems = [];
@@ -313,6 +335,8 @@ function cardProblems(cards, components) {
     const where = `New part card ${i + 1}`;
     if (!isObject(card)) { problems.push(`${where}: is not a card object`); return; }
     if (!isText(card.type) || !isObject(components?.[card.type])) problems.push(`${where}: "${card.type}" is not one of the level's components`);
+    if (!isOptionalText(card.aka)) problems.push(`${where}: aka must be text when it is there`);
+    if (card.before !== undefined && !(Number.isInteger(card.before) && card.before >= 0 && card.before < sectionCount)) problems.push(`${where}: before must be the index of a section of its part; it is ${card.before}`);
     problems.push(...prefixed(where, [...wordsProblems(card.what, 'what it is', L.cardWhatWords),
       ...wordsProblems(card.does, 'what it does', L.cardDoesWords), ...wordsProblems(card.game, 'in the game', L.cardGameWords)]));
   });
@@ -362,7 +386,7 @@ function partWords(part) {
   const cards = list(part.newParts).reduce((n, c) => n + words(c.what) + words(c.does) + words(c.game), 0);
   const sections = list(part.sections).reduce((n, s) => n + words(s.hook) + proseWords(s.body) + words(s.takeaway), 0);
   const checks = list(part.checks).reduce((n, c) => n + words(c.q) + list(c.options).reduce((m, o) => m + words(o.t), 0), 0);
-  return cards + sections + checks;
+  return words(part.lead) + cards + sections + checks;
 }
 
 /**
@@ -373,13 +397,14 @@ function partProblems(part, i, count, { levelId, drawn, questions, components })
   if (!isObject(part)) return [`part ${i + 1}: is not a part object`];
   const L = PAGE_LIMITS, problems = [];
   if (!isText(part.title)) problems.push('needs a title');
+  if (!isOptionalText(part.lead)) problems.push('lead must be text when it is there');
   if (part.mission !== i) problems.push(`its mission must be ${i}, as parts follow the missions in order; it is ${part.mission}`);
   if (!(Number.isFinite(part.minutes) && part.minutes > 0)) problems.push('needs its time in minutes');
   const sections = Array.isArray(part.sections) ? part.sections : [];
   if (sections.length < L.minSections || sections.length > L.maxSections) problems.push(`has ${sections.length} sections, not ${L.minSections} to ${L.maxSections}`);
   const maxWords = levelId === 1 && i === 0 ? L.firstPartWordsLevel1 : L.partWords, words = partWords(part);
   if (words > maxWords) problems.push(`has ${words} words before its mission card, more than ${maxWords}`);
-  problems.push(...cardProblems(part.newParts, components), ...checksProblems(part.checks), ...youWillProblems(part.youWill));
+  problems.push(...cardProblems(part.newParts, components, sections.length), ...checksProblems(part.checks), ...youWillProblems(part.youWill));
   if (i < count - 1 || part.debrief !== undefined) problems.push(...debriefProblems(part.debrief));
   return [...prefixed(`part ${i + 1}`, problems),
     ...sections.flatMap((s, n) => prefixed(`part ${i + 1} section ${n + 1}`, sectionProblems(s, drawn, questions)))];
@@ -422,11 +447,30 @@ function pageLessonProblems(level) {
 
   // The intro and the wrap-up each name a picture, so the level's drawFigures is always run.
   const drawn = figureIds(level, true, problems);
-  problems.push(...introProblems(lesson.intro, drawn));
+  problems.push(...introProblems(lesson.intro, drawn), ...startProblems(lesson.start, drawn));
   const context = { levelId: level.id, drawn, questions, components: level.components };
   parts.forEach((part, i) => problems.push(...partProblems(part, i, parts.length, context)));
   problems.push(...wrapProblems(lesson.wrap, drawn, flat(sections.flatMap((s) => textsIn(s)).join(' '))));
   for (const n of unused(questions.count, questions.used)) problems.push(`quiz question index ${n} is in no section's quiz`);
+  return problems;
+}
+
+/**
+ * Problems across the course: every component needs a New part card in the first level that has it. A level whose
+ * lesson is not on one page yet is skipped, but its components still count as seen by the levels after it. (A mission
+ * does not say which components it uses, so the card's part is not checked against the mission.)
+ * @param {{ id: number | string, components: Record<string, any>, lesson?: any }[]} levels  in course order
+ */
+export function newPartProblems(levels) {
+  const seen = new Set(), problems = [];
+  for (const level of levels) {
+    const parts = Array.isArray(level.lesson?.parts) ? level.lesson.parts : null;
+    const carded = new Set((parts ?? []).flatMap((p) => (Array.isArray(p?.newParts) ? p.newParts : [])).map((c) => c?.type));
+    for (const type of Object.keys(level.components ?? {})) {
+      if (parts && !seen.has(type) && !carded.has(type)) problems.push(`Level ${level.id}: "${type}" first appears in this level and has no New part card`);
+      seen.add(type);
+    }
+  }
   return problems;
 }
 

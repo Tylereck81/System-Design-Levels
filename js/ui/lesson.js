@@ -1,6 +1,6 @@
 // Lesson tab: a lesson written as steps or on one page (`level.lesson`, see Lesson in types.js) or authored HTML
 // (`level.lessonHtml`), and the helpers a level's diagrams are drawn with.
-import { level, inParts } from '../level.js';
+import { level, inParts, lessonMinutes } from '../level.js';
 import { $, svgEl, html, raw, prependHtml, setHtml } from '../dom.js';
 import { hooks } from '../hooks.js';
 import { drawIcon } from '../view/icons.js';
@@ -196,8 +196,7 @@ function wireSteps(root, lesson) {
 const missionState = (i) => (S.done[i] ? 'Done' : 'Not started');
 
 function introHtml(lesson) {
-  const { intro, parts } = lesson;
-  const minutes = parts.reduce((n, p) => n + p.minutes, 0);
+  const { intro } = lesson, minutes = lessonMinutes(lesson);
   return html`<section class="lintro" aria-labelledby="lp-intro">
     <p class="label">${raw(intro.kicker)} · about ${minutes} minutes</p>
     <h1 id="lp-intro" tabindex="-1">${raw(intro.title)}</h1>
@@ -223,13 +222,13 @@ function onPageHtml(parts) {
   </nav>`;
 }
 
-/** A "New part" card: the component's icon (drawn by `drawCardIcons`) and name, then three short lines. */
+/** A "New part" card: the component's icon (drawn by `drawCardIcons`) and name, with its long name if it has one, then three short lines. */
 function cardHtml(card) {
   return html`<div class="newpart">
     <svg class="newpart-icon" viewBox="-3 -3 36 30" aria-hidden="true" data-icon="${card.type}"></svg>
     <div>
       <p class="label">New part</p>
-      <p class="newpart-name">${level.components[card.type].name}</p>
+      <p class="newpart-name">${level.components[card.type].name}${card.aka ? ` (${card.aka})` : ''}</p>
       <dl>
         <dt>What it is</dt><dd>${raw(card.what)}</dd>
         <dt>What it does</dt><dd>${raw(card.does)}</dd>
@@ -239,10 +238,10 @@ function cardHtml(card) {
   </div>`;
 }
 
-/** Section `s` of part `p`: its title, hook, body and Remember line. */
+/** Section `s` of part `p` (or of "Start here"): its title, its hook when it has one, its body and Remember line. */
 const sectionHtml = (section, p, s) => html`<section class="lsec" aria-labelledby="lp-s${p}-${s}">
     <h3 id="lp-s${p}-${s}">${raw(section.title)}</h3>
-    <p class="hook">${raw(section.hook)}</p>
+    ${section.hook ? html`<p class="hook">${raw(section.hook)}</p>` : ''}
     <div class="lsec-body">
       ${section.body.map(blockHtml)}
       <p class="takeaway"><b>Remember</b> ${raw(section.takeaway)}</p>
@@ -285,12 +284,24 @@ function missionCardHtml(part, p) {
   </div>`;
 }
 
+/** "Start here": what every level takes as known, before the first part. */
+const startHtml = (start) => html`<section class="lstart" aria-labelledby="lp-start">
+    <p class="label">${start.minutes} min</p>
+    <h2 id="lp-start">Start here</h2>
+    ${sectionHtml(start, 'start', 0)}
+  </section>`;
+
 function partHtml(part, p) {
+  // A New part card comes before the section its `before` names: the first, when it names none.
+  const cardsBefore = (s) => {
+    const cards = (part.newParts ?? []).filter((card) => (card.before ?? 0) === s);
+    return cards.length ? html`<div class="newparts">${cards.map(cardHtml)}</div>` : '';
+  };
   return html`<section class="lpart" aria-labelledby="lp-part-${p}">
     <p class="label">${part.minutes} min</p>
     <h2 id="lp-part-${p}" tabindex="-1">Part ${p + 1} · ${raw(part.title)}</h2>
-    ${part.newParts?.length ? html`<div class="newparts">${part.newParts.map(cardHtml)}</div>` : ''}
-    ${part.sections.map((section, s) => sectionHtml(section, p, s))}
+    ${part.lead ? html`<p class="part-lead">${raw(part.lead)}</p>` : ''}
+    ${part.sections.map((section, s) => html`${cardsBefore(s)}${sectionHtml(section, p, s)}`)}
     ${part.checks?.length ? checksHtml(part.checks, p) : ''}
     ${missionCardHtml(part, p)}
   </section>`;
@@ -317,6 +328,7 @@ function wrapHtml(wrap) {
 const pageLessonHtml = (lesson) => html`<div class="page-lesson" id="pageLesson">
     ${introHtml(lesson)}
     ${onPageHtml(lesson.parts)}
+    ${lesson.start ? startHtml(lesson.start) : ''}
     ${lesson.parts.map(partHtml)}
     ${wrapHtml(lesson.wrap)}
   </div>`;

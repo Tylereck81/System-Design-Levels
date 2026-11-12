@@ -3,8 +3,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { LEVELS, MOCK_LEVELS, PARTS, TOTAL_LEVELS, saveKeyOf } from '../../levels/index.js';
-import { validateLevel } from '../../js/level.js';
-import { validateLesson, lessonWarnings } from '../../js/validate-lesson.js';
+import { validateLevel, lessonMinutes } from '../../js/level.js';
+import { validateLesson, lessonWarnings, newPartProblems } from '../../js/validate-lesson.js';
 
 const QUESTIONS = 10;
 const OPTIONS = 4;
@@ -43,9 +43,9 @@ for (const { entry, data, error } of levels) {
     assert.equal(data.saveKey, `sdl-level${entry.id}-v1`);
     assert.equal(saveKeyOf(entry.id), data.saveKey, 'the home page reads progress under the level\'s own key');
     assert.ok(typeof entry.line === 'string' && entry.line.length > 0 && entry.line.length <= 80, 'a one-line description of at most 80 characters');
-    // The home page shows minutes only for a one-page lesson, where they are the sum of its parts' minutes.
-    const partMinutes = data.lesson?.parts?.reduce((n, p) => n + p.minutes, 0);
-    assert.equal(entry.minutes, partMinutes, 'the index\'s minutes match the parts (or both are absent)');
+    // The home page shows minutes only for a one-page lesson, where they are the lesson's time: "Start here" and its parts.
+    const minutes = data.lesson?.parts ? lessonMinutes(data.lesson) : undefined;
+    assert.equal(entry.minutes, minutes, 'the index\'s minutes match the lesson (or both are absent)');
     assert.ok(isPositiveInteger(data.saveVersion), 'saveVersion is a positive integer');
     // quizVersion is optional: without it the quiz shares saveVersion (js/state.js).
     if (data.quizVersion !== undefined) assert.ok(isPositiveInteger(data.quizVersion), 'quizVersion is a positive integer');
@@ -72,6 +72,11 @@ for (const { entry, data, error } of levels) {
     else assert.equal(longestIsRight, legacy, `the right answer is the longest option ${longestIsRight} times: set LONGEST_RIGHT_EXACT[${entry.id}] to it only if it went down`);
   });
 }
+
+test('every component has a New part card in the first level that has it (levels not yet on one page are skipped)', () => {
+  assert.equal(loaded.length, LEVELS.length, 'every level loaded, so "first level" is right');
+  assert.deepEqual(newPartProblems(loaded.map(({ data }) => data)), []);
+});
 
 test('every HTML lesson shows the four interview steps once, with the minutes of a 45-minute interview', () => {
   // Written out by hand: 5–8 + 10–12 + 15–20 + 5 minutes is 35–45, which fits in 45.

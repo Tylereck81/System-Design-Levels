@@ -7,7 +7,7 @@ const SHIPPED = ['index.html', 'README.md', 'package.json', 'css', 'js', 'levels
 
 // Lessons cite topics and public standards, not numbered sections of a reference text.
 const FORBIDDEN = [
-  { re: /\bbook\b/i, why: 'mentions a reference text' },
+  { re: /(?<!\baddress )\bbook\b/i, why: 'mentions a reference text' }, // "address book" is the everyday phrase, and is allowed
   { re: /\bch(apter)?\.?\s?\d+\b/i, why: 'cites a section number' },
   { re: /\bfig(ure)?\.?\s?\d+-\d+/i, why: 'cites a figure number' },
   { re: /\btable\s\d+-\d+/i, why: 'cites a table number' },

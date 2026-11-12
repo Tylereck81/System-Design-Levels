@@ -1,10 +1,10 @@
 // Playable levels. Each entry loads its level file only when that level is opened.
 // `line` is the home page's one-line description. `minutes` is the level's time, given only once its lesson is written
-// on one page (it is the sum of its parts' minutes; tests/unit/levels.test.mjs checks it).
+// on one page (it is the lesson's time, `lessonMinutes` in js/level.js; tests/unit/levels.test.mjs checks it).
 export const TOTAL_LEVELS = 21;
 
 export const LEVELS = [
-  { id: 1, title: 'One server to two tiers', line: 'One server runs the whole shop, until traffic grows nine times.', minutes: 25, load: () => import('./level-01.js') },
+  { id: 1, title: 'One server to two tiers', line: 'One server runs the whole shop, until traffic grows nine times.', minutes: 30, load: () => import('./level-01.js') },
   { id: 2, title: 'Load balancer and horizontal scaling', line: 'One crash took the shop down, and no single machine was big enough.', load: () => import('./level-02.js') },
   { id: 3, title: 'Database replication', line: 'The web tier scales now. The one database does not.', load: () => import('./level-03.js') },
   { id: 4, title: 'Cache tier', line: 'The same product pages are fetched from disk again and again.', load: () => import('./level-04.js') },
