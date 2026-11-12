@@ -200,14 +200,10 @@ function introHtml(lesson) {
   return html`<section class="lintro" aria-labelledby="lp-intro">
     <p class="label">${raw(intro.kicker)} · about ${minutes} minutes</p>
     <h1 id="lp-intro" tabindex="-1">${raw(intro.title)}</h1>
-    <div class="intro-grid">
-      <div>
-        <p class="lede">${raw(intro.story)}</p>
-        <p class="label">By the end you can</p>
-        <ul>${intro.outcomes.map((o) => html`<li>${raw(o)}</li>`)}</ul>
-      </div>
-      <figure class="fig"><svg id="${intro.picture}" role="img" aria-label="${intro.alt}"></svg><figcaption>What you will build</figcaption></figure>
-    </div>
+    <p class="lede">${raw(intro.story)}</p>
+    <p class="label">By the end you can</p>
+    <ul>${intro.outcomes.map((o) => html`<li>${raw(o)}</li>`)}</ul>
+    <figure class="fig"><svg id="${intro.picture}" role="img" aria-label="${intro.alt}"></svg><figcaption>What you will build</figcaption></figure>
     ${rulesHtml(lesson.rules)}
   </section>`;
 }

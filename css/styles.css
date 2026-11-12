@@ -13,6 +13,8 @@
   --grid: #C9D0DA;
   --accent: #2F57CF;
   --accent-soft: #E5EBFA;
+  --mission: #0B6B78;
+  --mission-soft: #DDF1F3;
   --on-accent: #FFFFFF;
   --ok: #17704A;
   --ok-soft: #E1F2E9;
@@ -35,6 +37,7 @@
   :root:not([data-theme="light"]) {
     --bg: #0E1116; --surface: #161A21; --surface-2: #1E232C; --ink: #E7EAF0; --ink-2: #A8B0BD; --ink-3: #8E97A7;
     --line: #2A303A; --grid: #2C333E; --accent: #7F9DFF; --accent-soft: #1F2A47; --on-accent: #0E1116;
+    --mission: #5CC8D6; --mission-soft: #12323A;
     --ok: #45C08A; --ok-soft: #14301F; --warn: #E3A846; --warn-soft: #362812; --bad: #F2705F; --bad-soft: #3A1916;
     --web: #6DBB5B; --data: #5A8EE8; --data-top: #8FB3F2; --ext: #98A1B1; --dns-dot: #E59A45; --dot-ok: #45C08A; --dot-bad: #F2705F;
     color-scheme: dark;
@@ -43,6 +46,7 @@
 :root[data-theme="dark"] {
   --bg: #0E1116; --surface: #161A21; --surface-2: #1E232C; --ink: #E7EAF0; --ink-2: #A8B0BD; --ink-3: #8E97A7;
   --line: #2A303A; --grid: #2C333E; --accent: #7F9DFF; --accent-soft: #1F2A47; --on-accent: #0E1116;
+  --mission: #5CC8D6; --mission-soft: #12323A;
   --ok: #45C08A; --ok-soft: #14301F; --warn: #E3A846; --warn-soft: #362812; --bad: #F2705F; --bad-soft: #3A1916;
   --web: #6DBB5B; --data: #5A8EE8; --data-top: #8FB3F2; --ext: #98A1B1; --dns-dot: #E59A45; --dot-ok: #45C08A; --dot-bad: #F2705F;
   color-scheme: dark;
@@ -81,8 +85,8 @@ a.btn { color: var(--ink); text-decoration: none; }
 .linkbtn:hover { color: var(--bad); }
 
 /* ---------- Lesson ---------- */
-/* Text sizes: body 18 px (17 px on a phone) with lines of at most 60 characters, hook 20 px, screen title 28 px, table
-   cells 16 px, labels and captions 14 px. Nothing in a lesson is smaller than 14 px. */
+/* Text sizes: body 18 px (17 px on a phone) with lines of at most 60 characters (75 on a one-page lesson), hook 20 px,
+   screen title 28 px, table cells 16 px, labels and captions 14 px. Nothing in a lesson is smaller than 14 px. */
 .lesson { max-width: 760px; margin: 0 auto; font-size: 18px; line-height: 1.6; }
 .lesson .label, .lesson .btn.sm { font-size: 14px; }
 .lesson h1 { font-family: var(--f-display); font-size: clamp(30px, 5vw, 44px); line-height: 1.05; letter-spacing: -0.025em; margin: 6px 0 12px; text-wrap: balance; }
@@ -161,12 +165,14 @@ table.t td.n { font-family: var(--f-mono); font-variant-numeric: tabular-nums; w
 .lesson .bridge li { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 0; }
 .bridge b { display: block; }
 .step-lesson .fig svg, .step-lesson table.t { min-width: 0; }
-/* One-page lesson (js/ui/lesson.js): the intro, the links to each part, the parts with their mission cards, the wrap-up. */
+/* One-page lesson (js/ui/lesson.js): the intro, the links to each part, the parts with their mission cards, the wrap-up.
+   One column: text, boxes and pictures share both edges. 30em (540 px at 18 px) is the 24em rule above scaled from 60
+   to 75 characters; tests/e2e/text-size.spec.js measures it. */
+.page-lesson { max-width: 30em; margin-inline: auto; }
+.page-lesson p, .page-lesson li { max-width: none; }
 .page-lesson button { min-height: 44px; }
 .page-lesson .fig svg, .page-lesson table.t { min-width: 0; }
 .lesson .lintro { border-top: 0; }
-.intro-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 20px; align-items: start; }
-.intro-grid .fig { margin: 0; }
 .lintro .lesson-cta { border-top: 0; padding-top: 12px; }
 .onpage { padding: 12px 0; border-top: 1px solid var(--line); }
 .lesson .onpage ul { list-style: none; padding: 0; margin: 6px 0 0; display: flex; flex-wrap: wrap; gap: 8px; }
@@ -187,8 +193,10 @@ table.t td.n { font-family: var(--f-mono); font-variant-numeric: tabular-nums; w
 .newpart dl { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; font-size: 16px; }
 .newpart dt { font: 500 14px var(--f-mono); color: var(--ink-3); padding-top: 2px; }
 .newpart dd { margin: 0; }
-.mcard { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 12px; padding: 14px 16px; margin: 22px 0 0; }
-.mcard.done { border-left-color: var(--ok); }
+.mcard { background: var(--mission-soft); border: 1px solid var(--line); border-left: 4px solid var(--mission); border-radius: 12px; padding: 14px 16px; margin: 22px 0 0; }
+.mcard > .label { color: var(--mission); }
+.mcard.done { background: var(--surface); border-left-color: var(--ok); }
+.mcard.done > .label { color: var(--ink-3); }
 .mcard h3 { font-family: var(--f-display); font-size: 24px; line-height: 1.25; margin: 2px 0 8px; }
 .mcard-will { font-weight: 600; margin: 0; }
 .mcard-complete { font-weight: 600; color: var(--ok); margin: 0 0 6px; }
@@ -221,9 +229,6 @@ table.t td.n { font-family: var(--f-mono); font-variant-numeric: tabular-nums; w
 @media (max-width: 600px) {
   .home-level { grid-template-columns: auto minmax(0, 1fr); }
   .home-state { grid-column: 2; white-space: normal; }
-}
-@media (max-width: 700px) {
-  .intro-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* ---------- Build ---------- */

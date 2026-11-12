@@ -387,6 +387,24 @@ export function registerPageLessonTests({ level }) {
   });
 
   for (const width of [390, 1280]) {
+    test(`one-page lesson at ${width} px: one column, at most 620 px wide; text, boxes, tables, pictures and mission cards share its edges`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 844 });
+      await freshPage(page, routeHash(level, 'lesson'));
+      const { column, off } = await page.evaluate(() => {
+        const root = document.querySelector('#pageLesson').getBoundingClientRect();
+        const blocks = '.lede, .lintro > ul, .fig, .lsec-body > p, .lsec-body > ul, .newpart, .tbl-wrap, .check, .mcard, .lwrap > ol';
+        const off = [...document.querySelectorAll(blocks)].filter((e) => e.checkVisibility()).flatMap((e) => {
+          const r = e.getBoundingClientRect();
+          return Math.round(r.left) === Math.round(root.left) && Math.round(r.right) === Math.round(root.right) ? [] : [e.className || e.tagName];
+        });
+        return { column: root.width, off };
+      });
+      expect(column).toBeLessThanOrEqual(620);
+      expect(off).toEqual([]);
+    });
+  }
+
+  for (const width of [390, 1280]) {
     for (const colorScheme of ['light', 'dark']) {
       test.describe(`one-page lesson at ${width} px (${colorScheme})`, () => {
         test.use({ colorScheme, viewport: { width, height: 844 } });

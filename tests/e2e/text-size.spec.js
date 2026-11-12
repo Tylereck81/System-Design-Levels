@@ -46,7 +46,7 @@ for (const { id } of LEVELS) {
   });
 }
 
-test.describe('lesson type scale (Level 1)', () => {
+test.describe('lesson type scale', () => {
   test('laptop: body 18 px with line height 1.6, hook 20 px, title 28 px, table cells 16 px, labels 14 px', async ({ page }) => {
     await freshPage(page, routeHash(1, 'lesson'));
     await showWholeLesson(page);
@@ -60,28 +60,38 @@ test.describe('lesson type scale (Level 1)', () => {
     expect(await fontSize(page, '.fig figcaption')).toBe(14);
   });
 
-  test('laptop: no line of body text is longer than 60 characters', async ({ page }) => {
-    await freshPage(page, routeHash(1, 'lesson'));
-    await showWholeLesson(page);
-    // Each character is put on its line by its vertical middle; the longest line of each paragraph is counted.
-    const longest = await page.evaluate(() => Math.max(...[...document.querySelectorAll('.lsec-body > p, .lsec-body > ul > li, .lsec-body > ol > li')].map((p) => {
-      const top = p.getBoundingClientRect().top, lineHeight = parseFloat(getComputedStyle(p).lineHeight);
-      const lines = new Map(), range = document.createRange();
-      const walker = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
-      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-        for (let i = 0; i < node.length; i++) {
-          range.setStart(node, i); range.setEnd(node, i + 1);
-          const box = range.getBoundingClientRect();
-          if (!box.width) continue; // the space a line was broken at
-          const line = Math.floor(((box.top + box.bottom) / 2 - top) / lineHeight);
-          lines.set(line, (lines.get(line) ?? 0) + 1);
-        }
-      }
-      return Math.max(0, ...lines.values());
-    })));
-    expect(longest).toBeGreaterThan(40); // the text does wrap in a column, not far short of the limit
-    expect(longest).toBeLessThanOrEqual(60);
-  });
+  // A one-page lesson's column holds up to 75 characters a line; every other lesson keeps 60.
+  for (const { id, kind, max } of [{ id: 1, kind: 'one-page', max: 75 }, { id: 2, kind: 'step', max: 60 }]) {
+    test(`laptop: no line of body text in a ${kind} lesson (Level ${id}) is longer than ${max} characters`, async ({ page }) => {
+      await freshPage(page, routeHash(id, 'lesson'));
+      await expect(page.locator(kind === 'one-page' ? '#pageLesson' : '#stepLesson')).toBeAttached();
+      await showWholeLesson(page);
+      // Every paragraph and list item at the body text size, except a worked calculation's rows, which use the whole
+      // column on purpose. Each character is put on its line by its vertical middle; the longest line of each is counted.
+      const longest = await page.evaluate(() => {
+        const body = getComputedStyle(document.querySelector('#view-lesson')).fontSize;
+        const texts = [...document.querySelectorAll('#view-lesson p, #view-lesson li')]
+          .filter((p) => p.checkVisibility() && !p.closest('.calc-box') && getComputedStyle(p).fontSize === body);
+        return Math.max(...texts.map((p) => {
+          const top = p.getBoundingClientRect().top, lineHeight = parseFloat(getComputedStyle(p).lineHeight);
+          const lines = new Map(), range = document.createRange();
+          const walker = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+          for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            for (let i = 0; i < node.length; i++) {
+              range.setStart(node, i); range.setEnd(node, i + 1);
+              const box = range.getBoundingClientRect();
+              if (!box.width) continue; // the space a line was broken at
+              const line = Math.floor(((box.top + box.bottom) / 2 - top) / lineHeight);
+              lines.set(line, (lines.get(line) ?? 0) + 1);
+            }
+          }
+          return Math.max(0, ...lines.values());
+        }));
+      });
+      expect(longest).toBeGreaterThan(max - 20); // the text does wrap in a column, not far short of the limit
+      expect(longest).toBeLessThanOrEqual(max);
+    });
+  }
 
   test('phone: body text is 17 px', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
