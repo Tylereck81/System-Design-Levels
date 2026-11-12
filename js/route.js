@@ -1,8 +1,9 @@
-// URL routes. Level 1 keeps the short form (#lesson, #build, #quiz); other levels use #level-2/build, and the mock
-// interview #mock/build.
+// URL routes. The address with nothing after it is the home page. Level 1 keeps the short form (#lesson, #build,
+// #quiz); other levels use #level-2/build, and the mock interview #mock/build.
 // Addresses are read without regard to case and may end with a slash, e.g. #LEVEL-2/ or #level-2/Build.
 export function parseRoute(hash) {
   const h = decodeURIComponent((hash || '').replace(/^#/, '')).toLowerCase().replace(/\/+$/, '');
+  if (!h) return { level: 'home', tab: null };
   const m = h.match(/^level-(\d+)(?:\/([a-z]*))?$/);
   if (m) return { level: Number(m[1]), tab: m[2] || null };
   const k = h.match(/^mock(?:\/([a-z]*))?$/);
