@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, trackErrors } from '../helpers.js';
+import { freshPage, savedKeys, trackErrors } from '../helpers.js';
 
 // The home page: the bare address shows what the game is, how a level works, the course map with each level's
 // state read from its save, Continue, and the mock interview. It writes no saved data.
@@ -32,7 +32,7 @@ test.describe('Home page', () => {
     await expect(page.locator('.tabs')).toBeHidden();
     await expect(page.locator('header.top > :not([hidden])')).toHaveCount(1);
     await expect(page.locator('#brand')).toHaveText('System Design Levels');
-    expect(await page.evaluate(() => Object.keys(localStorage))).toEqual([]); // home saves nothing
+    expect(await savedKeys(page)).toEqual([]); // home saves nothing
     expect(await page.evaluate(() => window.__sdl)).toBeUndefined(); // and loads no level
     expect(errors).toEqual([]);
   });

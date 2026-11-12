@@ -10,6 +10,7 @@ import { paintGoals } from './mission.js';
 import { log } from './log.js';
 import { hooks } from '../hooks.js';
 import { inParts } from '../level.js';
+import { resetGuide } from './guide.js';
 import { isOn, activeExps, startExp, stopExp, crashCandidates } from '../engine/experiments.js';
 
 /** Why the open mission cannot be played yet ({ title, label } for the Play button), or null when it can. */
@@ -80,6 +81,7 @@ armButton($('resetBtn'), 'Clear canvas', 'Click again to clear', () => {
 });
 armButton($('resetLevel'), 'Reset level progress', 'Click again: this clears your missions and canvas', () => {
   const keepQuiz = S.quiz, keepTab = S.tab;
+  resetGuide(); // the guide shows again, as on a first visit
   replaceState(fresh()); S.quiz = keepQuiz; S.tab = keepTab; ui.sel = null; ui.connectFrom = null;
   stopRun(true); hooks.afterChange(true); log(`Level progress reset. ${inParts() ? 'Start Mission 1 from the lesson.' : 'Mission 1 is waiting.'}`);
 });

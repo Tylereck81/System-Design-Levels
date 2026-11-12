@@ -2,7 +2,7 @@
 // shell, the canvas, the mock interview, and checks every level shares. Import test and expect from ../fixtures.js.
 import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, openMission, reloadGame, trackErrors, buildBasic, playFor } from '../helpers.js';
+import { freshPage, savedKeys, openMission, reloadGame, trackErrors, buildBasic, playFor } from '../helpers.js';
 
 test.describe('App shell · header, routing, saved progress', () => {
   test('the header starts with a Home button, then names the level as plain text; Home works by keyboard', async ({ page }) => {
@@ -58,7 +58,7 @@ test.describe('App shell · header, routing, saved progress', () => {
   test('Level 1 progress is saved under its own key and still loads', async ({ page }) => {
     await freshPage(page, '#build');
     await page.evaluate(() => { window.__sdl.addNode('dns'); window.__sdl.S.quiz = { 0: 2 }; window.__sdl.afterChange(); });
-    expect(await page.evaluate(() => Object.keys(localStorage))).toEqual(['sdl-level1-v1']);
+    expect(await savedKeys(page)).toEqual(['sdl-level1-v1']);
     await reloadGame(page);
     expect(await page.evaluate(() => window.__sdl.S.nodes.some((n) => n.type === 'dns'))).toBe(true);
     expect(await page.evaluate(() => window.__sdl.S.quiz[0])).toBe(2);
