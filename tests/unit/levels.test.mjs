@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { LEVELS, MOCK_LEVELS } from '../../levels/index.js';
 import { validateLevel } from '../../js/level.js';
-import { validateLesson } from '../../js/validate-lesson.js';
+import { validateLesson, lessonWarnings } from '../../js/validate-lesson.js';
 
 const QUESTIONS = 10;
 const OPTIONS = 4;
@@ -33,10 +33,13 @@ const longestIndex = (options) => options.reduce((best, o, i) => (o.length > opt
 const isPositiveInteger = (v) => Number.isInteger(v) && v > 0;
 
 for (const { entry, data, error } of levels) {
-  test(`Level ${entry.id}: loads, passes validateLevel and has its save versions`, () => {
+  test(`Level ${entry.id}: loads, passes validateLevel and has its save versions`, (t) => {
     assert.ifError(error);
     assert.deepEqual(validateLevel(data), []);
-    if (data.lesson) assert.deepEqual(validateLesson(data), [], 'the step lesson passes validateLesson');
+    if (data.lesson) {
+      assert.deepEqual(validateLesson(data), [], 'the step lesson passes validateLesson');
+      for (const warning of lessonWarnings(data)) t.diagnostic(`lesson warning: ${warning}`); // advice; it never fails a level
+    }
     assert.equal(data.saveKey, `sdl-level${entry.id}-v1`);
     assert.ok(isPositiveInteger(data.saveVersion), 'saveVersion is a positive integer');
     // quizVersion is optional: without it the quiz shares saveVersion (js/state.js).

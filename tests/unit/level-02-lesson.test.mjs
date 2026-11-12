@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { SIZES } from '../../js/engine/catalog.js';
 import level from '../../levels/level-02.js';
+import { lessonWarnings } from '../../js/validate-lesson.js';
 
 test('"the next size up is also the last size": the start web server is one size below the largest', () => {
   const sizes = Object.keys(SIZES);
@@ -15,4 +16,8 @@ test('"the next size up is also the last size": the start web server is one size
 test('"Traffic grows", not "doubles": Mission 2 is not exactly twice Mission 1', () => {
   assert.notEqual(level.missions[1].qps, 2 * level.missions[0].qps);
   assert.match(level.lesson.recap.bridge[1], /^Traffic grows to /);
+});
+
+test('numbers of a million or more are written with the word ("40 million")', () => {
+  assert.deepEqual(lessonWarnings(level), []);
 });

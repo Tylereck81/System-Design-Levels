@@ -2,13 +2,19 @@
 // (Every real level with a step lesson passing it is checked in levels.test.mjs.)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateLesson, wordCount, LIMITS } from '../../js/validate-lesson.js';
+import { validateLesson, lessonWarnings, wordCount, LIMITS } from '../../js/validate-lesson.js';
 
 /** `n` words of text. */
 const words = (n) => Array(n).fill('word').join(' ');
 const check = () => ({
   kind: 'guess', q: 'Which one?',
   options: [{ t: 'This one', why: 'Because it is.', right: true }, { t: 'That one', why: 'It is not.' }],
+});
+/** A valid worked calculation with one row. */
+const calc = (extra = {}) => ({
+  formula: 'Total = boxes × apples in a box.',
+  rows: [{ label: 'Apples', work: '2 boxes × 6 apples', result: '12 apples' }],
+  result: 'You have 12 apples.', ...extra,
 });
 const step = (n, extra = {}) => ({
   title: `Why step ${n}?`, hook: 'A short problem.', body: [{ p: 'A short <b>body</b>.' }], takeaway: 'One idea.',
@@ -31,7 +37,7 @@ function level(change = (d) => d) {
         step(1, { check: check(), missions: [0], body: [{ figure: 'figOne', alt: 'One box.', caption: 'One box' }, { p: 'Text.' }] }),
         step(2, { check: { ...check(), kind: 'turn' }, missions: [1] }),
         step(3, { check: check(), quiz: [0], body: [{ ul: ['One', 'Two'] }, { table: { head: ['A', 'B'], rows: [['1', '2']] } }] }),
-        step(4, { quiz: [1], body: [{ ol: ['First', 'Second'] }, { example: ['1 + 1 = 2'], note: 'Simple.' }, { assume: 'A game rule.' }] }),
+        step(4, { quiz: [1], body: [{ ol: ['First', 'Second'] }, { calc: calc() }, { assume: 'A game rule.' }] }),
         step(5, { body: [{ p: 'An example request.' }, { code: 'GET /items/1' }] }),
       ],
       recap: { numbers: [['2×', 'a number to remember']], bridge: ['Mission 1 in one line.', 'Mission 2 in one line.'] },
@@ -87,14 +93,16 @@ test('an empty body', () => {
 });
 
 test('a body over the word limit: prose blocks count, the table, code or figure caption does not', () => {
-  // 40 + 2×20 + 2×10 + (9 + 1) + 10 = 120 words across p, ul, ol, example lines and note, and assume.
+  // 40 + 2×20 + 2×10 + (9 + 1) + 10 = 120 words across p, ul, ol, a calculation's formula and result sentence, and
+  // assume. A calculation's rows are a grid, like a table, and are not counted.
+  const row = { label: words(20), work: `${words(20)} ms`, result: `${words(20)} ms` };
   const prose = [{ p: words(40) }, { ul: [words(20), words(20)] }, { ol: [words(10), words(10)] },
-    { example: [words(9)], note: 'word' }, { assume: words(10) }];
+    { calc: { formula: words(9), rows: [row], result: 'word' } }, { assume: words(10) }];
   const at = (body) => level((d) => { steps(d)[3].body = body; });
   assert.deepEqual(validateLesson(at([...prose, { table: { head: [words(100)], rows: [[words(100)]] }, caption: words(50) }])), []);
   assert.deepEqual(validateLesson(at([...prose, { code: words(200) }])), []);
   assert.deepEqual(validateLesson(at([...prose, { p: '<b>one</b> more' }])), ['step 4: the body has 122 words, more than 120']);
-  assert.deepEqual(validateLesson(at([...prose.slice(0, 3), { example: [words(9)], note: 'two words' }, prose[4]])), ['step 4: the body has 121 words, more than 120']);
+  assert.deepEqual(validateLesson(at([...prose.slice(0, 3), { calc: { formula: words(9), rows: [row], result: 'two words' } }, prose[4]])), ['step 4: the body has 121 words, more than 120']);
 });
 
 test('more than one table, code sample or figure in a step', () => {
@@ -112,7 +120,7 @@ test('a takeaway that is missing or not one sentence', () => {
 
 test('a block of an unknown type, or with two types', () => {
   const at = (block) => validateLesson(level((d) => { steps(d)[0].body.push(block); }));
-  const types = 'p, ul, ol, table, code, example, figure, assume';
+  const types = 'p, ul, ol, table, code, calc, figure, assume';
   assert.deepEqual(at({ quote: 'Hi' }), [`step 1: a body block needs exactly one type from ${types}; it has keys quote`]);
   assert.deepEqual(at({ p: 'Hi', assume: 'Hi' }), [`step 1: a body block needs exactly one type from ${types}; it has keys p, assume`]);
 });
@@ -169,7 +177,11 @@ test('a block not filled in as its type needs: each type names what is missing, 
   assert.deepEqual(at({ p: '' }), ['step 1: p block needs text']);
   assert.deepEqual(at({ ul: 'one item' }), ['step 1: ul block needs a list of text items']);
   assert.deepEqual(at({ ol: ['one', ''] }), ['step 1: ol block needs a list of text items']);
-  assert.deepEqual(at({ example: '1 + 1 = 2' }), ['step 1: example block needs a list of lines, and a note only if it is text']);
+  const calcMsg = ['step 1: calc block needs a formula, a list of rows and a result sentence'];
+  assert.deepEqual(at({ calc: '1 + 1 = 2' }), calcMsg);
+  assert.deepEqual(at({ calc: calc({ formula: '' }) }), calcMsg);
+  assert.deepEqual(at({ calc: calc({ rows: 'one row' }) }), calcMsg);
+  assert.deepEqual(at({ calc: calc({ result: undefined }) }), calcMsg);
   assert.deepEqual(at({ assume: 3 }), ['step 1: assume block needs text']);
   const table = (t) => validateLesson(level((d) => { steps(d)[2].body[1] = t; }));
   const tableMsg = ['step 3: table block needs a head and rows with a cell for each heading'];
@@ -183,8 +195,59 @@ test('a block not filled in as its type needs: each type names what is missing, 
   const figureMsg = ['step 1: figure block needs an svg id, alt text and a caption'];
   assert.deepEqual(figure((b) => { delete b.alt; }), figureMsg);
   assert.deepEqual(figure((b) => { b.caption = ' '; }), figureMsg);
-  const types = 'p, ul, ol, table, code, example, figure, assume';
+  const types = 'p, ul, ol, table, code, calc, figure, assume';
   assert.deepEqual(at(null), [`step 1: a body block needs exactly one type from ${types}; it has keys none`]);
   assert.deepEqual(at('text'), [`step 1: a body block needs exactly one type from ${types}; it has keys none`]);
   assert.deepEqual(validateLesson(level((d) => { steps(d).push(null); })), ['step 6: is not a step object']);
+});
+
+test('a calculation has 1 to 4 rows', () => {
+  const row = calc().rows[0];
+  const rows = (n) => validateLesson(level((d) => { steps(d)[3].body[1] = { calc: calc({ rows: Array(n).fill(row) }) }; }));
+  assert.deepEqual(rows(0), ['step 4: the calculation has 0 rows, not 1 to 4']);
+  assert.deepEqual(rows(1), []);
+  assert.deepEqual(rows(LIMITS.maxCalcRows), []);
+  assert.deepEqual(rows(LIMITS.maxCalcRows + 1), ['step 4: the calculation has 5 rows, not 1 to 4']);
+});
+
+test('a calculation row with a missing part', () => {
+  const row = calc().rows[0];
+  const second = (r) => validateLesson(level((d) => { steps(d)[3].body[1] = { calc: calc({ rows: [row, r] }) }; }));
+  assert.deepEqual(second({ ...row, label: '' }), ['step 4: calculation row 2 needs its label']);
+  assert.deepEqual(second({ label: 'Apples', result: '12 apples' }), ['step 4: calculation row 2 needs its work']);
+  assert.deepEqual(second({ label: 'Apples' }), ['step 4: calculation row 2 needs its work and result']);
+  assert.deepEqual(second(null), ['step 4: calculation row 2 needs its label and work and result']);
+});
+
+test('a working or a result without a unit', () => {
+  const row = calc().rows[0];
+  const only = (r) => validateLesson(level((d) => { steps(d)[3].body[1] = { calc: calc({ rows: [{ ...row, ...r }] }) }; }));
+  assert.deepEqual(only({ work: '2 × 6' }), ['step 4: calculation row 1: the work "2 × 6" has no unit']);
+  assert.deepEqual(only({ result: '<b>12</b>' }), ['step 4: calculation row 1: the result "<b>12</b>" has no unit']);
+  assert.deepEqual(only({ work: '2 × 6', result: '12' }), ['step 4: calculation row 1: the work "2 × 6" has no unit', 'step 4: calculation row 1: the result "12" has no unit']);
+  // A word, a percent sign or a dollar sign is a unit.
+  assert.deepEqual(only({ work: '100% − 0.1%', result: '99.9%' }), []);
+  assert.deepEqual(only({ work: '2 × $40', result: '$80' }), []);
+  assert.deepEqual(only({ work: '20 ms ÷ (1 − 0.75)', result: '80 ms' }), []);
+});
+
+test('more than one calculation in a step', () => {
+  assert.deepEqual(validateLesson(level((d) => { steps(d)[3].body.push({ calc: calc() }); })), ['step 4: has 2 calculations; at most one']);
+});
+
+test('a warning for each number of a million or more written in digits', () => {
+  assert.deepEqual(lessonWarnings(level()), []);
+  const advice = 'is written in digits; use the word ("40 million", "1.2 billion")';
+  const hook = (text) => lessonWarnings(level((d) => { steps(d)[1].hook = text; }));
+  assert.deepEqual(hook('The app has 1,200,000,000 requests a day from 40000000 users.'), [`step 2: 1,200,000,000 ${advice}`, `step 2: 40000000 ${advice}`]);
+  assert.deepEqual(hook('It has <b>1,000,000</b> users, or 2,000,000, soon.'), [`step 2: 1,000,000 ${advice}`, `step 2: 2,000,000 ${advice}`]);
+  // Below a million, written with the word, or digits after a decimal point: no warning.
+  assert.deepEqual(hook('999,999 users, 40 million users, 86,400 s and 0.0000001 of a second.'), []);
+  // Every part of the lesson is read: its own fields, a calculation, a question, the recap.
+  assert.deepEqual(lessonWarnings(level((d) => { d.lesson.promise = 'Serve 2,000,000 users.'; })), [`2,000,000 ${advice}`]);
+  assert.deepEqual(lessonWarnings(level((d) => { d.lesson.recap.numbers[0][0] = '3,000,000'; })), [`3,000,000 ${advice}`]);
+  assert.deepEqual(lessonWarnings(level((d) => { steps(d)[3].body[1].calc.rows[0].work = '4,000,000 boxes × 6 apples'; })), [`step 4: 4,000,000 ${advice}`]);
+  assert.deepEqual(lessonWarnings(level((d) => { steps(d)[0].check.options[1].why = 'Not 5,000,000.'; })), [`step 1: 5,000,000 ${advice}`]);
+  // Code is shown as written, so a long number in it is left alone.
+  assert.deepEqual(lessonWarnings(level((d) => { steps(d)[4].body[1].code = 'GET /items/1234567'; })), []);
 });

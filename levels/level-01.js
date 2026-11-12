@@ -2,7 +2,7 @@
 /** @import { Level, Lesson } from '../js/types.js' */
 // Level 1: One server to two tiers.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
-import { fmt, percent, ms } from '../js/format.js';
+import { fmt, percent, ms, rate } from '../js/format.js';
 import { SIZES, T, COMPONENTS, SLOWDOWN_CAP_FROM, qmul } from '../js/engine/catalog.js';
 import { STEPS, INTERVIEW_MINUTES } from './mock-steps.js';
 import { servedGoal, latGoal } from './shared/goals.js';
@@ -116,13 +116,16 @@ const lesson = {
         ],
       },
       body: [
-        { p: 'Requests queue behind each other. Two numbers describe it: <b>busy = load ÷ capacity</b>, and <b>time per request = base time ÷ (1 − busy)</b>.' },
+        { p: 'Requests queue behind each other. Two numbers describe it: how <b>busy</b> the server is, and the <b>time per request</b>.' },
         {
-          example: [
-            `${fmt(ex.load)} req/s ÷ ${fmt(ex.cap)} req/s = ${ex.busy} → ${percent(ex.busy)} busy`,
-            `${ms(T.web)} ÷ (1 − ${ex.busy}) = ${ms(T.web)} ÷ ${1 - ex.busy} = ${ms(T.web * qmul(ex.busy))}`,
-          ],
-          note: `The same ${ms(T.web)} of work now takes ${ms(T.web * qmul(ex.busy))}. At ${percent(0.9)} busy it would take ${ms(T.web * qmul(0.9))}.`,
+          calc: {
+            formula: 'Busy = load ÷ capacity. Time per request = base time ÷ (1 − busy).',
+            rows: [
+              { label: 'How busy', work: `${rate(ex.load)} ÷ ${rate(ex.cap)}`, result: `${ex.busy}, or ${percent(ex.busy)} busy` },
+              { label: 'Time per request', work: `${ms(T.web)} ÷ (1 − ${ex.busy})`, result: ms(T.web * qmul(ex.busy)) },
+            ],
+            result: `The same ${ms(T.web)} of work now takes ${ms(T.web * qmul(ex.busy))}. At ${percent(0.9)} busy it would take ${ms(T.web * qmul(0.9))}.`,
+          },
         },
         {
           figure: 'figQueue',
@@ -214,12 +217,18 @@ const lesson = {
       title: 'How much traffic is coming?',
       hook: 'Marketing says "a million users". Servers are sized in requests per second. In an interview you have to turn one into the other, out loud.',
       body: [
-        { p: '<b>Requests per second = daily users × requests per user per day ÷ 86,400</b> (the seconds in a day). Traffic is not flat, so plan for a <b>peak of about 2× the average</b>. Take a photo app with 40 million daily users, each loading 30 pages a day:' },
-        { example: [
-          '40,000,000 users × 30 requests a day = 1,200,000,000 requests a day',
-          '1,200,000,000 requests ÷ 86,400 s ≈ 13,900 req/s on average',
-          '13,900 req/s × 2 ≈ 28,000 req/s at peak',
-        ] },
+        { p: 'Traffic is not flat, so plan for a <b>peak of about 2× the average</b>. Take a photo app with 40 million daily users, each loading 30 pages a day:' },
+        {
+          calc: {
+            formula: 'Requests per second = daily users × requests per user per day ÷ 86,400 (the seconds in a day).',
+            rows: [
+              { label: 'Requests a day', work: '40 million users × 30 requests a day', result: '1.2 billion requests a day' },
+              { label: 'Average', work: '1.2 billion requests ÷ 86,400 s', result: '13,900 req/s', approx: true },
+              { label: 'Peak', work: '13,900 req/s × 2', result: '28,000 req/s', approx: true },
+            ],
+            result: 'Plan for about 28,000 req/s at peak.',
+          },
+        },
         { p: 'Round hard. For a first guess call a day 100,000 seconds: the answer comes out about 14% low, which is fine. Say each assumption, and put a unit on every number.' },
         { assume: '"Peak is about 2× the average" is a rule of thumb, not a law. Say it as an assumption.' },
       ],
@@ -227,9 +236,9 @@ const lesson = {
         kind: 'turn',
         q: 'A recipe site has 5 million daily users, each making 10 requests a day. Roughly what is the peak?',
         options: [
-          { t: 'About 580 req/s', why: 'That is the average: 50,000,000 ÷ 86,400 ≈ 580. Double it for the peak.' },
-          { t: 'About 1,160 req/s', right: true, why: '5,000,000 × 10 ÷ 86,400 ≈ 580 on average, × 2 ≈ 1,160 at peak.' },
-          { t: 'About 50,000,000 req/s', why: 'That is requests per day. Divide by the 86,400 seconds in a day.' },
+          { t: 'About 580 req/s', why: 'That is the average: 50 million ÷ 86,400 ≈ 580. Double it for the peak.' },
+          { t: 'About 1,160 req/s', right: true, why: '5 million × 10 ÷ 86,400 ≈ 580 on average, × 2 ≈ 1,160 at peak.' },
+          { t: 'About 50 million req/s', why: 'That is requests per day. Divide by the 86,400 seconds in a day.' },
         ],
       },
       takeaway: 'Daily users × requests each ÷ 86,400, then × 2 for the peak.',

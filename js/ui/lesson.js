@@ -19,14 +19,22 @@ function blockHtml(b) {
   if ('figure' in b) {
     return html`<figure class="fig"><svg id="${b.figure}" role="img" aria-label="${b.alt}"></svg><figcaption>${raw(b.caption)}</figcaption></figure>`;
   }
-  if ('example' in b) {
-    return html`<div class="example"><p class="label">Worked example</p><p class="calc">${b.example.map((line, i) => html`${i ? raw('<br>') : ''}${raw(line)}`)}</p>${b.note ? html`<p>${raw(b.note)}</p>` : ''}</div>`;
-  }
+  if ('calc' in b) return calcHtml(b.calc);
   const { head, rows, num } = b.table; // the only type left (validate-lesson.js checks the shapes)
   const cell = (c, i) => html`<td${num && i > 0 ? raw(' class="n"') : ''}>${raw(c)}</td>`;
   return html`<div class="tbl-wrap"><table class="t">
     <thead><tr>${head.map((h) => (h ? html`<th>${raw(h)}</th>` : raw('<td></td>')))}</tr></thead>
     <tbody>${rows.map((r) => html`<tr>${r.map(cell)}</tr>`)}</tbody></table></div>${caption(b.caption)}`;
+}
+/** A worked calculation (`Calc`): the formula, one operation per row (label, working, result), then the answer. */
+function calcHtml({ formula, rows, result }) {
+  const row = (r) => html`<li><span class="calc-label">${raw(r.label)}</span> <span class="calc-work">${raw(r.work)}</span> <span class="calc-result">${r.approx ? '≈' : '='} ${raw(r.result)}</span></li>`;
+  return html`<div class="calc-box">
+    <p class="label">Worked example</p>
+    <p class="calc-formula">${raw(formula)}</p>
+    <ul class="calc-rows">${rows.map(row)}</ul>
+    <p class="calc-answer">${raw(result)}</p>
+  </div>`;
 }
 const caption = (text) => (text ? html`<p class="assume">${raw(text)}</p>` : '');
 
