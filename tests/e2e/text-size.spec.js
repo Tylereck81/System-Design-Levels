@@ -64,8 +64,8 @@ test.describe('lesson type scale', () => {
     expect(await fontSize(page, '.fig figcaption')).toBe(14);
   });
 
-  // A one-page lesson's column holds up to 75 characters a line; every other lesson keeps 60.
-  for (const { id, kind, max } of [{ id: 1, kind: 'one-page', max: 75 }, { id: 2, kind: 'step', max: 60 }]) {
+  // A one-page lesson's 760 px column holds up to 105 characters a line (42.2em; 24em holds 60); every other lesson keeps 60.
+  for (const { id, kind, max } of [{ id: 1, kind: 'one-page', max: 105 },{ id: 2, kind: 'step', max: 60 }]) {
     test(`laptop: no line of body text in a ${kind} lesson (Level ${id}) is longer than ${max} characters`, async ({ page }) => {
       await freshPage(page, routeHash(id, 'lesson'));
       await expect(page.locator(kind === 'one-page' ? '#pageLesson' : '#stepLesson')).toBeAttached();
