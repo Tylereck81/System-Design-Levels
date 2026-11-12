@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures.js';
 import { registerCommonTests } from '../shared-checks.js';
-import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, openMission, selectNode, calm, pressEnterOn } from '../helpers.js';
+import { freshPage, savedKeys, fastForward, playFor, state, logText, reloadGame, trackErrors, openMission, selectNode, calm, pressEnterOn } from '../helpers.js';
 
 // Level 3: database replication.
 // The level starts with Users, DNS, two load balancers, two XL web servers and one XL primary database ('b').
@@ -84,7 +84,7 @@ test.describe('Level 3 · playthrough', () => {
   test('progress is saved under its own key and does not touch Level 2', async ({ page }) => {
     await freshPage(page, '#level-3/build');
     await addReplicas(page, ['XL']);
-    expect(await page.evaluate(() => Object.keys(localStorage))).toEqual(['sdl-level3-v1']);
+    expect(await savedKeys(page)).toEqual(['sdl-level3-v1']);
     await page.goto('about:blank');
     await page.goto('/#level-2/build');
     await page.waitForFunction(() => !!window.__sdl);

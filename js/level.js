@@ -11,6 +11,27 @@ export const lessonMinutes = (lesson) => (lesson.start?.minutes ?? 0) + lesson.p
 // event: something happens (e.g. a price change); only its outcome is checked.
 // day: plays 24 hours of traffic in `secs` seconds; it counts when its outcome held all day.
 const EXP_KINDS = ['crash', 'spike', 'event', 'day'];
+/** The order every mission is played in; a guide step names the one it belongs to (`GuideStep.word`). */
+export const GUIDE_ORDER = ['Add', 'Connect', 'Edit', 'Play', 'Read'];
+/** The most words a guide note may have, its title included. */
+export const GUIDE_WORDS = 35;
+const words = (t) => t.split(/\s+/).filter(Boolean).length;
+
+/** Problems with mission `i`'s guide steps (types.js `GuideStep`). A text written as a function is checked by the level tests. */
+function guideProblems(guide, i) {
+  if (!Array.isArray(guide) || !guide.length) return [`Mission ${i + 1} guide must be a list of steps`];
+  const problems = [];
+  guide.forEach((st, k) => {
+    const at = `Mission ${i + 1} guide step ${k + 1}`;
+    if (!GUIDE_ORDER.includes(st.word)) problems.push(`${at} has word "${st.word}", not one of ${GUIDE_ORDER.join(', ')}`);
+    if (typeof st.title !== 'string' || !st.title) problems.push(`${at} needs a title`);
+    if (typeof st.text !== 'string' && typeof st.text !== 'function') problems.push(`${at} needs a text`);
+    if (typeof st.at !== 'string' && typeof st.at !== 'function') problems.push(`${at} needs an "at" selector`);
+    if (st.done !== undefined && typeof st.done !== 'function') problems.push(`${at} has a "done" that is not a function`);
+    if (typeof st.text === 'string' && words(`${st.title} ${st.text}`) > GUIDE_WORDS) problems.push(`${at} is over ${GUIDE_WORDS} words`);
+  });
+  return problems;
+}
 
 /** Problems that would make a level misbehave silently (a step lesson's own checks are in validate-lesson.js). An empty list means the level is fine. */
 export function validateLevel(data) {
@@ -25,6 +46,7 @@ export function validateLevel(data) {
   }
   data.missions.forEach((M, i) => {
     for (const g of M.goals) if (g.type === 'exp' && !ids.has(g.id)) problems.push(`Mission ${i + 1} goal "${g.id}" has no matching experiment`);
+    if (M.guide !== undefined) problems.push(...guideProblems(M.guide, i));
   });
   return problems;
 }

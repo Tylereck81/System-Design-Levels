@@ -477,6 +477,21 @@ details.hint p { margin: 8px 0 0; color: var(--ink-2); }
 .result p { margin: 0 0 12px; color: var(--ink-2); }
 .result .row { display: flex; gap: 8px; flex-wrap: wrap; }
 
+/* The first-mission guide (js/ui/guide.js places it). It takes no clicks except on its buttons, so it never blocks the
+   page; the ring outlines what it points at. */
+.guide { position: fixed; z-index: 45; box-sizing: border-box; background: var(--surface); color: var(--ink); border: 2px solid var(--accent); border-radius: 12px; padding: 12px 14px; box-shadow: 0 8px 24px rgba(0,0,0,.18); pointer-events: none; font-size: 14.5px; line-height: 1.45; }
+.guide:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.guide p { margin: 0 0 8px; }
+.guide-step { font: 500 13px var(--f-mono); color: var(--ink-3); }
+.guide-order { font: 13px var(--f-mono); color: var(--ink-2); }
+.guide-order b { font-weight: 700; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.guide-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.guide button, .guide-show { pointer-events: auto; min-height: 44px; }
+.mission > .guide-show { margin-bottom: 12px; }
+.guide-ring { position: fixed; z-index: 44; pointer-events: none; border: 3px solid var(--accent); border-radius: 12px; }
+@media (prefers-reduced-motion: no-preference) {
+  .guide { transition: left .2s ease, top .2s ease; }
+}
 /* Laptop: the centre column is narrow, so the dashboard numbers are smaller */
 @media (min-width: 1181px) and (max-width: 1400px) {
   .metric { padding: 8px 7px 9px; }

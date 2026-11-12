@@ -5,7 +5,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import level from '../../levels/level-01.js';
 import { lessonWarnings } from '../../js/validate-lesson.js';
-import { SIZES, COMPONENTS, sizesOf } from '../../js/engine/catalog.js';
+import { SIZES, COMPONENTS, sizesOf, T } from '../../js/engine/catalog.js';
+import { validateLevel, GUIDE_WORDS } from '../../js/level.js';
 
 const { intro, parts } = level.lesson;
 const [first, second, third] = level.missions;
@@ -67,4 +68,39 @@ test('Mission 2\'s hint says "takes 4× as long"', () => {
 
 test('numbers of a million or more are written with the word ("40 million")', () => {
   assert.deepEqual(lessonWarnings(level), []);
+});
+
+// The first-mission guide (Mission 1's `guide`, shown by js/ui/guide.js).
+const guide = first.guide;
+/** Each half of a step's text: a text written as a function is read with the Web server selected and not. */
+const guideTexts = (st) => (typeof st.text === 'string' ? [st.text] : [{ type: 'web' }, null].map((sel) => st.text({ sel, nodes: [], running: false, g: null })));
+
+test('the guide has seven notes, each at most GUIDE_WORDS words with its title', () => {
+  assert.equal(guide.length, 7);
+  for (const st of guide) for (const text of guideTexts(st)) {
+    assert.ok(`${st.title} ${text}`.split(/\s+/).length <= GUIDE_WORDS, `"${st.title}" is over ${GUIDE_WORDS} words`);
+  }
+});
+
+test('the guide\'s step titles are the lesson\'s "How to use the Build screen" steps', () => {
+  const lesson = JSON.stringify(level.lesson);
+  for (const title of ['Add a part', 'Connect two parts', 'Change a part', 'Press Play']) {
+    assert.ok(lesson.includes(`<b>${title}.</b>`), `the lesson names "${title}"`);
+    assert.ok(guide.some((st) => st.title === title), `the guide names "${title}"`);
+  }
+});
+
+test('the last note reads its numbers from the level\'s targets and the hold time', () => {
+  assert.match(guide[6].text, new RegExp(`at least ${level.targets.servedPct}% and Response under ${level.targets.latencyMs} ms for ${T.hold} seconds`));
+});
+
+test('validateLevel reports a broken guide', () => {
+  const broken = { ...level, missions: [{ ...first, guide: [{ word: 'Build', title: '', text: 'x '.repeat(40), at: 3, done: true }] }, second, third] };
+  assert.deepEqual(validateLevel(broken), [
+    'Mission 1 guide step 1 has word "Build", not one of Add, Connect, Edit, Play, Read',
+    'Mission 1 guide step 1 needs a title',
+    'Mission 1 guide step 1 needs an "at" selector',
+    'Mission 1 guide step 1 has a "done" that is not a function',
+    `Mission 1 guide step 1 is over ${GUIDE_WORDS} words`,
+  ]);
 });

@@ -10,6 +10,7 @@ import { hooks } from '../hooks.js';
 import { anyOn } from '../engine/experiments.js';
 import { level, inParts } from '../level.js';
 import { renderMock, stressOpen } from './mock.js';
+import { guideButton } from './guide.js';
 
 /** Why mission i is not open yet, in words. */
 const lockedWhy = (i) => (inParts() ? `Read Part ${i + 1} of the lesson, then press Start Mission ${i + 1}.` : 'Finish the previous mission first');
@@ -85,6 +86,8 @@ function buildMission() {
     again.dataset.act = 'lesson-part'; again.dataset.mission = String(i);
     box.appendChild(again);
   }
+  const showGuide = guideButton(i);
+  if (showGuide) box.appendChild(showGuide);
   const facts = el('div', 'facts');
   const trafficTxt = trafficHidden(M) ? '?' : fmt(M.qps);
   setHtml(facts, html`<div><b>${trafficTxt}</b><span>req/s at peak</span></div><div><b>${M.budget ? '$' + fmt(M.budget) : '—'}</b><span>monthly budget</span></div><div><b>&lt;${TARGET_MS} ms</b><span>response</span></div>`);

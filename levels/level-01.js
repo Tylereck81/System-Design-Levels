@@ -440,6 +440,30 @@ export default {
       ],
       hint: 'Drag DNS and a Web server onto the canvas. Then drag from the + under Users onto each of them (or select Users and use Connections in the inspector), and press Play.',
       takeaway: 'One server ran everything. DNS returned the IP once, then HTTP requests went straight to your server.',
+      // The first-mission guide (js/ui/guide.js). Titles are the lesson's "How to use the Build screen" steps.
+      guide: [
+        { word: 'Add', at: '#missionCard', title: 'Your goals', text: 'The mission is done when every line here is ticked. You always work in the same order: add, connect, edit, play, read.' },
+        { word: 'Add', at: '#palList', title: 'Add a part', text: 'Drag DNS from this list onto the canvas, or tap it.', done: (s) => s.nodes.some((n) => n.type === 'dns') },
+        { word: 'Add', at: '#palList', title: 'Add a part', text: 'Now add a Web server the same way.', done: (s) => s.nodes.some((n) => n.type === 'web') },
+        {
+          word: 'Connect', at: (s) => `#cv .handle[data-handle="${s.g.users?.id}"]`, title: 'Connect two parts',
+          text: 'Drag from the + under Users onto DNS. Then do the same onto the Web server. An arrow means "sends requests to".',
+          done: (s) => s.g.hasDNS && !!webOf(s.g),
+        },
+        {
+          // Once the Web server is selected, the note moves to the edit box.
+          word: 'Edit', title: 'Change a part',
+          at: (s) => (s.sel?.type === 'web' ? '#inspCard' : `#cv .node[data-node="${s.nodes.find((n) => n.type === 'web')?.id}"]`),
+          text: (s) => (s.sel?.type === 'web'
+            ? 'This box edits the part you selected: its size and its connections. Nothing needs changing in this mission.'
+            : 'Click the Web server on the canvas.'),
+        },
+        { word: 'Play', at: '#playBtn', title: 'Press Play', text: 'Traffic starts. Each dot is a request or its response.', done: (s) => s.running },
+        {
+          word: 'Read', at: '#hud', title: 'Read the numbers',
+          text: `Served must stay at least ${targets.servedPct}% and Response under ${targets.latencyMs} ms for ${T.hold} seconds. If a goal stays unticked, change the design and press Play again.`,
+        },
+      ],
     },
     {
       title: 'Separate the data tier', ref: 'Two tiers', qps: traffic[1], budget: budgets[1],

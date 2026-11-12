@@ -7,9 +7,14 @@ import { expect } from '@playwright/test';
 
 export const QUIZ_KEY_L1 = [2, 0, 2, 3, 3, 1, 1, 2, 1, 0];
 
-/** Open the game with empty saved progress, on Level 1's lesson unless `hash` names another page ('' is the home page). */
-export async function freshPage(page, hash = '#lesson') {
+/**
+ * Open the game with empty saved progress, on Level 1's lesson unless `hash` names another page ('' is the home page).
+ * The first-mission guide counts as finished before every page load, so it never shows (it would add notes over
+ * Level 1, Mission 1); `guide: true` leaves it to show as for a first-time player (tests/e2e/guide.spec.js).
+ */
+export async function freshPage(page, hash = '#lesson', { guide = false } = {}) {
   await installCapture(page);
+  if (!guide) await page.addInitScript(() => { try { if (!localStorage.getItem('sdl-guide-v1')) localStorage.setItem('sdl-guide-v1', 'finished'); } catch { /* storage blocked: the guide shows, as for a player */ } });
   // Each test gets a new browser context, so a page that has not opened anything yet has no saved data and the game
   // loads once. Otherwise clear it on the game's own page first.
   const { origins } = await page.context().storageState();
@@ -22,6 +27,9 @@ export async function freshPage(page, hash = '#lesson') {
   await page.goto('/' + hash);
   await page.waitForFunction(() => !!window.__sdl || document.getElementById('view-home')?.hidden === false); // a level, or the home page
 }
+
+/** The keys in browser storage, without the one freshPage sets itself (the guide marked finished). */
+export const savedKeys = (page) => page.evaluate(() => Object.keys(localStorage).filter((k) => k !== 'sdl-guide-v1'));
 
 /** Reload the page and wait until the game has started (it loads its level file first). */
 export async function reloadGame(page) {

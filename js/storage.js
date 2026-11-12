@@ -10,3 +10,8 @@ export function readStorage(key) {
 export function writeStorage(key, value) {
   try { localStorage.setItem(key, value); return true; } catch { return false; }
 }
+
+/** Forget what is stored under `key`. */
+export function removeStorage(key) {
+  try { localStorage.removeItem(key); } catch { /* nothing stored that can be read either */ }
+}

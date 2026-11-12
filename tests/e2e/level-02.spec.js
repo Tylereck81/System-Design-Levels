@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures.js';
 import { registerCommonTests, registerLessonTests } from '../shared-checks.js';
-import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, openMission, pressEnterOn } from '../helpers.js';
+import { freshPage, savedKeys, fastForward, playFor, state, logText, reloadGame, trackErrors, openMission, pressEnterOn } from '../helpers.js';
 
 // Level 2: load balancer and horizontal scaling.
 
@@ -93,7 +93,7 @@ test.describe('Level 2 · playthrough', () => {
     await freshPage(page, '#level-2/build');
     await build(page);
     await page.evaluate(() => window.__sdl.afterChange());
-    expect(await page.evaluate(() => Object.keys(localStorage))).toEqual(['sdl-level2-v1']);
+    expect(await savedKeys(page)).toEqual(['sdl-level2-v1']);
     await page.goto('about:blank');
     await page.goto('/#build');
     await page.waitForFunction(() => !!window.__sdl);

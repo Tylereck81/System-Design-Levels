@@ -142,6 +142,26 @@
  * @property {number} [hot]         share of requests for the hot key (0–1)
  * @property {number} [nonRel]      share of data that is not relational (0–1)
  * @property {{ keys: number, rate: number }} [bot]  bot keys, each sending `rate` requests per second
+ * @property {GuideStep[]} [guide]  notes that walk a first-time player through the mission (js/ui/guide.js)
+ */
+
+/**
+ * What a guide step reads to decide where it points, what it says and whether it is done.
+ * @typedef {object} GuideView
+ * @property {GraphView} g
+ * @property {CanvasNode[]} nodes     every component on the canvas
+ * @property {CanvasNode | null} sel  the selected component
+ * @property {boolean} running        the simulation has been started for this mission
+ */
+/**
+ * One note of a mission's guide. Shown while it is the first step not done. Without `done` it is done when the
+ * player presses Next (Done on the last step).
+ * @typedef {object} GuideStep
+ * @property {'Add' | 'Connect' | 'Edit' | 'Play' | 'Read'} word  where the step sits in the order every mission uses
+ * @property {string} title           the note's first words, the lesson's name for the step
+ * @property {string | ((s: GuideView) => string)} text
+ * @property {string | ((s: GuideView) => string)} at  CSS selector of what the note points at
+ * @property {(s: GuideView) => boolean} [done]
  */
 
 /**
