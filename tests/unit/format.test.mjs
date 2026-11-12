@@ -1,7 +1,7 @@
 // js/format.js: fmt rounds to a whole number and groups thousands with commas; percent, ms and rate build on it.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fmt, percent, ms, rate } from '../../js/format.js';
+import { fmt, count, percent, ms, rate } from '../../js/format.js';
 
 test('thousands are grouped with commas', () => {
   assert.equal(fmt(999), '999');
@@ -49,4 +49,16 @@ test('ms rounds to one decimal place', () => {
 test('rate rounds to whole requests and groups thousands', () => {
   assert.equal(rate(833.3), '833 req/s');
   assert.equal(rate(1204), '1,204 req/s');
+});
+
+test('count: a million or more is written with the word and never rounded; less is written as fmt writes it', () => {
+  assert.equal(count(999999), '999,999');
+  assert.equal(count(1000000), '1 million');
+  assert.equal(count(1500000), '1.5 million');
+  assert.equal(count(40000000), '40 million');
+  assert.equal(count(1234567), '1.234567 million');
+  assert.equal(count(999999999), '999.999999 million');
+  assert.equal(count(1200000000), '1.2 billion');
+  assert.equal(count(3500000000000), '3.5 trillion');
+  assert.equal(count(86400), '86,400');
 });

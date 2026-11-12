@@ -3,6 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import level from '../../levels/level-01.js';
+import { lessonWarnings } from '../../js/validate-lesson.js';
 
 test('"Traffic triples": Mission 2 has three times the traffic of Mission 1', () => {
   assert.equal(level.missions[1].qps, 3 * level.missions[0].qps);
@@ -12,4 +13,8 @@ test('"Traffic triples": Mission 2 has three times the traffic of Mission 1', ()
 test('"a million users": Mission 3 is built on 1,000,000 daily users', () => {
   assert.match(level.missions[2].story, /1,000,000 daily active users/);
   assert.match(level.lesson.steps[6].hook, /a million users/);
+});
+
+test('numbers of a million or more are written with the word ("40 million")', () => {
+  assert.deepEqual(lessonWarnings(level), []);
 });

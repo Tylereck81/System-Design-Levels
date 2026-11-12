@@ -198,13 +198,20 @@
  */
 
 /**
+ * A worked calculation: the formula in words, one operation per row, then the answer as a sentence.
+ * A row is shown as "label | work | = result"; `approx` shows "≈" where the result is rounded.
+ * Every `work` and `result` carries a unit.
+ * @typedef {{ formula: string, rows: { label: string, work: string, result: string, approx?: boolean }[], result: string }} Calc
+ */
+
+/**
  * One block of a lesson step's body. Exactly one of these keys names its type; js/validate-lesson.js lists them.
- * Text may hold inline markup (`<b>`, `<code>`). `figure` names an svg the level's drawFigures draws; `example` is
- * worked arithmetic, one line per step; `assume` states a rule of the game.
+ * Text may hold inline markup (`<b>`, `<code>`). `figure` names an svg the level's drawFigures draws; `calc` is
+ * a worked calculation (`Calc`); `assume` states a rule of the game.
  * @typedef {{ p: string } | { ul: string[] } | { ol: string[] }
  *   | { table: { head: string[], rows: string[][], num?: boolean }, caption?: string }
  *   | { code: string, caption?: string }
- *   | { example: string[], note?: string }
+ *   | { calc: Calc }
  *   | { figure: string, alt: string, caption: string }
  *   | { assume: string }} LessonBlock
  */

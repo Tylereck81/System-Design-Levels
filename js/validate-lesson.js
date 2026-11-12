@@ -2,7 +2,7 @@
 // The word limits are the rule: when a lesson cannot meet one, raise it with the owner; never loosen the check.
 
 /** Blocks whose text counts towards a step's word limit. */
-const PROSE = ['p', 'ul', 'ol', 'example', 'assume'];
+const PROSE = ['p', 'ul', 'ol', 'calc', 'assume'];
 /** Blocks a step may have one of; their text is not counted. */
 const VISUAL = ['table', 'code', 'figure'];
 
@@ -10,6 +10,7 @@ export const LIMITS = {
   minSteps: 5, maxSteps: 8,
   promiseWords: 60, hookWords: 50, bodyWords: 120,
   minChecks: 3, minOptions: 2, maxOptions: 3,
+  maxCalcRows: 4,
 };
 
 const isText = (v) => typeof v === 'string' && v.trim() !== '';
@@ -30,7 +31,7 @@ const SHAPES = {
   ol: { test: (b) => isTextList(b.ol), needs: 'a list of text items' },
   table: { test: (b) => isTable(b.table) && isOptionalText(b.caption), needs: 'a head and rows with a cell for each heading' },
   code: { test: (b) => isText(b.code) && isOptionalText(b.caption), needs: 'the code as text' },
-  example: { test: (b) => isTextList(b.example) && isOptionalText(b.note), needs: 'a list of lines, and a note only if it is text' },
+  calc: { test: (b) => isObject(b.calc) && isText(b.calc.formula) && Array.isArray(b.calc.rows) && isText(b.calc.result), needs: 'a formula, a list of rows and a result sentence' },
   figure: { test: (b) => isText(b.figure) && isText(b.alt) && isText(b.caption), needs: 'an svg id, alt text and a caption' },
   assume: { test: (b) => isText(b.assume), needs: 'text' },
 };
@@ -46,10 +47,10 @@ const isOneSentence = (text) => {
   return /[.!?]$/.test(s) && !/[.!?]\s/.test(s.slice(0, -1));
 };
 
-/** The text of a prose block, one string per line or item. */
+/** The text of a prose block that counts towards the word limit, one string per line or item. */
 function proseOf(block, type) {
   if (type === 'ul' || type === 'ol') return block[type];
-  if (type === 'example') return [...block.example, block.note ?? ''];
+  if (type === 'calc') return [block.calc.formula, block.calc.result]; // its rows are a grid, like a table's cells
   return [block[type]];
 }
 
@@ -98,6 +99,21 @@ function textProblems(step) {
   return problems;
 }
 
+/** A working or a result names what its numbers count: it has a word ("req/s", "servers"), a % or a $. */
+const hasUnit = (text) => /[\p{L}%$]/u.test(plain(text));
+
+/** Problems with a calculation's rows: how many there are, and each row's label, working and result. */
+function calcProblems(calc) {
+  const problems = [];
+  if (calc.rows.length < 1 || calc.rows.length > LIMITS.maxCalcRows) problems.push(`the calculation has ${calc.rows.length} rows, not 1 to ${LIMITS.maxCalcRows}`);
+  calc.rows.forEach((row, i) => {
+    const missing = ['label', 'work', 'result'].filter((part) => !isText(row?.[part]));
+    if (missing.length) { problems.push(`calculation row ${i + 1} needs its ${missing.join(' and ')}`); return; }
+    for (const part of ['work', 'result']) if (!hasUnit(row[part])) problems.push(`calculation row ${i + 1}: the ${part} "${row[part]}" has no unit`);
+  });
+  return problems;
+}
+
 /** The block's type, or null when it has none or more than one. */
 function blockType(block) {
   const types = isObject(block) ? BLOCK_TYPES.filter((t) => t in block) : [];
@@ -109,7 +125,7 @@ const keysOf = (block) => (isObject(block) && Object.keys(block).join(', ')) || 
 function bodyProblems(body, drawn) {
   const blocks = Array.isArray(body) ? body : [], problems = [];
   if (!blocks.length) problems.push('needs a body');
-  let words = 0, visuals = 0;
+  let words = 0, visuals = 0, calcs = 0;
   for (const block of blocks) {
     const type = blockType(block);
     if (!type) {
@@ -119,10 +135,12 @@ function bodyProblems(body, drawn) {
     if (!SHAPES[type].test(block)) { problems.push(`${type} block needs ${SHAPES[type].needs}`); continue; }
     if (PROSE.includes(type)) words += proseOf(block, type).reduce((n, line) => n + wordCount(line), 0);
     if (VISUAL.includes(type)) visuals++;
+    if (type === 'calc') { calcs++; problems.push(...calcProblems(block.calc)); }
     if (type === 'figure' && drawn && !drawn.has(block.figure)) problems.push(`figure "${block.figure}" is not drawn by the level's drawFigures`);
   }
   if (words > LIMITS.bodyWords) problems.push(`the body has ${words} words, more than ${LIMITS.bodyWords}`);
   if (visuals > 1) problems.push(`has ${visuals} tables, code samples or figures; at most one`);
+  if (calcs > 1) problems.push(`has ${calcs} calculations; at most one`);
   return problems;
 }
 
@@ -187,4 +205,25 @@ export function validateLesson(level) {
     problems.push(...stepProblems.map((p) => `step ${i + 1}: ${p}`));
   });
   return [...problems, ...coverageProblems(lesson, steps, missions, questions)];
+}
+
+/** Every piece of text under `value`, except code samples (shown as written) and figure ids. */
+function textsIn(value, key) {
+  if (typeof value === 'string') return key === 'code' || key === 'figure' ? [] : [value];
+  if (Array.isArray(value)) return value.flatMap((v) => textsIn(v, key));
+  return isObject(value) ? Object.entries(value).flatMap(([k, v]) => textsIn(v, k)) : [];
+}
+
+/** Whole numbers of a million or more written in digits ("1,200,000"); digits after a decimal point do not count. */
+const bigNumbers = (text) => (plain(text).match(/\d(?:[\d,]*\d)?(?:\.\d+)?/g) ?? []).filter((n) => n.split('.')[0].replaceAll(',', '').length >= 7);
+
+/**
+ * Advice on a level's step lesson that is not a problem: a number of a million or more is easier to read with the
+ * word ("40 million", "1.2 billion"). An id or a similar long number may stay as it is, so this never fails a level.
+ */
+export function lessonWarnings(level) {
+  const { steps, ...rest } = level.lesson;
+  const places = [['', rest], ...(Array.isArray(steps) ? steps : []).map((step, i) => [`step ${i + 1}: `, step])];
+  return places.flatMap(([where, value]) => textsIn(value).flatMap(bigNumbers)
+    .map((n) => `${where}${n} is written in digits; use the word ("40 million", "1.2 billion")`));
 }

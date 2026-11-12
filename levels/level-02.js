@@ -9,7 +9,7 @@ import { lbText, levelComplete } from './shared/text.js';
 import { ONE_DNS, TWO_LBS } from './shared/limits.js';
 import { failText, passText } from './shared/quiz.js';
 import { LB_PUBLIC_IP, WEB_PRIVATE_IPS } from './shared/addresses.js';
-import { fmt, percent, ms, rate } from '../js/format.js';
+import { fmt, count, percent, ms, rate } from '../js/format.js';
 import { SIZES, T, COMPONENTS, SLOWDOWN_CAP_FROM, qmul } from '../js/engine/catalog.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
@@ -132,12 +132,15 @@ const lesson = {
         { p: 'The load balancer sends each server a request every few seconds: a <b>health check</b>. A server that stops answering gets no more traffic, and the healthy ones share its load.' },
         { p: `The servers left must then carry the whole peak. Plan for <b>N + 1</b>: N servers for the peak, plus one spare. At a peak of ${rate(spare.peak)} on M servers:` },
         {
-          example: [
-            `${rate(spare.peak)} ÷ ${rate(spare.cap)} per server = ${spare.peak / spare.cap} → ${spare.n} servers carry the peak`,
-            `${spare.n} servers + 1 spare = ${spare.n + 1} servers`,
-            `One crashes: ${spare.n} servers × ${rate(spare.cap)} = ${rate(spare.left)}, still above ${rate(spare.peak)}`,
-          ],
-          note: `Those ${spare.n} run ${percent(spare.peak / spare.left)} busy: slower, but nothing fails.`,
+          calc: {
+            formula: 'Servers = peak ÷ what one server carries, rounded up, + 1 spare.',
+            rows: [
+              { label: 'For the peak', work: `${rate(spare.peak)} ÷ ${rate(spare.cap)} per server`, result: `${spare.peak / spare.cap}, so ${spare.n} servers` },
+              { label: 'Add the spare', work: `${spare.n} servers + 1 spare`, result: `${spare.n + 1} servers` },
+              { label: 'One crashes', work: `${spare.n} servers × ${rate(spare.cap)}`, result: rate(spare.left) },
+            ],
+            result: `With one down, the pool still carries ${rate(spare.left)}, above the ${rate(spare.peak)} peak. Those ${spare.n} run ${percent(spare.peak / spare.left)} busy: slower, but nothing fails.`,
+          },
         },
         { assume: 'Game rule: a dead server is noticed at once. Real health checks take a few seconds, and some requests fail meanwhile.' },
       ],
@@ -193,15 +196,18 @@ const lesson = {
         ],
       },
       body: [
-        { p: `Estimate first, as in Level 1: <b>daily users × requests per user per day ÷ 86,400</b>, then × 2 for the peak. Size the pool with N + 1. Then check the database: every request still needs ${queriesPerRequest} query from it. Take a ticket site with ${fmt(est.users)} daily users, each making ${est.each} requests a day:` },
+        { p: `Estimate the peak first, as in Level 1. Size the pool with N + 1. Then check the database: every request still needs ${queriesPerRequest} query from it. Take a ticket site with ${count(est.users)} daily users, each making ${est.each} requests a day:` },
         {
-          example: [
-            `${fmt(est.users)} users × ${est.each} requests a day = ${fmt(est.day)} requests a day`,
-            `${fmt(est.day)} requests ÷ 86,400 s ≈ ${rate(est.avg)} on average, × 2 ≈ ${rate(est.peak)} at peak`,
-            `${rate(est.peak)} ÷ ${rate(S.cap)} per S server ≈ ${(est.peak / S.cap).toFixed(1)} → ${est.n} servers, + 1 spare = ${est.n + 1} servers`,
-            `Database: ${fmt(Math.round(est.queries))} queries/s is more than size ${est.tooSmall} handles (${fmt(SIZES[est.tooSmall].cap)}), so it needs size ${est.dbSize} (${fmt(SIZES[est.dbSize].cap)})`,
-          ],
-          note: 'The web tier grew by adding servers. The database could only move up a size.',
+          calc: {
+            formula: 'Peak = daily users × requests per user per day ÷ 86,400 × 2. Servers = peak ÷ what one server carries, rounded up, + 1 spare.',
+            rows: [
+              { label: 'Requests a day', work: `${count(est.users)} users × ${est.each} requests a day`, result: `${count(est.day)} requests a day` },
+              { label: 'Average', work: `${count(est.day)} requests ÷ 86,400 s`, result: rate(est.avg), approx: true },
+              { label: 'Peak', work: `${rate(est.avg)} × 2`, result: rate(est.peak), approx: true },
+              { label: 'Web servers', work: `${rate(est.peak)} ÷ ${rate(S.cap)} per S server`, result: `${(est.peak / S.cap).toFixed(1)}, so ${est.n} servers, and ${est.n + 1} with the spare`, approx: true },
+            ],
+            result: `The database gets ${fmt(est.queries)} queries/s. Size ${est.tooSmall} handles ${fmt(SIZES[est.tooSmall].cap)} queries/s, so it needs size ${est.dbSize} (${fmt(SIZES[est.dbSize].cap)} queries/s). The web tier grew by adding servers; the database could only move up a size.`,
+          },
         },
       ],
       takeaway: 'Estimate the peak, size the pool with a spare, then check the one thing every request still shares: the database.',
@@ -245,11 +251,16 @@ const lesson = {
       body: [
         { p: 'The site is down only when <b>every</b> copy is down at the same moment. If the copies fail <b>independently</b>, multiply their chances of being down:' },
         {
-          example: [
-            `One server: down ${percent(one.down)} of the time = ${(one.down * HOURS_A_YEAR).toFixed(2)} hours a year`,
-            `Both down at once: ${percent(one.down)} × ${percent(one.down)} = ${percent(one.bothDown)} of the time`,
-            `At least one up: 100% − ${percent(one.bothDown)} = ${percent(1 - one.bothDown)} → about ${Math.round(one.bothDown * HOURS_A_YEAR * 3600)} seconds a year`,
-          ],
+          calc: {
+            formula: 'Chance that both are down = chance one is down × chance the other is down.',
+            rows: [
+              { label: 'One server down', work: `${percent(one.down)} of ${fmt(HOURS_A_YEAR)} hours a year`, result: `${(one.down * HOURS_A_YEAR).toFixed(2)} hours a year`, approx: true },
+              { label: 'Both down at once', work: `${percent(one.down)} × ${percent(one.down)}`, result: `${percent(one.bothDown)} of the time` },
+              { label: 'At least one up', work: `100% − ${percent(one.bothDown)}`, result: `${percent(1 - one.bothDown)} of the time` },
+              { label: 'Two servers down', work: `${percent(one.bothDown)} of ${fmt(HOURS_A_YEAR)} hours a year`, result: `${Math.round(one.bothDown * HOURS_A_YEAR * 3600)} seconds a year`, approx: true },
+            ],
+            result: `One server is down about ${(one.down * HOURS_A_YEAR).toFixed(2)} hours a year. Two are down together about ${Math.round(one.bothDown * HOURS_A_YEAR * 3600)} seconds a year.`,
+          },
         },
         { p: '"Independent" matters. Two servers on the same power supply, or updated by the same bad deploy, fail together, and the sum no longer holds.' },
         { p: 'Then follow one request through your design and name every part that has no copy. After a pool and a standby pair, one is left: the database. Level 3 deals with it.' },
