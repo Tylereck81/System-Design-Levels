@@ -1,7 +1,7 @@
 // Mission panel: brief, estimate box and goals.
 import { fmt } from '../format.js';
 import { $, el, keepFocus, html, raw, setHtml, setHtmlIfChanged } from '../dom.js';
-import { TARGET_MS, MISSIONS, HOLD, S, run, expPassed, trafficHidden } from '../state.js';
+import { TARGET_MS, MISSIONS, HOLD, S, run, expPassed, trafficHidden, mayOpen, missionOpen } from '../state.js';
 import { model } from '../engine/model.js';
 import { stopRun } from '../view/loop.js';
 import { paintControls } from './controls.js';
@@ -11,25 +11,53 @@ import { anyOn } from '../engine/experiments.js';
 import { level, inParts } from '../level.js';
 import { renderMock, stressOpen } from './mock.js';
 
-export const unlocked = (i) => i === 0 || S.done[i - 1];
+/** Why mission i is not open yet, in words. */
+const lockedWhy = (i) => (inParts() ? `Read Part ${i + 1} of the lesson, then press Start Mission ${i + 1}.` : 'Finish the previous mission first');
 export function renderMissionTabs() {
   const box = $('mtabs'); box.textContent = '';
   MISSIONS.forEach((M, i) => {
     const b = el('button', S.done[i] ? 'done' : '', (S.done[i] ? '✓ ' : '') + 'Mission ' + (i + 1)); b.type = 'button'; b.dataset.focusKey = 'mtab-' + i;
-    b.disabled = !unlocked(i);
+    b.disabled = !missionOpen(i);
     b.setAttribute('aria-current', S.mission === i ? 'true' : 'false');
-    b.title = unlocked(i) ? M.title : 'Finish the previous mission first';
+    b.title = missionOpen(i) ? M.title : lockedWhy(i);
     b.onclick = () => switchMission(i);
     box.appendChild(b);
   });
 }
 
 export function switchMission(i) {
-  if (!unlocked(i) || i === S.mission) return;
+  if (!missionOpen(i) || i === S.mission) return;
   S.mission = i;
   stopRun(true);
   hooks.afterChange(true);
   log(`Mission ${i + 1}: ${MISSIONS[i].title}. Traffic is now ${trafficHidden(MISSIONS[i]) ? 'unknown until you estimate it' : fmt(MISSIONS[i].qps) + ' req/s'}.`);
+}
+
+/**
+ * Opens mission i from its card in the lesson (with a one-page lesson, from then on it stays open) and makes it the
+ * Build tab's mission. Does nothing while the mission before it is not done; returns whether it opened.
+ */
+export function openFromLesson(i) {
+  if (!mayOpen(i)) return false;
+  if (inParts() && !S.opened[i]) {
+    S.opened[i] = true;
+    if (i === S.mission) { hooks.afterChange(); return true; } // switchMission does nothing for the mission already shown
+  }
+  switchMission(i);
+  return true;
+}
+
+/** The Build tab's notice for a mission not open yet, with a button to its card in the lesson. */
+function renderLocked(box, M, i) {
+  box.appendChild(el('p', 'label', `Mission ${i + 1} of ${MISSIONS.length}`));
+  box.appendChild(el('h2', null, M.title));
+  const p = el('p', 'locked', lockedWhy(i)); p.id = 'missionLocked'; box.appendChild(p);
+  const b = el('button', 'btn primary', `Go to Part ${i + 1}`); b.type = 'button';
+  b.dataset.act = 'lesson-mission'; b.dataset.mission = String(i);
+  box.appendChild(b);
+  setHtmlIfChanged($('mstrip'), html`<span><b>Mission ${i + 1}:</b> ${M.title}</span><span>not open yet · brief ↓</span>`);
+  $('expGroup').hidden = true;
+  paintControls();
 }
 
 export function renderMission() { keepFocus($('missionCard'), buildMission, () => $('missionCard')); }
@@ -48,9 +76,15 @@ function buildMission() {
     paintControls();
     return;
   }
+  if (!missionOpen(i)) { renderLocked(box, M, i); return; }
   box.appendChild(el('p', 'label', `Mission ${i + 1} of ${MISSIONS.length} · ${M.ref}`));
   box.appendChild(el('h2', null, M.title));
   box.appendChild(el('p', 'story', M.story));
+  if (inParts()) {
+    const again = el('button', 'linkbtn', `Read Part ${i + 1} again`); again.type = 'button';
+    again.dataset.act = 'lesson-part'; again.dataset.mission = String(i);
+    box.appendChild(again);
+  }
   const facts = el('div', 'facts');
   const trafficTxt = trafficHidden(M) ? '?' : fmt(M.qps);
   setHtml(facts, html`<div><b>${trafficTxt}</b><span>req/s at peak</span></div><div><b>${M.budget ? '$' + fmt(M.budget) : '—'}</b><span>monthly budget</span></div><div><b>&lt;${TARGET_MS} ms</b><span>response</span></div>`);
@@ -63,8 +97,11 @@ function buildMission() {
     const c = el('div', 'complete');
     const last = i === MISSIONS.length - 1;
     setHtml(c, html`<b>Mission complete.</b><p>${M.takeaway}</p>`);
-    const nb = el('button', 'btn primary', last ? 'Take the quiz →' : `Mission ${i + 2} →`); nb.type = 'button';
-    nb.onclick = () => last ? hooks.setTab('quiz') : switchMission(i + 1);
+    // With a one-page lesson the next mission opens from its part of the lesson, so until then this leads back there.
+    const toLesson = !last && !missionOpen(i + 1);
+    const nb = el('button', 'btn primary', last ? 'Take the quiz →' : toLesson ? 'Back to the lesson →' : `Mission ${i + 2} →`); nb.type = 'button';
+    if (toLesson) nb.dataset.act = 'debrief';
+    else nb.onclick = () => last ? hooks.setTab('quiz') : switchMission(i + 1);
     c.appendChild(nb); box.appendChild(c);
   } else {
     const d = el('details', 'hint');

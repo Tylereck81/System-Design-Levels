@@ -2,7 +2,7 @@
 // shell, the canvas, the mock interview, and checks every level shares. Import test and expect from ../fixtures.js.
 import { test, expect } from '../fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
-import { freshPage, reloadGame, trackErrors, buildBasic, playFor } from '../helpers.js';
+import { freshPage, openMission, reloadGame, trackErrors, buildBasic, playFor } from '../helpers.js';
 
 test.describe('App shell · header, routing, saved progress', () => {
   test('the header starts with a Home button, then names the level as plain text; Home works by keyboard', async ({ page }) => {
@@ -92,6 +92,7 @@ test.describe('App shell · header, routing, saved progress', () => {
   test('a quote, < or & in level text shows as written and adds no markup', async ({ page }) => {
     const errors = trackErrors(page);
     await freshPage(page, '#build');
+    await openMission(page, 0);
     const odd = 'A "quoted" <b>&</b> title';
     await page.evaluate(async (odd) => {
       const { MISSIONS } = await import('/js/state.js'); // the game's own module instance
@@ -121,6 +122,7 @@ test.describe('App shell · header, routing, saved progress', () => {
 test.describe('Live panels · repainted only when they change', () => {
   test('while a design plays, the HUD and goals are rewritten only when what they show changed', async ({ page }) => {
     await freshPage(page, '#level-1/build');
+    await openMission(page, 0);
     await buildBasic(page);
     await page.click('#playBtn');
     await playFor(page, 1); // the first paints swap the "—" placeholders for numbers

@@ -1,6 +1,6 @@
 // Play, experiments and reset buttons.
 import { $ } from '../dom.js';
-import { MISSIONS, EXPERIMENTS, fresh, S, ui, run, replaceState, expPassed } from '../state.js';
+import { MISSIONS, EXPERIMENTS, fresh, S, ui, run, replaceState, expPassed, missionOpen } from '../state.js';
 import { graph, model } from '../engine/model.js';
 import { paintLive } from '../view/canvas.js';
 import { stopRun } from '../view/loop.js';
@@ -9,16 +9,22 @@ import { renderInspector } from './inspector.js';
 import { paintGoals } from './mission.js';
 import { log } from './log.js';
 import { hooks } from '../hooks.js';
+import { inParts } from '../level.js';
 import { isOn, activeExps, startExp, stopExp, crashCandidates } from '../engine/experiments.js';
 
-export function paintControls() {
+/** Why the open mission cannot be played yet ({ title, label } for the Play button), or null when it can. */
+function playBlock() {
+  if (!missionOpen(S.mission)) return { title: 'Open this mission from the lesson first', label: 'Play' };
   const M = MISSIONS[S.mission];
+  return M.gate && !S.est ? { title: 'Estimate peak traffic first', label: 'Estimate first' } : null;
+}
+export function paintControls() {
   const pb = $('playBtn');
-  const blocked = !!(M.gate && !S.est);
+  const block = playBlock(), blocked = !!block;
   pb.disabled = blocked;
-  pb.title = blocked ? 'Estimate peak traffic first' : (run.playing ? 'Pause the simulation' : 'Start the simulation');
+  pb.title = block ? block.title : (run.playing ? 'Pause the simulation' : 'Start the simulation');
   $('playIcon').textContent = run.playing ? '❚❚' : '▶';
-  $('playTxt').textContent = blocked ? 'Estimate first' : (run.playing ? 'Pause' : 'Play');
+  $('playTxt').textContent = block ? block.label : (run.playing ? 'Pause' : 'Play');
   for (const exp of EXPERIMENTS) {
     const btn = $('exp-' + exp.id);
     btn.disabled = blocked;
@@ -27,8 +33,7 @@ export function paintControls() {
   }
 }
 export function togglePlay() {
-  const M = MISSIONS[S.mission];
-  if (M.gate && !S.est) return;
+  if (playBlock()) return;
   run.playing = !run.playing;
   if (run.playing) { run.everPlayed = true; run.errored = false; log(run.t === 0 ? 'Simulation started.' : 'Resumed.'); }
   else log('Paused.');
@@ -76,5 +81,5 @@ armButton($('resetBtn'), 'Clear canvas', 'Click again to clear', () => {
 armButton($('resetLevel'), 'Reset level progress', 'Click again: this clears your missions and canvas', () => {
   const keepQuiz = S.quiz, keepTab = S.tab;
   replaceState(fresh()); S.quiz = keepQuiz; S.tab = keepTab; ui.sel = null; ui.connectFrom = null;
-  stopRun(true); hooks.afterChange(true); log('Level progress reset. Mission 1 is waiting.');
+  stopRun(true); hooks.afterChange(true); log(`Level progress reset. ${inParts() ? 'Start Mission 1 from the lesson.' : 'Mission 1 is waiting.'}`);
 });

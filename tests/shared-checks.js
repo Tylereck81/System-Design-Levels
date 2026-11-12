@@ -2,7 +2,7 @@ import { test, expect } from './fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
 import { routeHash } from '../js/route.js';
 import { LEVELS } from '../levels/index.js';
-import { freshPage, selectNode } from './helpers.js';
+import { freshPage, selectNode, reloadGame } from './helpers.js';
 
 /**
  * The layout and accessibility checks every level must pass. Call it inside the level's layout describe block.
@@ -144,10 +144,13 @@ export function registerPageLessonTests({ level }) {
   const loadLevel = async () => (await LEVELS.find((l) => l.id === level).load()).default;
   const load = async () => (await loadLevel()).lesson;
   const plain = (t) => t.replace(/<[^>]*>/g, '');
-  /** Setup only: marks missions done (and checked) as a finished mission leaves them, with mission `open` open. */
+  /**
+   * Setup only: marks missions done (and checked) as a finished mission leaves them, with mission `open` open; the
+   * finished ones and `open` count as opened from the lesson.
+   */
   const finish = (page, done, open) => page.evaluate(({ done, open }) => {
     const { S } = window.__sdl;
-    done.forEach((d, i) => { S.done[i] = d; S.verified[i] = d; });
+    done.forEach((d, i) => { S.done[i] = d; S.verified[i] = d; S.opened[i] = d || i === open; });
     S.mission = open;
     window.__sdl.afterChange();
   }, { done, open });
@@ -231,13 +234,71 @@ export function registerPageLessonTests({ level }) {
     expect(await page.evaluate(() => window.__sdl.S.mission)).toBe(0);
   });
 
-  test('one-page lesson: a mission still locked opens the first one not done and says why', async ({ page }) => {
-    const lesson = await load(), last = lesson.parts.length - 1;
-    await freshPage(page, routeHash(level, 'lesson'));
-    await page.click(`.mcard[data-part="${last}"] .mcard-start [data-act="mission"]`);
+  test('one-page lesson: a mission is locked on the Build tab until its Start button in the lesson is pressed', async ({ page }) => {
+    const lesson = await load(), count = lesson.parts.length;
+    await freshPage(page, routeHash(level, 'build'));
+    await expect(page.locator('#missionLocked')).toHaveText('Read Part 1 of the lesson, then press Start Mission 1.');
+    await expect(page.locator('#playBtn')).toBeDisabled();
+    await expect(page.locator('#mtabs button')).toHaveCount(count);
+    for (const tab of await page.locator('#mtabs button').all()) await expect(tab).toBeDisabled();
+    // Its button goes to the mission's card; the next mission's Start waits for this one.
+    await page.getByRole('button', { name: 'Go to Part 1' }).click();
+    await expect(page.locator('#view-lesson')).toBeVisible();
+    await expect(page.locator('#lp-m0')).toBeFocused();
+    const next = page.locator('.mcard[data-part="1"] .mcard-start');
+    await expect(next.locator('.mcard-wait')).toHaveText('Finish Mission 1 first.');
+    await expect(next.getByRole('button', { name: 'Start Mission 2' })).toBeDisabled();
+    await page.getByRole('button', { name: 'Start Mission 1' }).click();
     await expect(page.locator('#view-build')).toBeVisible();
-    expect(await page.evaluate(() => window.__sdl.S.mission)).toBe(0);
-    await expect(page.locator('#log')).toContainText(`Finish Mission ${last} first. Mission 1 is open.`);
+    await expect(page.locator('#missionLocked')).toHaveCount(0);
+    await expect(page.locator('#playBtn')).toBeEnabled();
+    expect(await page.evaluate(() => window.__sdl.S.opened)).toEqual(lesson.parts.map((_, i) => i === 0));
+    // Opened stays opened after a reload; the mission card leads back to its part.
+    await reloadGame(page);
+    await expect(page.locator('#view-build')).toBeVisible();
+    await expect(page.locator('#playBtn')).toBeEnabled();
+    expect(await page.evaluate(() => window.__sdl.S.opened)).toEqual(lesson.parts.map((_, i) => i === 0));
+    await page.getByRole('button', { name: 'Read Part 1 again' }).click();
+    await expect(page.locator('#lp-part-0')).toBeFocused();
+  });
+
+  test('one-page lesson: a finished mission leads back to its card, where the next mission opens', async ({ page }) => {
+    const lesson = await load();
+    await freshPage(page, routeHash(level, 'lesson'));
+    await page.getByRole('button', { name: 'Start Mission 1' }).click();
+    await finish(page, lesson.parts.map((_, i) => i === 0), 0);
+    const back = page.locator('#doneBanner [data-act="debrief"]');
+    await expect(back).toHaveText('Back to the lesson →');
+    await expect(page.locator('#mission .complete button')).toHaveText('Back to the lesson →'); // Mission 2 is not open yet
+    await back.click();
+    await expect(page.locator('#view-lesson')).toBeVisible();
+    await expect(page.locator('#lp-m0')).toBeFocused();
+    await expect(page.locator('.mcard[data-part="0"] .mcard-done')).toBeVisible();
+    const next = page.locator('.mcard[data-part="1"] .mcard-start');
+    await expect(next.locator('.mcard-wait')).toBeHidden();
+    await next.getByRole('button', { name: 'Start Mission 2' }).click();
+    await expect(page.locator('#view-build')).toBeVisible();
+    expect(await page.evaluate(() => [window.__sdl.S.mission, window.__sdl.S.opened[1]])).toEqual([1, true]);
+  });
+
+  test('one-page lesson: an older save without opened missions opens every mission it could open; reset closes them', async ({ page }) => {
+    const data = await loadLevel(), count = data.lesson.parts.length;
+    await freshPage(page, routeHash(level, 'build'));
+    // A save from before missions opened from the lesson: Mission 1 done, Mission 2 the open one.
+    await page.evaluate(({ key, v }) => {
+      const old = JSON.parse(JSON.stringify(window.__sdl.S));
+      delete old.opened;
+      old.v = v; old.done[0] = true; old.verified[0] = true; old.mission = 1;
+      localStorage.setItem(key, JSON.stringify(old));
+    }, { key: data.saveKey, v: data.saveVersion - 1 });
+    await reloadGame(page);
+    const loaded = await page.evaluate(() => ({ opened: window.__sdl.S.opened, v: window.__sdl.S.v }));
+    expect(loaded).toEqual({ opened: Array.from({ length: count }, (_, i) => i < 2), v: data.saveVersion });
+    await expect(page.locator('#missionLocked')).toHaveCount(0);
+    await page.click('#resetLevel');
+    await page.click('#resetLevel'); // it asks for a second click
+    expect(await page.evaluate(() => window.__sdl.S.opened)).toEqual(Array.from({ length: count }, () => false));
+    await expect(page.locator('#missionLocked')).toBeVisible();
   });
 
   test('one-page lesson: a finished mission\'s card shows what it showed, and "Replay" opens it again', async ({ page }) => {
