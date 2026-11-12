@@ -274,15 +274,19 @@ export function registerPageLessonTests({ level }) {
     await expect(page.locator('#view-quiz')).toBeVisible();
   });
 
+  /**
+   * Serves the level's file with `code` run at its end, so a test can show a lesson shape the level does not have yet.
+   * `code` edits the file's `lesson` constant (every level file names its lesson so).
+   */
+  const serveLessonWith = (page, code) => page.route(`**/levels/level-${String(level).padStart(2, '0')}.js`, async (route) => {
+    const text = await (await route.fetch()).text();
+    await route.fulfill({ body: `${text}\n${code}\n`, contentType: 'text/javascript' });
+  });
+
   test('one-page lesson: a New part card shows the component\'s icon and name, and its three lines', async ({ page }) => {
-    // The level's file is served with one card added to its first part, as a level that introduces a component has.
+    // One card in the first part, as a level that introduces a component has.
     const card = { type: 'dns', what: 'The internet address book.', does: 'Turns a name into an address.', game: 'Five dollars a month.' };
-    await page.route(`**/levels/level-${String(level).padStart(2, '0')}.js`, async (route) => {
-      const text = await (await route.fetch()).text();
-      const body = text.replace(/^( +)mission: 0,$/m, `$1mission: 0, newParts: [${JSON.stringify(card)}],`);
-      expect(body).not.toBe(text);
-      await route.fulfill({ body, contentType: 'text/javascript' });
-    });
+    await serveLessonWith(page, `lesson.parts[0].newParts = [${JSON.stringify(card)}];`);
     await freshPage(page, routeHash(level, 'lesson'));
     const shown = page.locator('.lpart').first().locator('.newpart');
     await expect(shown).toHaveCount(1);
@@ -290,6 +294,20 @@ export function registerPageLessonTests({ level }) {
     await expect(shown.locator('svg.newpart-icon > g > *')).not.toHaveCount(0);
     await expect(shown.locator('dt')).toHaveText(['What it is', 'What it does', 'In the game']);
     await expect(shown.locator('dd')).toHaveText([card.what, card.does, card.game]);
+  });
+
+  test('one-page lesson: a part without questions has no Check yourself block; a wrap-up without its closing paragraph ends with "Still broken"', async ({ page }) => {
+    // Both are optional (PageLesson in js/types.js): the last part loses its questions, the wrap-up its loop.
+    const lesson = await load(), last = lesson.parts.length - 1;
+    await serveLessonWith(page, 'delete lesson.parts[lesson.parts.length - 1].checks; delete lesson.wrap.loop;');
+    await freshPage(page, routeHash(level, 'lesson'));
+    const part = page.locator('.lpart').nth(last);
+    await expect(part.locator('.lsec')).toHaveCount(lesson.parts[last].sections.length);
+    await expect(part.locator('.checks')).toHaveCount(0);
+    await expect(part.locator('.mcard')).toBeVisible();
+    const paragraphs = page.locator('.lwrap > p');
+    await expect(paragraphs).toHaveCount(2); // the label, then "Still broken"
+    await expect(paragraphs.last()).toHaveText(`Still broken. ${plain(lesson.wrap.broken)}`);
   });
 
   test('one-page lesson: no sideways scroll at 360 px, with every mission card in its done state', async ({ page }) => {
