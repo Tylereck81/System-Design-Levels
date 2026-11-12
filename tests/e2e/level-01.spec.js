@@ -457,4 +457,53 @@ test.describe('Level 1 · accessibility', () => {
 
 test.describe('Level 1 · one-page lesson', () => {
   registerPageLessonTests({ level: 1 });
+
+  test('"Start here" comes before Part 1 with the seven words; each part opens with its lead; the level takes about 30 minutes', async ({ page }) => {
+    await freshPage(page, '#lesson');
+    await expect(page.locator('.lintro > .label').first()).toHaveText('Level 1 · Part 1: Grow one app · about 30 minutes');
+    const order = await page.locator('#pageLesson').locator('.onpage, #lp-start, #lp-part-0').evaluateAll((els) => els.map((e) => e.id || e.className));
+    expect(order).toEqual(['onpage', 'lp-start', 'lp-part-0']);
+    const start = page.locator('.lstart');
+    await expect(start.locator('.label').first()).toHaveText('3 min');
+    await expect(start.locator('.lsec h3')).toHaveText('What is system design?');
+    await expect(start.locator('tbody tr td:first-child')).toHaveText(['Client', 'Server', 'Request and response', 'Requests per second (req/s)', 'Capacity', 'IP address', 'Domain name']);
+    await expect(start.locator('tbody tr').nth(3)).toContainText('50 req/s in Mission 1');
+    await expect(start.locator('tbody tr').nth(4)).toContainText('The smallest server: 200 req/s');
+    await expect(start.locator('.takeaway')).toBeVisible();
+    await expect(page.locator('.lpart > .part-lead')).toHaveText([/^The shop is ready\./, /^Traffic has tripled\./, /^Marketing counts users per day\./]);
+  });
+
+  test('New part cards: Users, DNS and Web server open Part 1; the Database card comes just before its own section', async ({ page }) => {
+    await freshPage(page, '#lesson');
+    const parts = page.locator('.lpart');
+    await expect(parts.nth(0).locator('.newpart-name')).toHaveText(['Users', 'DNS (Domain Name System)', 'Web server']);
+    const first = await parts.nth(0).evaluate((e) => [...e.children].map((c) => c.className));
+    expect(first.indexOf('newparts')).toBeLessThan(first.indexOf('lsec'));
+    await expect(parts.nth(0).locator('.newpart').nth(1)).toContainText('$5 a month.');
+    await expect(parts.nth(0).locator('.newpart').nth(2)).toContainText('The smallest carries 200 req/s for $40 a month.');
+    await expect(parts.nth(1).locator('.newpart-name')).toHaveText(['Database']);
+    // In page order within Part 2: the busy-server section, the card, then "Why give the database its own machine?".
+    const second = await parts.nth(1).evaluate((e) => [...e.children].filter((c) => /lsec|newparts/.test(c.className)).map((c) => c.querySelector('h3')?.textContent ?? 'card'));
+    expect(second).toEqual(['Why is a busy server slow?', 'card', 'Why give the database its own machine?', 'Which kind of database?']);
+    await expect(parts.nth(2).locator('.newpart')).toHaveCount(0);
+  });
+
+  test('the Build screen is explained before Mission 1: four steps, and all five dashboard numbers', async ({ page }) => {
+    await freshPage(page, '#lesson');
+    const sections = page.locator('.lpart').nth(0).locator('.lsec');
+    const build = sections.nth(1);
+    await expect(build.locator('h3')).toHaveText('How to use the Build screen');
+    await expect(build.locator('.hook')).toHaveCount(0); // this section opens with its steps
+    await expect(build.locator('ol > li b')).toHaveText(['Add a part.', 'Connect two parts.', 'Change a part.', 'Press Play.']);
+    await expect(sections.nth(2).locator('tbody tr td:first-child')).toHaveText(['Traffic', 'Served', 'Response', 'Cost', 'SPOFs']);
+    // The same five names, in the same order, label the numbers at the top of the Build screen.
+    await page.locator('#startBuild').click();
+    const labels = await page.locator('#hud .label').allTextContents();
+    expect(labels.map((t) => t.trim())).toEqual(['Traffic', 'Served', 'Response', 'Cost', 'SPOFs']);
+  });
+
+  test('the component list uses the lesson\'s words', async ({ page }) => {
+    await freshPage(page, '#build');
+    await expect(page.locator('.palette .ps')).toHaveText(['Finds your server\'s address', 'Runs your code, answers requests', 'Keeps the shop\'s data']);
+  });
 });

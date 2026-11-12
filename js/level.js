@@ -5,6 +5,8 @@ export let entry = null; // the level's entry in levels/index.js (id, title)
 export function setLevel(data, levelEntry) { level = data; entry = levelEntry; }
 /** True when the level's lesson is written on one page: one part per mission, each ending with its mission's card. */
 export const inParts = () => !!level?.lesson && 'parts' in level.lesson;
+/** A one-page lesson's time in minutes: "Start here", when it has one, and every part. */
+export const lessonMinutes = (lesson) => (lesson.start?.minutes ?? 0) + lesson.parts.reduce((n, p) => n + p.minutes, 0);
 
 // event: something happens (e.g. a price change); only its outcome is checked.
 // day: plays 24 hours of traffic in `secs` seconds; it counts when its outcome held all day.

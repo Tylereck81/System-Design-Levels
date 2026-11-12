@@ -98,7 +98,7 @@ test.describe('a worked calculation (Level 1)', () => {
   async function openCalc(page) {
     const sections = (await load()).parts.flatMap((p) => p.sections), s = sections.findIndex((sec) => sec.body.some((b) => 'calc' in b));
     await freshPage(page, routeHash(1, 'lesson'));
-    const box = page.locator('.lsec').nth(s).locator('.calc-box');
+    const box = page.locator('.lpart .lsec').nth(s).locator('.calc-box'); // the parts' sections: "Start here" has one of its own
     await box.scrollIntoViewIfNeeded();
     return { calc: sections[s].body.find((b) => 'calc' in b).calc, box };
   }

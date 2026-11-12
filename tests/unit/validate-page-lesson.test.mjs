@@ -3,7 +3,7 @@
 // one by one in validate-lesson.test.mjs; here they are shown to apply with a section's own limits.)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateLesson, lessonWarnings, PAGE_LIMITS as L } from '../../js/validate-lesson.js';
+import { validateLesson, lessonWarnings, newPartProblems, PAGE_LIMITS as L } from '../../js/validate-lesson.js';
 
 /** `n` words of text. */
 const words = (n) => Array(n).fill('word').join(' ');
@@ -176,7 +176,35 @@ test('Level 1\'s first part may have 700 words before its mission card; its othe
 test('a section title that is a question or starts "How to "', () => {
   assert.deepEqual(at((d) => { sec(d, 0, 1).title = 'How to use the Build screen'; }), []);
   assert.deepEqual(at((d) => { sec(d, 0, 1).title = 'Section two'; }), ['part 1 section 2: the title must be a question ending in "?" or start with "How to "']);
-  assert.deepEqual(at((d) => { delete sec(d, 0, 1).hook; }), ['part 1 section 2: needs a hook']);
+});
+
+test('a section may open with its body; a hook that is there must be text', () => {
+  assert.deepEqual(at((d) => { delete sec(d, 0, 1).hook; }), []);
+  assert.deepEqual(at((d) => { sec(d, 0, 1).hook = ''; }), ['part 1 section 2: needs a hook']);
+});
+
+test('"Start here" is optional: one section\'s text and its time, without quiz questions', () => {
+  const start = (extra = {}) => ({ minutes: 3, title: 'What is a shop?', hook: 'A short problem.', body: [{ p: 'A short body.' }], takeaway: 'One idea.', ...extra });
+  const withStart = (extra) => at((d) => { lesson(d).start = start(extra); });
+  assert.deepEqual(withStart(), []);
+  assert.deepEqual(withStart({ hook: undefined }), []);
+  assert.deepEqual(at((d) => { lesson(d).start = 'Read this first.'; }), ['start: is not an object']);
+  assert.deepEqual(withStart({ minutes: 0 }), ['start: needs its time in minutes']);
+  assert.deepEqual(withStart({ title: 'Start' }), ['start: the title must be a question ending in "?" or start with "How to "']);
+  assert.deepEqual(withStart({ quiz: [0] }), ['start: has quiz, which Start here does not take; remove it']);
+  // The same limits as a section: 150 words of prose with the hook (3 here), and a Remember line of 16 words.
+  assert.deepEqual(withStart({ body: [{ p: words(L.sectionWords - 3) }] }), []);
+  assert.deepEqual(withStart({ body: [{ p: words(L.sectionWords - 2) }] }), ['start: the hook and body has 151 words, more than 150']);
+  assert.deepEqual(withStart({ takeaway: `${words(L.takeawayWords + 1)}.` }), ['start: the takeaway has 17 words, more than 16']);
+  assert.deepEqual(withStart({ body: [{ figure: 'figNine', alt: 'One box.', caption: 'One box' }] }), ['start: figure "figNine" is not drawn by the level\'s drawFigures']);
+});
+
+test('a part\'s lead is optional text, and counts towards the words before the mission card', () => {
+  assert.deepEqual(at((d) => { part(d, 0).lead = 'The shop is ready.'; }), []);
+  assert.deepEqual(at((d) => { part(d, 0).lead = 4; }), ['part 1: lead must be text when it is there']);
+  // fill(d, 108) brings part 1 to 597 words (see the 600-word test); a lead of 3 words is the limit, 4 is one over.
+  assert.deepEqual(at((d) => { fill(d, 108); part(d, 0).lead = words(3); }), []);
+  assert.deepEqual(at((d) => { fill(d, 108); part(d, 0).lead = words(4); }), ['part 1: has 601 words before its mission card, more than 600']);
 });
 
 test('at most 150 words of prose in a section, its hook included; a table is not counted', () => {
@@ -244,6 +272,30 @@ test('a New part card names one of the level\'s components', () => {
   assert.deepEqual(at((d) => { part(d, 0).newParts = [card({ type: 'lb' })]; }), ['part 1: New part card 1: "lb" is not one of the level\'s components']);
   assert.deepEqual(at((d) => { part(d, 0).newParts = card(); }), ['part 1: newParts must be a list of cards']);
   assert.deepEqual(at((d) => { part(d, 0).newParts = ['dns']; }), ['part 1: New part card 1: is not a card object']);
+});
+
+test('a New part card may name the section it comes before, and the component\'s name written out', () => {
+  // Part 1 has 2 sections, so `before` is 0 or 1.
+  assert.deepEqual(at((d) => { part(d, 0).newParts = [card({ before: 1, aka: 'Domain Name System' })]; }), []);
+  for (const before of [2, -1, 0.5, '1']) {
+    assert.deepEqual(at((d) => { part(d, 0).newParts = [card({ before })]; }), [`part 1: New part card 1: before must be the index of a section of its part; it is ${before}`]);
+  }
+  assert.deepEqual(at((d) => { part(d, 0).newParts = [card({ aka: '' })]; }), ['part 1: New part card 1: aka must be text when it is there']);
+});
+
+test('across levels: a component needs a New part card in the first level that has it; levels not on one page are skipped', () => {
+  const paged = (id, types, carded) => ({ id, components: Object.fromEntries(types.map((t) => [t, {}])), lesson: { parts: [{ newParts: [] }, { newParts: carded.map((type) => ({ type })) }] } });
+  const old = (id, types) => ({ id, components: Object.fromEntries(types.map((t) => [t, {}])), lessonHtml: '<p>Old lesson</p>' });
+  assert.deepEqual(newPartProblems([paged(1, ['users', 'dns'], ['users', 'dns'])]), []);
+  assert.deepEqual(newPartProblems([paged(1, ['users', 'dns'], ['users'])]), ['Level 1: "dns" first appears in this level and has no New part card']);
+  // Level 2 needs a card only for what Level 1 did not have.
+  assert.deepEqual(newPartProblems([paged(1, ['users'], ['users']), paged(2, ['users', 'lb'], ['lb'])]), []);
+  assert.deepEqual(newPartProblems([paged(1, ['users'], ['users']), paged(2, ['users', 'lb'], [])]), ['Level 2: "lb" first appears in this level and has no New part card']);
+  // A level not on one page yet is skipped, and what it has counts as introduced for the levels after it.
+  assert.deepEqual(newPartProblems([old(1, ['users', 'dns']), paged(2, ['users', 'dns', 'lb'], ['lb'])]), []);
+  assert.deepEqual(newPartProblems([paged(1, ['users'], ['users']), old(2, ['users', 'lb']), paged(3, ['users', 'lb', 'cache'], [])]), ['Level 3: "cache" first appears in this level and has no New part card']);
+  // A one-page lesson without any card list.
+  assert.deepEqual(newPartProblems([{ id: 1, components: { users: {} }, lesson: { parts: [{}] } }]), ['Level 1: "users" first appears in this level and has no New part card']);
 });
 
 test('a New part card\'s three lines: what it is (25 words), what it does (30), in the game (20)', () => {

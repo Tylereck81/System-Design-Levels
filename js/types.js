@@ -250,7 +250,7 @@
  * One section of a part: one idea, titled as a question or "How to …".
  * @typedef {object} LessonSection
  * @property {string} title
- * @property {string} hook    the problem the section answers
+ * @property {string} [hook]  the problem the section answers; a section may open with its body instead
  * @property {LessonBlock[]} body
  * @property {string} takeaway  one sentence: the section's "Remember" line
  * @property {number[]} quiz      indexes of the quiz questions that review this section
@@ -264,8 +264,10 @@
 /**
  * A "New part" card: a component the level's components describe (`type`), introduced before the mission that uses it.
  * The card shows the component's icon and name.
- * @typedef {{ type: string, what: string, does: string, game: string }} NewPartCard
- *   `what`: what it is; `does`: what it does; `game`: what it costs or carries in the game
+ * @typedef {{ type: string, what: string, does: string, game: string, aka?: string, before?: number }} NewPartCard
+ *   `what`: what it is; `does`: what it does; `game`: what it costs or carries in the game; `aka`: the name written
+ *   out ("Domain Name System"); `before`: the index of the section of its part it is shown before (the first, when
+ *   left out)
  */
 
 /**
@@ -274,7 +276,8 @@
  * @property {string} title
  * @property {number} mission   index of its mission; part N is mission N
  * @property {number} minutes   time for the reading and the mission
- * @property {NewPartCard[]} [newParts]  shown before the sections
+ * @property {string} [lead]     one short paragraph under the part's title: where the story stands
+ * @property {NewPartCard[]} [newParts]  each shown before the section its `before` names
  * @property {LessonSection[]} sections
  * @property {CheckQuestion[]} [checks]  0 to 2 "Check yourself" questions
  * @property {string[]} youWill  the mission card's list: what the player does or watches for
@@ -289,6 +292,8 @@
  * @typedef {object} PageLesson
  * @property {{ kicker: string, title: string, story: string, picture: string, alt: string, outcomes: string[] }} intro
  *   `picture` names an svg the level's drawFigures draws: the finished design
+ * @property {Omit<LessonSection, 'quiz'> & { minutes: number }} [start]
+ *   "Start here", before the first part: one section's text for what the whole course takes as known, and its time
  * @property {LessonPart[]} parts
  * @property {{ picture: string, alt: string, say: string[], numbers: [string, string][], broken: string, loop?: string }} wrap
  *   `say`: three things to say in an interview; `numbers`: values each taught in a section; `broken`: what is
