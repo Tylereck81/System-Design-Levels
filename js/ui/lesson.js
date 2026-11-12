@@ -257,15 +257,16 @@ const checksHtml = (checks, p) => html`<div class="checks" aria-labelledby="lp-c
 
 /**
  * Part `p`'s mission card, in both of its states: what the mission asks with a Start button, and once the mission is
- * done what it showed with a Replay button. `paintParts` shows the one that applies.
+ * done what it showed with a Replay button. `paintParts` shows the one that applies. Only the last part may have no
+ * debrief (validate-lesson.js), and the wrap-up follows it.
  */
 function missionCardHtml(part, p) {
-  const n = p + 1, mission = level.missions[p], last = p === level.missions.length - 1;
+  const n = p + 1, mission = level.missions[p];
   const done = part.debrief
     ? html`<p><b>What you saw.</b> ${raw(part.debrief.saw)}</p>
       <p class="debrief-num"><span class="label">Your number</span> <b>${raw(part.debrief.number[0])}</b> ${raw(part.debrief.number[1])}</p>
       <p><b>What breaks next.</b> ${raw(part.debrief.next)}</p>`
-    : last ? html`<p>The wrap-up below sums up the level.</p>` : '';
+    : html`<p>The wrap-up below sums up the level.</p>`;
   return html`<div class="mcard" data-part="${p}" aria-labelledby="lp-m${p}">
     <p class="label">Mission ${n}</p>
     <h3 id="lp-m${p}" tabindex="-1">${mission.title}</h3>
