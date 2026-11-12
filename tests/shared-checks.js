@@ -461,7 +461,7 @@ export function registerPageLessonTests({ level }) {
   });
 
   for (const width of [390, 1280]) {
-    test(`one-page lesson at ${width} px: one column, at most 620 px wide; text, boxes, tables, pictures, mission cards and lock lines share its edges`, async ({ page }) => {
+    test(`one-page lesson at ${width} px: one column, at most 760 px wide (the lesson's width); text, boxes, tables, pictures, mission cards and lock lines share its edges`, async ({ page }) => {
       const lesson = await load();
       await page.setViewportSize({ width, height: 844 });
       await freshPage(page, routeHash(level, 'lesson'));
@@ -478,7 +478,7 @@ export function registerPageLessonTests({ level }) {
       for (const done of [false, true]) {
         if (done) await finishMissions(page, lesson.parts.map(() => true), 0);
         const { column, off } = await edges();
-        expect(column).toBeLessThanOrEqual(620);
+        expect(column).toBeLessThanOrEqual(760);
         expect(off).toEqual([]);
       }
     });

@@ -85,7 +85,7 @@ a.btn { color: var(--ink); text-decoration: none; }
 .linkbtn:hover { color: var(--bad); }
 
 /* ---------- Lesson ---------- */
-/* Text sizes: body 18 px (17 px on a phone) with lines of at most 60 characters (75 on a one-page lesson), hook 20 px,
+/* Text sizes: body 18 px (17 px on a phone) with lines of at most 60 characters (105 on a one-page lesson), hook 20 px,
    screen title 28 px, table cells 16 px, labels and captions 14 px. Nothing in a lesson is smaller than 14 px. */
 .lesson { max-width: 760px; margin: 0 auto; font-size: 18px; line-height: 1.6; }
 .lesson .label, .lesson .btn.sm { font-size: 14px; }
@@ -166,9 +166,9 @@ table.t td.n { font-family: var(--f-mono); font-variant-numeric: tabular-nums; w
 .bridge b { display: block; }
 .step-lesson .fig svg, .step-lesson table.t { min-width: 0; }
 /* One-page lesson (js/ui/lesson.js): the intro, the links to each part, the parts with their mission cards, the wrap-up.
-   One column: text, boxes and pictures share both edges. 30em (540 px at 18 px) is the 24em rule above scaled from 60
-   to 75 characters; tests/e2e/text-size.spec.js measures it. */
-.page-lesson { max-width: 30em; margin-inline: auto; }
+   One column: text, boxes and pictures share both edges and fill the lesson's 760 px, as wide as the quiz and the home
+   page. By the 24em rule above, 760 px at 18 px (42.2em) holds at most 105 characters a line; tests/e2e/text-size.spec.js
+   measures it. */
 .page-lesson p, .page-lesson li { max-width: none; }
 .page-lesson button { min-height: 44px; }
 .page-lesson .fig svg, .page-lesson table.t { min-width: 0; }
