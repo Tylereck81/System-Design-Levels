@@ -1,6 +1,6 @@
 // Lesson tab: a lesson written as steps or as chapters (`level.lesson`, see Lesson in types.js) or authored HTML
 // (`level.lessonHtml`), and the helpers a level's diagrams are drawn with.
-import { level } from '../level.js';
+import { level, inChapters } from '../level.js';
 import { $, svgEl, html, raw, prependHtml, setHtml } from '../dom.js';
 import { hooks } from '../hooks.js';
 import { drawIcon } from '../view/icons.js';
@@ -54,18 +54,32 @@ function checkHtml(check, s) {
   </div>`;
 }
 
-function stepHtml(step, s, count) {
+/**
+ * What a step and a briefing screen share: the label, the title (heading `id`), the hook, the question (its ids keyed
+ * by `key`) and the body a "Guess first" question hides until it is answered, ending with the takeaway and `after`.
+ */
+function stepParts(step, { label, id, key, after = '' }) {
   const guess = step.check?.kind === 'guess';
-  return html`<section class="lstep" data-step="${s}" aria-labelledby="st-${s}"${s ? raw(' hidden') : ''}>
-    <p class="label">Step ${s + 1} of ${count}</p>
-    <h2 id="st-${s}" tabindex="-1">${raw(step.title)}</h2>
+  return html`<p class="label">${label}</p>
+    <h2 id="${id}" tabindex="-1">${raw(step.title)}</h2>
     <p class="hook">${raw(step.hook)}</p>
-    ${guess ? checkHtml(step.check, s) : ''}
+    ${guess ? checkHtml(step.check, key) : ''}
     <div class="lstep-body" tabindex="-1"${guess ? raw(' hidden') : ''}>
       ${step.body.map(blockHtml)}
-      ${step.check && !guess ? checkHtml(step.check, s) : ''}
+      ${step.check && !guess ? checkHtml(step.check, key) : ''}
       <p class="takeaway"><b>Remember</b> ${raw(step.takeaway)}</p>
-    </div>
+      ${after}
+    </div>`;
+}
+/** Numbers worth remembering, as [value, what it is] pairs. */
+const numbersHtml = (numbers) => html`<dl class="recap-nums">${numbers.map(([value, meaning]) => html`<div><dt>${raw(value)}</dt><dd>${raw(meaning)}</dd></div>`)}</dl>`;
+/** The "Game rules" button and the rules it shows. */
+const rulesHtml = (rules) => html`<button type="button" class="btn sm" data-act="rules" aria-expanded="false" aria-controls="lessonRules">Game rules</button>
+    <p class="assume" id="lessonRules" hidden>${raw(rules)}</p>`;
+
+function stepHtml(step, s, count) {
+  return html`<section class="lstep" data-step="${s}" aria-labelledby="st-${s}"${s ? raw(' hidden') : ''}>
+    ${stepParts(step, { label: `Step ${s + 1} of ${count}`, id: `st-${s}`, key: s })}
     <div class="lstep-nav">
       ${s ? html`<button type="button" class="btn" data-go="${s - 1}">Back</button>` : ''}
       <button type="button" class="btn primary" data-go="${s + 1}">Next</button>
@@ -80,11 +94,10 @@ function recapHtml(lesson, s) {
     <h2 id="st-${s}" tabindex="-1">What you now know</h2>
     <ul>${lesson.steps.map((step) => html`<li>${raw(step.takeaway)}</li>`)}</ul>
     <h3>Numbers to carry</h3>
-    <dl class="recap-nums">${numbers.map(([value, meaning]) => html`<div><dt>${raw(value)}</dt><dd>${raw(meaning)}</dd></div>`)}</dl>
+    ${numbersHtml(numbers)}
     <h3>Your missions</h3>
     <ol class="bridge">${bridge.map((line, i) => html`<li><b>Mission ${i + 1} · ${level.missions[i].title}</b> ${raw(line)}</li>`)}</ol>
-    <button type="button" class="btn sm" data-act="rules" aria-expanded="false" aria-controls="lessonRules">Game rules</button>
-    <p class="assume" id="lessonRules" hidden>${raw(lesson.rules)}</p>
+    ${rulesHtml(lesson.rules)}
     <div class="lstep-nav">
       <button type="button" class="btn" data-go="${s - 1}">Back</button>
       <button type="button" class="btn primary" data-act="build">Start mission 1 <span aria-hidden="true">→</span></button>
@@ -208,26 +221,19 @@ function introHtml(lesson) {
       <span class="chapter-meta">${c.minutes} min · <span class="chapter-state" data-chapter="${i}">${chapterState(i)}</span></span></button></li>`)}
       <li><button type="button" class="chapter" data-act="quiz"><span class="chapter-name">Quiz</span><span class="chapter-meta">${QUIZ.length} questions</span></button></li>
     </ol>
-    <button type="button" class="btn sm" data-act="rules" aria-expanded="false" aria-controls="lessonRules">Game rules</button>
-    <p class="assume" id="lessonRules" hidden>${raw(lesson.rules)}</p>
+    ${rulesHtml(lesson.rules)}
   </section>`;
 }
 
 /** Briefing screen `s` of chapter `c`: a step's parts, then the line on how the mission uses the idea. */
 function screenHtml(chapter, c, screen, s) {
   const key = `b${c}-${s}`, last = s === chapter.screens.length - 1;
-  const guess = screen.check?.kind === 'guess';
   return html`<section class="lpage lstep" data-page="${key}" aria-labelledby="${headingId(key)}" hidden>
-    <p class="label">Chapter ${c + 1} · ${raw(chapter.title)} · briefing ${s + 1} of ${chapter.screens.length}</p>
-    <h2 id="${headingId(key)}" tabindex="-1">${raw(screen.title)}</h2>
-    <p class="hook">${raw(screen.hook)}</p>
-    ${guess ? checkHtml(screen.check, key) : ''}
-    <div class="lstep-body" tabindex="-1"${guess ? raw(' hidden') : ''}>
-      ${screen.body.map(blockHtml)}
-      ${screen.check && !guess ? checkHtml(screen.check, key) : ''}
-      <p class="takeaway"><b>Remember</b> ${raw(screen.takeaway)}</p>
-      <p class="uses"><b>In Mission ${c + 1}</b> ${raw(screen.uses)}</p>
-    </div>
+    ${stepParts(screen, {
+      label: html`Chapter ${c + 1} · ${raw(chapter.title)} · briefing ${s + 1} of ${chapter.screens.length}`,
+      id: headingId(key), key,
+      after: html`<p class="uses"><b>In Mission ${c + 1}</b> ${raw(screen.uses)}</p>`,
+    })}
     <div class="lstep-nav">
       <button type="button" class="btn" data-go="${s ? `b${c}-${s - 1}` : 'intro'}">Back</button>
       ${last
@@ -262,7 +268,7 @@ function wrapHtml(wrap) {
     <h3>Three things to say in an interview</h3>
     <ol>${wrap.say.map((line) => html`<li>${raw(line)}</li>`)}</ol>
     <h3>Numbers to keep</h3>
-    <dl class="recap-nums">${wrap.numbers.map(([value, meaning]) => html`<div><dt>${raw(value)}</dt><dd>${raw(meaning)}</dd></div>`)}</dl>
+    ${numbersHtml(wrap.numbers)}
     ${wrap.loop ? html`<p>${raw(wrap.loop)}</p>` : ''}
     <p><b>Still broken.</b> ${raw(wrap.broken)}</p>
     <div class="lstep-nav">
@@ -304,7 +310,8 @@ export function paintChapters() {
 function startMission(i) {
   if (lessonView.inDialog) /** @type {HTMLDialogElement} */ ($('briefingDialog')).close();
   const open = unlocked(i) ? i : S.done.findIndex((done) => !done);
-  if (open !== i) log(`Finish Mission ${i} first. Mission ${open + 1} is open.`, 'warn');
+  const previous = i; // i is the asked-for mission's 0-based index, so the mission before it is number i
+  if (open !== i) log(`Finish Mission ${previous} first. Mission ${open + 1} is open.`, 'warn');
   if (open !== S.mission) switchMission(open);
   hooks.setTab('build');
 }
@@ -320,26 +327,29 @@ function openDebrief(c) {
  * it is open, so each figure stays one svg with one id, and moves back when it closes.
  */
 function openBriefing(c) {
-  let dialog = /** @type {HTMLDialogElement} */ ($('briefingDialog'));
-  if (!dialog) {
-    dialog = document.createElement('dialog');
-    dialog.id = 'briefingDialog';
-    dialog.className = 'lesson briefing-dialog';
-    dialog.setAttribute('aria-label', 'Briefing');
-    setHtml(dialog, html`<div class="dialog-bar"><button type="button" class="btn sm" data-act="close">Close</button></div>`);
-    dialog.addEventListener('click', (e) => { if (/** @type {HTMLElement} */ (e.target).closest('[data-act="close"]')) dialog.close(); });
-    dialog.addEventListener('close', () => {
-      lessonView.inDialog = false;
-      $('view-lesson').prepend(lessonView.root);
-      showPage('intro', false);
-      $('mission').querySelector('[data-act="briefing"]')?.focus(); // back to the link that opened it
-    });
-    document.body.appendChild(dialog);
-  }
+  const dialog = /** @type {HTMLDialogElement} */ ($('briefingDialog')) || briefingDialog();
   lessonView.inDialog = true;
   dialog.appendChild(lessonView.root);
   showPage(`b${c}-0`, false);
   dialog.showModal();
+}
+
+/** Creates the Briefing dialog. When it closes, the lesson goes back to its tab and focus to the Briefing link. */
+function briefingDialog() {
+  const dialog = document.createElement('dialog');
+  dialog.id = 'briefingDialog';
+  dialog.className = 'lesson briefing-dialog';
+  dialog.setAttribute('aria-label', 'Briefing');
+  setHtml(dialog, html`<div class="dialog-bar"><button type="button" class="btn sm" data-act="close">Close</button></div>`);
+  dialog.addEventListener('click', (e) => { if (/** @type {HTMLElement} */ (e.target).closest('[data-act="close"]')) dialog.close(); });
+  dialog.addEventListener('close', () => {
+    lessonView.inDialog = false;
+    $('view-lesson').prepend(lessonView.root);
+    showPage('intro', false);
+    $('mission').querySelector('[data-act="briefing"]')?.focus();
+  });
+  document.body.appendChild(dialog);
+  return dialog;
 }
 
 /** Wires a rendered chapter lesson, and the Debrief and Briefing buttons on the Build tab. */
@@ -373,7 +383,7 @@ function wireChapters(root, lesson) {
 export function renderLesson() {
   const view = $('view-lesson');
   if (!level.lesson) { prependHtml(view, raw(level.lessonHtml)); return; } // a lesson is authored markup
-  const chapters = 'chapters' in level.lesson;
+  const chapters = inChapters();
   prependHtml(view, chapters ? chapterLessonHtml(level.lesson) : lessonHtml(level.lesson));
   const cta = view.querySelector('.lesson-cta');
   $('startBuild').firstChild.textContent = 'Skip to the missions ';

@@ -8,7 +8,7 @@ import { paintControls } from './controls.js';
 import { log } from './log.js';
 import { hooks } from '../hooks.js';
 import { anyOn } from '../engine/experiments.js';
-import { level } from '../level.js';
+import { level, inChapters } from '../level.js';
 import { renderMock, stressOpen } from './mock.js';
 
 export const unlocked = (i) => i === 0 || S.done[i - 1];
@@ -33,8 +33,6 @@ export function switchMission(i) {
 }
 
 export function renderMission() { keepFocus($('missionCard'), buildMission, () => $('missionCard')); }
-/** True when the level's lesson is written in chapters: a mission then has a briefing and a debrief. */
-const inChapters = () => !!level.lesson && 'chapters' in level.lesson;
 function buildMission() {
   renderMissionTabs();
   const M = MISSIONS[S.mission], i = S.mission;
