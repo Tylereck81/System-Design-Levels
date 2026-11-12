@@ -209,6 +209,12 @@ export function registerPageLessonTests({ level }) {
     await expect(fb).toContainText(plain(options[wrong].why));
     await expect(fb).toContainText(plain(options.find((o) => o.right).t));
     await expect(question.locator(`.opt[data-opt="${wrong}"]`)).toHaveAttribute('aria-pressed', 'true');
+    // Then the right one: its own explanation replaces the feedback, and only it is pressed.
+    const right = options.findIndex((o) => o.right);
+    await question.locator(`.opt[data-opt="${right}"]`).click();
+    await expect(fb).toHaveText(`Right. ${plain(options[right].why)}`);
+    await expect(question.locator(`.opt[data-opt="${right}"]`)).toHaveAttribute('aria-pressed', 'true');
+    await expect(question.locator(`.opt[data-opt="${wrong}"]`)).toHaveAttribute('aria-pressed', 'false');
   });
 
   test('one-page lesson: Mission 1\'s card names it and lists "You will"; keyboard only, "Start Mission 1" opens it', async ({ page }) => {
