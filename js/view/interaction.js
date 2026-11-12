@@ -108,6 +108,8 @@ export function nodeAt(p) {
 }
 export function select(next) { ui.sel = next; renderCanvas(); renderInspector(); }
 export function cancelConnect() { if (ui.connectFrom) { ui.connectFrom = null; setBanner(); } }
+/** Select nothing, which closes the inspector, and drop a connection that was being started. */
+export function deselect() { cancelConnect(); select(null); }
 
 export let drag = null, conn = null;
 cv.addEventListener('pointerdown', (e) => {
@@ -246,6 +248,10 @@ document.addEventListener('keydown', (e) => {
   if (tag === 'input' || tag === 'textarea') return;
   const onCanvas = e.target === document.body || cv.contains(e.target); // not on a button, tab or other control
   if ((e.key === 'Delete' || e.key === 'Backspace') && ui.sel && onCanvas) { e.preventDefault(); removeSel(); }
-  if (e.key === 'Escape') { ui.connectFrom = null; setBanner(); select(null); }
+  if (e.key === 'Escape') {
+    const node = e.target.closest?.('[data-node]');
+    if (node) ui.refocus = node.dataset.node; // redrawing the canvas would drop the focus this component has
+    deselect();
+  }
   if (e.key === ' ' && e.target === document.body) { e.preventDefault(); togglePlay(); }
 });

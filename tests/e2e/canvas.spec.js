@@ -1,7 +1,7 @@
 import { test, expect } from '../fixtures.js';
 import { freshPage, buildBasic, center } from '../helpers.js';
 
-// The desktop canvas: a wider view, zoom from 100% out to 70%, and the layout around it.
+// The desktop canvas: a wider view and zoom from 100% out to 70%. The layout around it is in build-layout.spec.js.
 
 const viewBox = (page) => page.locator('#cv').evaluate((cv) => cv.getAttribute('viewBox').split(' ').map(Number));
 
@@ -46,16 +46,6 @@ test.describe('Canvas · zoom and layout', () => {
     const dns = await page.evaluate(() => window.__sdl.S.nodes.find((n) => n.type === 'dns').id);
     const [cv, box] = await Promise.all([page.locator('#cv').boundingBox(), page.locator(`[data-node="${dns}"] .node-box`).boundingBox()]);
     expect(box.x).toBeGreaterThanOrEqual(cv.x);
-  });
-
-  test('at 1440 px the canvas is wider, with the palette above it and the inspector above the mission', async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
-    await freshPage(page, '#level-5/build');
-    const [cv, pal, insp, mission] = await Promise.all(['#cv', '.palette', '#insp', '#missionCard'].map((s) => page.locator(s).first().boundingBox()));
-    expect(cv.width).toBeGreaterThan(950);
-    expect(pal.y + pal.height).toBeLessThanOrEqual(cv.y);
-    expect(insp.y).toBeLessThan(mission.y);
-    expect(insp.x).toBeGreaterThan(cv.x + cv.width - 1);
   });
 
   test('phones keep their fitted view and hide the zoom controls', async ({ page }) => {

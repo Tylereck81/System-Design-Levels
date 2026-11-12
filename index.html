@@ -45,8 +45,9 @@
         <div class="palette">
           <p class="label">Components</p>
           <div class="pal-list" id="palList"></div>
-          <p class="pal-hint">Drag onto the canvas or tap to add. Connect with the <b>+</b> handle or the inspector.</p>
+          <p class="pal-hint">Drag onto the canvas or tap to add. Select a component to change its size and connections.</p>
         </div>
+        <div class="card insp-card" id="inspCard" aria-label="Inspector" hidden><div class="insp" id="insp"></div></div>
       </div>
 
       <div class="stage">
@@ -87,7 +88,6 @@
       </div>
 
       <div class="panel">
-        <div class="card insp-card" aria-label="Inspector"><div class="insp" id="insp"></div></div>
         <div class="card mission-card" id="missionCard" tabindex="-1">
           <div class="mtabs" id="mtabs"></div>
           <div class="mission" id="mission"></div>
