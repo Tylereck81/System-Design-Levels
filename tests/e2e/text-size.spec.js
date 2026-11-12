@@ -5,7 +5,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { test, expect } from '../fixtures.js';
 import { routeHash } from '../../js/route.js';
 import { LEVELS } from '../../levels/index.js';
-import { freshPage } from '../helpers.js';
+import { freshPage, finishMissions } from '../helpers.js';
 
 /** The visible HTML text under `selector` that is smaller than `min` px, as "tag.class size: text". */
 const smallText = (page, selector, min) => page.evaluate(({ selector, min }) => {
@@ -21,11 +21,15 @@ const smallText = (page, selector, min) => page.evaluate(({ selector, min }) => 
 }, { selector, min });
 
 /**
- * Shows the whole lesson: every step of a step lesson with each explanation, or the game rules of a one-page lesson
- * (everything else on it is shown already). A hand-written lesson needs nothing.
+ * Shows the whole lesson: every step of a step lesson with each explanation, or every part of a one-page lesson (its
+ * missions marked done, which opens them) and its game rules. A hand-written lesson needs nothing.
  */
 async function showWholeLesson(page) {
-  if (await page.locator('#pageLesson').count()) return page.click('#pageLesson [data-act="rules"]');
+  if (await page.locator('#pageLesson').count()) {
+    const missions = await page.evaluate(() => window.__sdl.S.done.length);
+    await finishMissions(page, Array.from({ length: missions }, () => true), 0);
+    return page.click('#pageLesson [data-act="rules"]');
+  }
   if (!(await page.locator('[data-act="all"]').count())) return;
   await page.click('[data-act="all"]');
   for (const skip of await page.locator('[data-act="reveal"]').all()) await skip.click();
@@ -37,6 +41,7 @@ const fontSize = (page, selector) => page.locator(selector).first().evaluate((e)
 for (const { id } of LEVELS) {
   test(`Level ${id}: lesson text is at least 14 px, Build text at least 13 px`, async ({ page }) => {
     await freshPage(page, routeHash(id, 'lesson'));
+    expect(await smallText(page, '#view-lesson', 14)).toEqual([]); // as it opens: a one-page lesson's lock lines
     await showWholeLesson(page);
     expect(await smallText(page, '#view-lesson', 14)).toEqual([]);
     await page.click('#tab-build');
@@ -106,8 +111,10 @@ test.describe('a worked calculation (Level 1)', () => {
   const load = async () => (await LEVELS.find((l) => l.id === 1).load()).default.lesson;
   /** Opens the lesson and returns its first calculation and that calculation's box on the page. */
   async function openCalc(page) {
-    const sections = (await load()).parts.flatMap((p) => p.sections), s = sections.findIndex((sec) => sec.body.some((b) => 'calc' in b));
+    const { parts } = await load(), sections = parts.flatMap((p) => p.sections), s = sections.findIndex((sec) => sec.body.some((b) => 'calc' in b));
+    const part = parts.findIndex((p) => p.sections.includes(sections[s]));
     await freshPage(page, routeHash(1, 'lesson'));
+    await finishMissions(page, parts.map((_, i) => i < part), part); // its part is open
     const box = page.locator('.lpart .lsec').nth(s).locator('.calc-box'); // the parts' sections: "Start here" has one of its own
     await box.scrollIntoViewIfNeeded();
     return { calc: sections[s].body.find((b) => 'calc' in b).calc, box };

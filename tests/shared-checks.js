@@ -2,7 +2,7 @@ import { test, expect } from './fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
 import { routeHash } from '../js/route.js';
 import { LEVELS } from '../levels/index.js';
-import { freshPage, selectNode, reloadGame } from './helpers.js';
+import { freshPage, selectNode, reloadGame, finishMissions } from './helpers.js';
 
 /**
  * The layout and accessibility checks every level must pass. Call it inside the level's layout describe block.
@@ -144,16 +144,6 @@ export function registerPageLessonTests({ level }) {
   const loadLevel = async () => (await LEVELS.find((l) => l.id === level).load()).default;
   const load = async () => (await loadLevel()).lesson;
   const plain = (t) => t.replace(/<[^>]*>/g, '');
-  /**
-   * Setup only: marks missions done (and checked) as a finished mission leaves them, with mission `open` open; the
-   * finished ones and `open` count as opened from the lesson.
-   */
-  const finish = (page, done, open) => page.evaluate(({ done, open }) => {
-    const { S } = window.__sdl;
-    done.forEach((d, i) => { S.done[i] = d; S.verified[i] = d; S.opened[i] = d || i === open; });
-    S.mission = open;
-    window.__sdl.afterChange();
-  }, { done, open });
 
   test('one-page lesson: the intro, the links, each part in mission order with all its sections, then the wrap-up', async ({ page }) => {
     const lesson = await load();
@@ -162,6 +152,7 @@ export function registerPageLessonTests({ level }) {
     // In page order: the intro's heading, the links, each part's heading, the wrap-up's heading.
     const order = await root.locator('#lp-intro, .onpage, .lpart > h2, #lp-wrap').evaluateAll((els) => els.map((e) => e.id || e.className));
     expect(order).toEqual(['lp-intro', 'onpage', ...lesson.parts.map((_, i) => `lp-part-${i}`), 'lp-wrap']);
+    await finishMissions(page, lesson.parts.map(() => true), 0); // every part open
     for (const [i, part] of lesson.parts.entries()) {
       await expect(page.locator(`#lp-part-${i}`)).toHaveText(`Part ${i + 1} · ${plain(part.title)}`);
       const sections = root.locator('.lpart').nth(i).locator('.lsec');
@@ -171,9 +162,10 @@ export function registerPageLessonTests({ level }) {
         await expect(sections.nth(s)).toBeVisible();
       }
     }
-    // Nothing is hidden but a mission card's done state and the game rules, and there is no page-by-page navigation.
+    // With every mission done, nothing is hidden but the game rules, each mission card's Start state and the lock
+    // lines, and there is no page-by-page navigation.
     const hidden = await root.locator('[hidden]').evaluateAll((els) => els.map((e) => e.id || e.className));
-    expect(hidden).toEqual(['lessonRules', ...lesson.parts.map(() => 'mcard-done')]);
+    expect(hidden).toEqual(['lessonRules', ...lesson.parts.flatMap((_, i) => (i ? ['part-lock', 'mcard-start'] : ['mcard-start'])), 'part-lock']);
     await expect(root.locator('[data-go], [data-act="reveal"]')).toHaveCount(0);
   });
 
@@ -182,22 +174,105 @@ export function registerPageLessonTests({ level }) {
     await freshPage(page, routeHash(level, 'lesson'));
     const links = page.locator('.onpage .jump');
     await expect(links).toHaveCount(lesson.parts.length + 1);
-    for (const [i, part] of lesson.parts.entries()) await expect(links.nth(i)).toHaveText(`${i + 1} · ${plain(part.title)} · Not started`);
+    for (const [i, part] of lesson.parts.entries()) await expect(links.nth(i)).toHaveText(`${i + 1} · ${plain(part.title)} · ${i ? 'Locked' : 'Not started'}`);
     await expect(links.nth(last + 1)).toHaveText('Wrap-up');
     await links.nth(last).click();
     await expect(page.locator(`#lp-part-${last}`)).toBeFocused();
     await expect(page.locator(`#lp-part-${last}`)).toBeInViewport();
     await links.nth(last + 1).click();
     await expect(page.locator('#lp-wrap')).toBeFocused();
-    await finish(page, lesson.parts.map((_, i) => i === 0), 1);
+    await finishMissions(page, lesson.parts.map((_, i) => i === 0), 1);
     await expect(links.nth(0)).toHaveText(`1 · ${plain(lesson.parts[0].title)} · Done`);
     await expect(links.nth(1)).toContainText('Not started');
+    if (last > 1) await expect(links.nth(2)).toContainText('Locked');
+  });
+
+  /** The text of each shown child of part `i`, or of the wrap-up for `i` equal to the number of parts. */
+  const shownIn = (page, i) => page.locator('.lpart, .lwrap').nth(i).evaluate((e) => [...e.children]
+    .filter((c) => !(/** @type {HTMLElement} */ (c).hidden)).map((c) => c.textContent.replace(/\s+/g, ' ').trim()));
+  /** What a locked part shows: its heading and the line saying which mission opens it. */
+  const lockedPart = (part, i) => [`Part ${i + 1} · ${plain(part.title)}`, `Finish Mission ${i} to unlock this part.`];
+  const lockedWrap = (count) => ['Wrap-up', `Finish Mission ${count} to unlock the wrap-up.`];
+
+  test('one-page lesson: on a fresh level Part 1 is open and every later part shows only its heading and the mission that opens it', async ({ page }) => {
+    const lesson = await load(), count = lesson.parts.length;
+    await freshPage(page, routeHash(level, 'lesson'));
+    expect((await shownIn(page, 0)).length).toBeGreaterThan(2);
+    for (const [i, part] of lesson.parts.entries()) if (i) expect(await shownIn(page, i)).toEqual(lockedPart(part, i));
+    expect(await shownIn(page, count)).toEqual(lockedWrap(count));
+    // A locked part's text is out of the page, not covered: a section title of Part 2 is not shown anywhere.
+    await expect(page.getByText(plain(lesson.parts[1].sections[0].title), { exact: true })).toBeHidden();
+    await expect(page.locator('.onpage .jump').nth(1)).toContainText('Locked');
+  });
+
+  test('one-page lesson: a locked part has no focusable element; its heading takes focus only from its link', async ({ page }) => {
+    const lesson = await load();
+    await freshPage(page, routeHash(level, 'lesson'));
+    const locked = page.locator('.lpart, .lwrap').filter({ has: page.locator('.part-lock:not([hidden])') });
+    await expect(locked).toHaveCount(lesson.parts.length); // Part 2 onwards and the wrap-up
+    const focusable = await locked.evaluateAll((secs) => secs.flatMap((sec) => [...sec.querySelectorAll('*')]
+      .filter((e) => e.checkVisibility() && /** @type {HTMLElement} */ (e).tabIndex >= 0).map((e) => e.outerHTML.slice(0, 60))));
+    expect(focusable).toEqual([]);
+    await page.locator('.onpage .jump').nth(1).click();
+    await expect(page.locator('#lp-part-1')).toBeFocused();
+    await expect(page.locator('#lp-part-1')).toBeInViewport();
+  });
+
+  test('one-page lesson: Part 2 opens when Mission 1 is done, stays open after a reload, and locks again on "Reset level progress"', async ({ page }) => {
+    const lesson = await load();
+    await freshPage(page, routeHash(level, 'build'));
+    await finishMissions(page, lesson.parts.map((_, i) => i === 0), 1);
+    await reloadGame(page);
+    await page.click('#tab-lesson');
+    const open = await shownIn(page, 1);
+    expect(open).toContain(`Part 2 · ${plain(lesson.parts[1].title)}`);
+    expect(open).not.toContain(lockedPart(lesson.parts[1], 1)[1]);
+    for (const section of await page.locator('.lpart').nth(1).locator('.lsec').all()) await expect(section).toBeVisible();
+    await expect(page.locator('.mcard[data-part="1"] .mcard-start')).toBeVisible();
+    await expect(page.locator('.onpage .jump').nth(1)).toContainText('Not started');
+    await page.click('#tab-build');
+    await page.click('#resetLevel');
+    await page.click('#resetLevel'); // it asks for a second click
+    await page.click('#tab-lesson');
+    expect(await shownIn(page, 1)).toEqual(lockedPart(lesson.parts[1], 1));
+    await expect(page.locator('.onpage .jump').nth(1)).toContainText('Locked');
+  });
+
+  test('one-page lesson: the wrap-up opens only once the last mission is done', async ({ page }) => {
+    const lesson = await load(), count = lesson.parts.length, last = count - 1;
+    await freshPage(page, routeHash(level, 'lesson'));
+    await finishMissions(page, lesson.parts.map((_, i) => i < last), last);
+    expect(await shownIn(page, last)).not.toEqual(lockedPart(lesson.parts[last], last)); // the last part is open
+    expect(await shownIn(page, count)).toEqual(lockedWrap(count));
+    await finishMissions(page, lesson.parts.map(() => true), last);
+    const wrap = await shownIn(page, count);
+    expect(wrap).toContain('What you built');
+    expect(wrap).not.toContain(lockedWrap(count)[1]);
+    await expect(page.locator('.lwrap [data-act="quiz"]')).toBeVisible();
+  });
+
+  test('one-page lesson: every picture in a part or the wrap-up is drawn once it opens', async ({ page }) => {
+    const lesson = await load();
+    await freshPage(page, routeHash(level, 'lesson'));
+    await finishMissions(page, lesson.parts.map(() => true), 0);
+    const pictures = page.locator('.lpart .fig svg, .lwrap .fig svg');
+    expect(await pictures.count()).toBeGreaterThan(0);
+    for (const svg of await pictures.all()) {
+      await svg.scrollIntoViewIfNeeded();
+      // Its marks are there, and they take up room on the page (a picture drawn while hidden would measure 0).
+      const seen = await svg.evaluate((e) => {
+        const box = /** @type {SVGSVGElement} */ (e).getBBox(), rect = e.getBoundingClientRect();
+        return { id: e.id, marks: e.querySelectorAll('line, path, rect, text').length > 2, drawn: box.width > 0 && box.height > 0, shown: rect.width > 0 && rect.height > 0 };
+      });
+      expect(seen).toEqual({ id: seen.id, marks: true, drawn: true, shown: true });
+    }
   });
 
   test('one-page lesson: a part\'s questions come after its sections, before its mission card; a wrong answer explains itself', async ({ page }) => {
     const lesson = await load(), p = lesson.parts.findIndex((part) => part.checks?.length);
     const { options } = lesson.parts[p].checks[0], wrong = options.findIndex((o) => !o.right);
     await freshPage(page, routeHash(level, 'lesson'));
+    await finishMissions(page, lesson.parts.map((_, i) => i < p), p); // the part is open
     const part = page.locator('.lpart').nth(p);
     const kids = await part.evaluate((e) => [...e.children].map((c) => c.className));
     expect(kids.lastIndexOf('lsec')).toBeLessThan(kids.indexOf('checks'));
@@ -241,13 +316,11 @@ export function registerPageLessonTests({ level }) {
     await expect(page.locator('#playBtn')).toBeDisabled();
     await expect(page.locator('#mtabs button')).toHaveCount(count);
     for (const tab of await page.locator('#mtabs button').all()) await expect(tab).toBeDisabled();
-    // Its button goes to the mission's card; the next mission's Start waits for this one.
+    // Its button goes to the mission's card; the next mission's card waits, locked in its part, for this one.
     await page.getByRole('button', { name: 'Go to Part 1' }).click();
     await expect(page.locator('#view-lesson')).toBeVisible();
     await expect(page.locator('#lp-m0')).toBeFocused();
-    const next = page.locator('.mcard[data-part="1"] .mcard-start');
-    await expect(next.locator('.mcard-wait')).toHaveText('Finish Mission 1 first.');
-    await expect(next.getByRole('button', { name: 'Start Mission 2' })).toBeDisabled();
+    await expect(page.locator('.mcard[data-part="1"]')).toBeHidden();
     await page.getByRole('button', { name: 'Start Mission 1' }).click();
     await expect(page.locator('#view-build')).toBeVisible();
     await expect(page.locator('#missionLocked')).toHaveCount(0);
@@ -266,7 +339,7 @@ export function registerPageLessonTests({ level }) {
     const lesson = await load();
     await freshPage(page, routeHash(level, 'lesson'));
     await page.getByRole('button', { name: 'Start Mission 1' }).click();
-    await finish(page, lesson.parts.map((_, i) => i === 0), 0);
+    await finishMissions(page, lesson.parts.map((_, i) => i === 0), 0);
     const back = page.locator('#doneBanner [data-act="debrief"]');
     await expect(back).toHaveText('Back to the lesson →');
     await expect(page.locator('#mission .complete button')).toHaveText('Back to the lesson →'); // Mission 2 is not open yet
@@ -274,8 +347,9 @@ export function registerPageLessonTests({ level }) {
     await expect(page.locator('#view-lesson')).toBeVisible();
     await expect(page.locator('#lp-m0')).toBeFocused();
     await expect(page.locator('.mcard[data-part="0"] .mcard-done')).toBeVisible();
+    // Part 2 is open, its sections and then its mission card.
+    for (const section of await page.locator('.lpart').nth(1).locator('.lsec').all()) await expect(section).toBeVisible();
     const next = page.locator('.mcard[data-part="1"] .mcard-start');
-    await expect(next.locator('.mcard-wait')).toBeHidden();
     await next.getByRole('button', { name: 'Start Mission 2' }).click();
     await expect(page.locator('#view-build')).toBeVisible();
     expect(await page.evaluate(() => [window.__sdl.S.mission, window.__sdl.S.opened[1]])).toEqual([1, true]);
@@ -305,7 +379,7 @@ export function registerPageLessonTests({ level }) {
     const lesson = await load(), { debrief } = lesson.parts[0];
     await freshPage(page, routeHash(level, 'build'));
     await expect(page.locator('#doneBanner')).toBeHidden();
-    await finish(page, lesson.parts.map((_, i) => i === 0), 0);
+    await finishMissions(page, lesson.parts.map((_, i) => i === 0), 0);
     await expect(page.locator('#doneText')).toHaveText('Mission 1 complete');
     await page.click('#doneBanner [data-act="debrief"]');
     await expect(page.locator('#view-lesson')).toBeVisible();
@@ -318,7 +392,7 @@ export function registerPageLessonTests({ level }) {
     await expect(done).toContainText(plain(debrief.number[0]));
     await expect(done).toContainText(plain(debrief.next));
     await expect(page.locator('.mcard').nth(1).locator('.mcard-start')).toBeVisible(); // the next mission is still to do
-    await finish(page, lesson.parts.map((_, i) => i === 0), 1);
+    await finishMissions(page, lesson.parts.map((_, i) => i === 0), 1);
     await done.getByRole('button', { name: 'Replay Mission 1' }).click();
     await expect(page.locator('#view-build')).toBeVisible();
     expect(await page.evaluate(() => window.__sdl.S.mission)).toBe(0);
@@ -327,7 +401,7 @@ export function registerPageLessonTests({ level }) {
   test('one-page lesson: after the last mission, its button on the canvas opens the wrap-up, which leads to the quiz', async ({ page }) => {
     const lesson = await load(), last = lesson.parts.length - 1;
     await freshPage(page, routeHash(level, 'build'));
-    await finish(page, lesson.parts.map(() => true), last);
+    await finishMissions(page, lesson.parts.map(() => true), last);
     await expect(page.locator('#doneText')).toHaveText(`Mission ${last + 1} complete`);
     await page.click('#doneBanner [data-act="debrief"]');
     await expect(page.locator('#lp-wrap')).toBeFocused();
@@ -368,11 +442,12 @@ export function registerPageLessonTests({ level }) {
     const lesson = await load(), last = lesson.parts.length - 1;
     await serveLessonWith(page, 'delete lesson.parts[lesson.parts.length - 1].checks; delete lesson.wrap.loop;');
     await freshPage(page, routeHash(level, 'lesson'));
+    await finishMissions(page, lesson.parts.map(() => true), last); // the last part and the wrap-up open
     const part = page.locator('.lpart').nth(last);
     await expect(part.locator('.lsec')).toHaveCount(lesson.parts[last].sections.length);
     await expect(part.locator('.checks')).toHaveCount(0);
     await expect(part.locator('.mcard')).toBeVisible();
-    const paragraphs = page.locator('.lwrap > p');
+    const paragraphs = page.locator('.lwrap > p:not(.part-lock)');
     await expect(paragraphs).toHaveCount(2); // the label, then "Still broken"
     await expect(paragraphs.last()).toHaveText(`Still broken. ${plain(lesson.wrap.broken)}`);
   });
@@ -382,25 +457,31 @@ export function registerPageLessonTests({ level }) {
     await page.setViewportSize({ width: 360, height: 780 });
     await freshPage(page, routeHash(level, 'lesson'));
     await page.click('#pageLesson [data-act="rules"]');
-    await finish(page, lesson.parts.map(() => true), 0);
+    await finishMissions(page, lesson.parts.map(() => true), 0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
   });
 
   for (const width of [390, 1280]) {
-    test(`one-page lesson at ${width} px: one column, at most 620 px wide; text, boxes, tables, pictures and mission cards share its edges`, async ({ page }) => {
+    test(`one-page lesson at ${width} px: one column, at most 620 px wide; text, boxes, tables, pictures, mission cards and lock lines share its edges`, async ({ page }) => {
+      const lesson = await load();
       await page.setViewportSize({ width, height: 844 });
       await freshPage(page, routeHash(level, 'lesson'));
-      const { column, off } = await page.evaluate(() => {
+      const edges = () => page.evaluate(() => {
         const root = document.querySelector('#pageLesson').getBoundingClientRect();
-        const blocks = '.lede, .lintro > ul, .fig, .lsec-body > p, .lsec-body > ul, .newpart, .tbl-wrap, .check, .mcard, .lwrap > ol';
+        const blocks = '.lede, .lintro > ul, .fig, .lsec-body > p, .lsec-body > ul, .newpart, .tbl-wrap, .check, .mcard, .lwrap > ol, .part-lock';
         const off = [...document.querySelectorAll(blocks)].filter((e) => e.checkVisibility()).flatMap((e) => {
           const r = e.getBoundingClientRect();
           return Math.round(r.left) === Math.round(root.left) && Math.round(r.right) === Math.round(root.right) ? [] : [e.className || e.tagName];
         });
         return { column: root.width, off };
       });
-      expect(column).toBeLessThanOrEqual(620);
-      expect(off).toEqual([]);
+      // With the later parts locked, then with every part open.
+      for (const done of [false, true]) {
+        if (done) await finishMissions(page, lesson.parts.map(() => true), 0);
+        const { column, off } = await edges();
+        expect(column).toBeLessThanOrEqual(620);
+        expect(off).toEqual([]);
+      }
     });
   }
 
@@ -412,7 +493,7 @@ export function registerPageLessonTests({ level }) {
           const lesson = await load();
           await freshPage(page, routeHash(level, 'lesson'));
           await page.click('#pageLesson [data-act="rules"]');
-          await finish(page, lesson.parts.map((_, i) => i === 0), 1);
+          await finishMissions(page, lesson.parts.map((_, i) => i === 0), 1);
           await page.locator('.checks .opt').first().click();
           const results = await new AxeBuilder({ page }).include('#view-lesson').setLegacyMode().analyze();
           expect(results.violations.map((v) => `${v.id} (${v.nodes.length})`)).toEqual([]);

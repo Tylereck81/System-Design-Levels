@@ -191,9 +191,22 @@ function wireSteps(root, lesson) {
 // The intro, a line of links to each part, one part per mission (its sections, its questions, its mission card),
 // then the wrap-up, all on one page. Nothing here is saved: a part's state comes from mission progress, and a mission
 // card's Start button is what opens its mission (`S.opened`, see missionOpen in state.js).
+// Part 2 onwards and the wrap-up are locked until the mission before them is done (`partOpen`): a locked one shows its
+// heading and a line saying which mission opens it, and the rest of it is `hidden`, so it cannot be read, reached by
+// the keyboard or found.
 
-/** A mission's state in words (never colour alone). */
-const missionState = (i) => (S.done[i] ? 'Done' : 'Not started');
+/**
+ * Whether part `p` of a one-page lesson is open; `p` equal to the number of parts is the wrap-up. The only rule for it:
+ * a part opens with its mission (Part 1 always, any other once the mission before it is done), and the wrap-up once
+ * the last mission is done. It reads `S.done` only, so resetting the level locks the parts again.
+ */
+const partOpen = (p) => mayOpen(p);
+
+/** A part's state in words (never colour alone). */
+const partState = (i) => (!partOpen(i) ? 'Locked' : S.done[i] ? 'Done' : 'Not started');
+
+/** The line a locked part (or, for `p` equal to the number of parts, the locked wrap-up) shows under its heading. */
+const lockHtml = (p, wrap = false) => html`<p class="part-lock" hidden>Finish Mission ${p} to unlock ${wrap ? 'the wrap-up' : 'this part'}.</p>`;
 
 function introHtml(lesson) {
   const { intro } = lesson, minutes = lessonMinutes(lesson);
@@ -212,7 +225,7 @@ function introHtml(lesson) {
 function onPageHtml(parts) {
   return html`<nav class="onpage" aria-labelledby="onpageLabel">
     <p class="label" id="onpageLabel">On this page</p>
-    <ul>${parts.map((p, i) => html`<li><button type="button" class="jump" data-jump="lp-part-${i}">${i + 1} · ${raw(p.title)} · <span class="part-state" data-part="${i}">${missionState(i)}</span></button></li>`)}
+    <ul>${parts.map((p, i) => html`<li><button type="button" class="jump" data-jump="lp-part-${i}">${i + 1} · ${raw(p.title)} · <span class="part-state" data-part="${i}">${partState(i)}</span></button></li>`)}
       <li><button type="button" class="jump" data-jump="lp-wrap">Wrap-up</button></li>
     </ul>
   </nav>`;
@@ -251,9 +264,9 @@ const checksHtml = (checks, p) => html`<div class="checks" aria-labelledby="lp-c
   </div>`;
 
 /**
- * Part `p`'s mission card, in both of its states: what the mission asks with a Start button (available once the
- * mission before it is done, and until then saying so), and once the mission is done what it showed with a Replay
- * button. `paintParts` shows the one that applies. Only the last part may have no
+ * Part `p`'s mission card, in both of its states: what the mission asks with a Start button, and once the mission is
+ * done what it showed with a Replay button. `paintParts` shows the one that applies (the card is in its part, so it
+ * is seen only once its mission may open). Only the last part may have no
  * debrief (validate-lesson.js), and the wrap-up follows it.
  */
 function missionCardHtml(part, p) {
@@ -269,8 +282,7 @@ function missionCardHtml(part, p) {
     <div class="mcard-start">
       <p class="mcard-will">You will</p>
       <ul>${part.youWill.map((line) => html`<li>${raw(line)}</li>`)}</ul>
-      ${p ? html`<p class="mcard-wait" id="lp-wait${p}">Finish Mission ${p} first.</p>` : ''}
-      <button type="button" class="btn primary" data-act="mission" data-mission="${p}"${p ? raw(` aria-describedby="lp-wait${p}"`) : ''}>Start Mission ${n} <span aria-hidden="true">→</span></button>
+      <button type="button" class="btn primary" data-act="mission" data-mission="${p}">Start Mission ${n} <span aria-hidden="true">→</span></button>
     </div>
     <div class="mcard-done" hidden>
       <p class="mcard-complete"><span aria-hidden="true">✓</span> Mission ${n} complete</p>
@@ -296,6 +308,7 @@ function partHtml(part, p) {
   return html`<section class="lpart" aria-labelledby="lp-part-${p}">
     <p class="label">${part.minutes} min</p>
     <h2 id="lp-part-${p}" tabindex="-1">Part ${p + 1} · ${raw(part.title)}</h2>
+    ${p ? lockHtml(p) : ''}
     ${part.lead ? html`<p class="part-lead">${raw(part.lead)}</p>` : ''}
     ${part.sections.map((section, s) => html`${cardsBefore(s)}${sectionHtml(section, p, s)}`)}
     ${part.checks?.length ? checksHtml(part.checks, p) : ''}
@@ -303,11 +316,15 @@ function partHtml(part, p) {
   </section>`;
 }
 
+/** The wrap-up's heading: "Wrap-up" while it is locked, as its link names it. */
+const WRAP_TITLE = { open: 'What you built', locked: 'Wrap-up' };
+
 /** The level's wrap-up: the intro's picture, three things to say, numbers to keep, then the quiz. */
 function wrapHtml(wrap) {
   return html`<section class="lwrap" aria-labelledby="lp-wrap">
     <p class="label">Level ${level.id} · wrap-up</p>
-    <h2 id="lp-wrap" tabindex="-1">What you built</h2>
+    <h2 id="lp-wrap" tabindex="-1">${WRAP_TITLE.open}</h2>
+    ${lockHtml(level.missions.length, true)}
     <figure class="fig"><svg id="${wrap.picture}" role="img" aria-label="${wrap.alt}"></svg></figure>
     <h3>Three things to say in an interview</h3>
     <ol>${wrap.say.map((line) => html`<li>${raw(line)}</li>`)}</ol>
@@ -334,24 +351,38 @@ function drawCardIcons(root) {
   for (const svg of root.querySelectorAll('.newpart-icon')) drawIcon(/** @type {HTMLElement} */ (svg).dataset.icon, svg, 0, 0);
 }
 
-/** The rendered one-page lesson, and each mission card's state it last showed (so a repaint touches only what changed). */
+/** The rendered one-page lesson, and each part's state it last showed (so a repaint touches only what changed). */
 const pageView = { root: null, painted: [] };
 
-/** Shows each part's state in the links and its mission card's state. main.js calls it after every change. */
+/**
+ * Shows part section `sec` (a part, or the wrap-up) open or locked: locked, only its heading and its lock line. Part 1
+ * has no lock line and is never locked.
+ */
+function paintLock(sec, open) {
+  for (const kid of sec.children) if (kid.tagName !== 'H2') /** @type {HTMLElement} */ (kid).hidden = kid.classList.contains('part-lock') === open;
+}
+
+/** Shows mission `i`'s card as done (what it showed, Replay) or still to do (You will, Start). */
+function paintCard(i, done) {
+  const card = pageView.root.querySelector(`.mcard[data-part="${i}"]`);
+  card.classList.toggle('done', done);
+  card.querySelector('.mcard-start').hidden = done;
+  card.querySelector('.mcard-done').hidden = !done;
+}
+
+/** Shows each part locked or open, its state in the links and its mission card's state. main.js calls it after every change. */
 export function paintParts() {
   if (!pageView.root) return;
-  MISSIONS.forEach((_, i) => {
-    const done = !!S.done[i], ready = mayOpen(i), state = done ? 'done' : ready ? 'ready' : 'wait';
-    if (pageView.painted[i] === state) return;
-    pageView.painted[i] = state;
-    pageView.root.querySelector(`.part-state[data-part="${i}"]`).textContent = missionState(i);
-    const card = pageView.root.querySelector(`.mcard[data-part="${i}"]`);
-    card.classList.toggle('done', done);
-    card.querySelector('.mcard-start').hidden = done;
-    card.querySelector('.mcard-done').hidden = !done;
-    /** @type {HTMLButtonElement} */ (card.querySelector('.mcard-start [data-act="mission"]')).disabled = !ready;
-    const wait = card.querySelector('.mcard-wait');
-    if (wait) /** @type {HTMLElement} */ (wait).hidden = ready;
+  // In page order: part p is index p, and the wrap-up, after the last part, is index MISSIONS.length.
+  pageView.root.querySelectorAll('.lpart, .lwrap').forEach((sec, p) => {
+    const wrap = sec.classList.contains('lwrap'), open = partOpen(p), done = !wrap && !!S.done[p];
+    const state = !open ? 'locked' : done ? 'done' : 'open';
+    if (pageView.painted[p] === state) return;
+    pageView.painted[p] = state;
+    paintLock(sec, open);
+    if (wrap) { sec.querySelector('h2').textContent = open ? WRAP_TITLE.open : WRAP_TITLE.locked; return; }
+    pageView.root.querySelector(`.part-state[data-part="${p}"]`).textContent = partState(p);
+    paintCard(p, done);
   });
 }
 
@@ -362,7 +393,7 @@ function jumpTo(id) {
   heading.focus({ preventScroll: true });
 }
 
-/** A card's Start or Replay button: opens mission `i` on the Build tab (the button is disabled until it may open). */
+/** A card's Start or Replay button: opens mission `i` on the Build tab (its card is in view only once it may open). */
 function startMission(i) {
   if (openFromLesson(i)) hooks.setTab('build');
 }
