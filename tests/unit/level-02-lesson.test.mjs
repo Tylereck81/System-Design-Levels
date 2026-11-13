@@ -2,6 +2,7 @@
 // Run with `npm run test:unit`.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { SIZES } from '../../js/engine/catalog.js';
 import level from '../../levels/level-02.js';
 import { lessonWarnings } from '../../js/validate-lesson.js';
 
@@ -22,6 +23,10 @@ test('"bought four ways": one row per server size, each with the same total capa
   // 1,600 req/s = 1 × XL (1,600) = 2 × L (800) = 4 × M (400) = 8 × S (200).
   const rows = second.sections[1].body.find((b) => b.table).table.rows;
   assert.deepEqual(rows.map((r) => r[0]), ['1 × XL', '2 × L', '4 × M', '8 × S']);
+  for (const [label] of rows) {
+    const [n, name] = label.split(' × ');
+    assert.equal(Number(n) * SIZES[name].cap, 1600, label);
+  }
 });
 
 test('quiz review lines name the section that lists the question', () => {
