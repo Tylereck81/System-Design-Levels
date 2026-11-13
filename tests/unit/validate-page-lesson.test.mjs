@@ -198,6 +198,17 @@ test('"Start here" is optional: one section\'s text and its time, without quiz q
   assert.deepEqual(withStart({ body: [{ figure: 'figNine', alt: 'One box.', caption: 'One box' }] }), ['start: figure "figNine" is not drawn by the level\'s drawFigures']);
 });
 
+test('"Last time" is optional text of at most 40 words, and a lesson has it or Start here, not both', () => {
+  const withLast = (last) => at((d) => { lesson(d).last = last; });
+  assert.deepEqual(withLast('The last level left the database as the only single point of failure.'), []);
+  assert.deepEqual(withLast(words(L.lastWords)), []);
+  assert.deepEqual(withLast(words(L.lastWords + 1)), ['last: Last time has 41 words, more than 40']);
+  assert.deepEqual(withLast(''), ['last: needs Last time']);
+  assert.deepEqual(withLast(3), ['last: needs Last time']);
+  const start = { minutes: 3, title: 'What is a shop?', body: [{ p: 'A short body.' }], takeaway: 'One idea.' };
+  assert.deepEqual(at((d) => { lesson(d).start = start; lesson(d).last = 'One line.'; }), ['last: a lesson has Start here or Last time, not both']);
+});
+
 test('a part\'s lead is optional text, and counts towards the words before the mission card', () => {
   assert.deepEqual(at((d) => { part(d, 0).lead = 'The shop is ready.'; }), []);
   assert.deepEqual(at((d) => { part(d, 0).lead = 4; }), ['part 1: lead must be text when it is there']);

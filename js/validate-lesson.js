@@ -21,7 +21,7 @@ export const LIMITS = {
  * `firstPartWordsLevel1`: Level 1's first part may be longer, because it also explains the Build screen.
  */
 export const PAGE_LIMITS = {
-  storyWords: 50, minOutcomes: 3, maxOutcomes: 5, outcomeWords: 12,
+  storyWords: 50, minOutcomes: 3, maxOutcomes: 5, outcomeWords: 12, lastWords: 40,
   minSections: 1, maxSections: 4, partWords: 600, firstPartWordsLevel1: 700,
   sectionWords: 150, takeawayWords: 16,
   maxChecks: 2, minYouWill: 2, maxYouWill: 4,
@@ -324,6 +324,17 @@ function startProblems(start, drawn) {
 }
 
 /**
+ * Problems with "Last time", the line before the first part on every level after the first: what the level before
+ * left broken. A lesson opens with Start here or with Last time, never both.
+ */
+function lastProblems(lesson) {
+  if (lesson.last === undefined) return [];
+  const problems = wordsProblems(lesson.last, 'Last time', PAGE_LIMITS.lastWords);
+  if (lesson.start !== undefined) problems.push('a lesson has Start here or Last time, not both');
+  return prefixed('last', problems);
+}
+
+/**
  * Problems with a part's New part cards: each names a component of the level, with three short lines, and `before`,
  * when it is there, is the index of one of the part's `sections` (there are `sectionCount`).
  */
@@ -447,7 +458,7 @@ function pageLessonProblems(level) {
 
   // The intro and the wrap-up each name a picture, so the level's drawFigures is always run.
   const drawn = figureIds(level, true, problems);
-  problems.push(...introProblems(lesson.intro, drawn), ...startProblems(lesson.start, drawn));
+  problems.push(...introProblems(lesson.intro, drawn), ...startProblems(lesson.start, drawn), ...lastProblems(lesson));
   const context = { levelId: level.id, drawn, questions, components: level.components };
   parts.forEach((part, i) => problems.push(...partProblems(part, i, parts.length, context)));
   problems.push(...wrapProblems(lesson.wrap, drawn, flat(sections.flatMap((s) => textsIn(s)).join(' '))));

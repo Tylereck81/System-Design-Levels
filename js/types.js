@@ -312,6 +312,8 @@
  * @typedef {object} PageLesson
  * @property {{ kicker: string, title: string, story: string, picture: string, alt: string, outcomes: string[] }} intro
  *   `picture` names an svg the level's drawFigures draws: the finished design
+ * @property {string} [last]
+ *   "Last time", on every level after the first: what the level before left broken, at most 40 words
  * @property {Omit<LessonSection, 'quiz'> & { minutes: number }} [start]
  *   "Start here", before the first part: one section's text for what the whole course takes as known, and its time
  * @property {LessonPart[]} parts
