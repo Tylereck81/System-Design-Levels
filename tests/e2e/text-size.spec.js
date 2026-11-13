@@ -65,10 +65,10 @@ test.describe('lesson type scale', () => {
   });
 
   // A one-page lesson's 760 px column holds up to 105 characters a line (42.2em; 24em holds 60); every other lesson keeps 60.
-  for (const { id, kind, max } of [{ id: 1, kind: 'one-page', max: 105 },{ id: 2, kind: 'step', max: 60 }]) {
+  for (const { id, kind, max, root } of [{ id: 1, kind: 'one-page', max: 105, root: '#pageLesson' }, { id: 3, kind: 'written-out', max: 60, root: '#view-lesson .lede' }]) {
     test(`laptop: no line of body text in a ${kind} lesson (Level ${id}) is longer than ${max} characters`, async ({ page }) => {
       await freshPage(page, routeHash(id, 'lesson'));
-      await expect(page.locator(kind === 'one-page' ? '#pageLesson' : '#stepLesson')).toBeAttached();
+      await expect(page.locator(root)).toBeAttached();
       await showWholeLesson(page);
       // Every paragraph and list item at the body text size, except a worked calculation's rows, which use the whole
       // column on purpose. Each character is put on its line by its vertical middle; the longest line of each is counted.

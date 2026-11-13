@@ -434,6 +434,7 @@ details.hint p { margin: 8px 0 0; color: var(--ink-2); }
 .tier-label { font: 500 11.5px var(--f-mono); fill: var(--ink-3); }
 .d-line { stroke: var(--ink-3); stroke-width: 1.5; fill: none; }
 .d-dash { stroke-dasharray: 5 4; }
+.fig-down .node-box { fill: var(--bad-soft); stroke: var(--bad); }
 .d-arc { stroke: var(--accent); stroke-width: 5; fill: none; stroke-linecap: round; }
 .d-label { font: 12px var(--f-mono); fill: var(--ink-2); }
 .d-step { fill: var(--accent); }
