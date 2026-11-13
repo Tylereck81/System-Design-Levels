@@ -298,6 +298,12 @@ const startHtml = (start) => html`<section class="lstart" aria-labelledby="lp-st
     ${sectionHtml(start, 'start', 0)}
   </section>`;
 
+/** "Last time": what the level before left broken, before the first part. It takes Start here's place. */
+const lastHtml = (last) => html`<section class="lstart llast" aria-labelledby="lp-last">
+    <h2 id="lp-last">Last time</h2>
+    <p>${raw(last)}</p>
+  </section>`;
+
 function partHtml(part, p) {
   // A New part card comes before the section its `before` names: the first, when it names none.
   const cardsBefore = (s) => {
@@ -341,6 +347,7 @@ const pageLessonHtml = (lesson) => html`<div class="page-lesson" id="pageLesson"
     ${introHtml(lesson)}
     ${onPageHtml(lesson.parts)}
     ${lesson.start ? startHtml(lesson.start) : ''}
+    ${lesson.last ? lastHtml(lesson.last) : ''}
     ${lesson.parts.map(partHtml)}
     ${wrapHtml(lesson.wrap)}
   </div>`;
