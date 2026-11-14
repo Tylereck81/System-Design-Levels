@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures.js';
-import { registerCommonTests } from '../shared-checks.js';
+import { registerCommonTests, registerPageLessonTests } from '../shared-checks.js';
 import { freshPage, savedKeys, fastForward, playFor, state, logText, reloadGame, trackErrors, openMission, selectNode, calm, pressEnterOn } from '../helpers.js';
 
 // Level 3: database replication.
@@ -28,8 +28,16 @@ const measure = (page) => page.evaluate(() => {
 test.describe('Level 3 · playthrough', () => {
   test('all three missions can be completed', async ({ page }) => {
     const errors = trackErrors(page);
-    await freshPage(page, '#level-3/build');
+    await freshPage(page, '#level-3/lesson');
     await expect(page.locator('#lvlChip')).toHaveText('Level 3 / 21');
+    // Each mission opens from its card in the lesson, and a finished one leads back there.
+    const start = async (n) => {
+      await page.click('#doneBanner [data-act="debrief"]');
+      await expect(page.locator(`#lp-m${n - 2}`)).toBeFocused();
+      await page.getByRole('button', { name: `Start Mission ${n}` }).click();
+      await expect(page.locator('#view-build')).toBeVisible();
+    };
+    await page.getByRole('button', { name: 'Start Mission 1' }).click();
 
     // Mission 1: two XL replicas, then crash one.
     await addReplicas(page, ['XL', 'XL']);
@@ -44,7 +52,7 @@ test.describe('Level 3 · playthrough', () => {
     expect(await logText(page)).toContain('Its reads moved to the other replica.');
 
     // Mission 2: estimate the peak writes, add a third XL replica.
-    await page.click('#mission .complete button');
+    await start(2);
     await page.fill('#estIn', '400 writes/s');
     await page.click('#estBtn');
     await addReplicas(page, ['XL']);
@@ -57,7 +65,7 @@ test.describe('Level 3 · playthrough', () => {
     expect(await state(page, () => window.__sdl.S.done[1])).toBe(true);
 
     // Mission 3: crash the primary and promote a replica through the inspector.
-    await page.click('#mission .complete button');
+    await start(3);
     await page.click('#playBtn');
     await fastForward(page, 5);
     await page.click('#exp-crash-primary');
@@ -83,6 +91,7 @@ test.describe('Level 3 · playthrough', () => {
 
   test('progress is saved under its own key and does not touch Level 2', async ({ page }) => {
     await freshPage(page, '#level-3/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     await addReplicas(page, ['XL']);
     expect(await savedKeys(page)).toEqual(['sdl-level3-v1']);
     await page.goto('about:blank');
@@ -96,6 +105,7 @@ test.describe('Level 3 · playthrough', () => {
 test.describe('Level 3 · numbers', () => {
   test('pinned designs match the simulation model', async ({ page }) => {
     await freshPage(page, '#level-3/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     await calm(page);
     // 1,500 req/s on one XL database: 94% busy. 40 + LB 1/(1 − 0.3) + 0.5 + web 20/(1 − 0.469) + 0.5 + db 10/(1 − 0.9375)
     let r = await measure(page);
@@ -128,6 +138,7 @@ test.describe('Level 3 · numbers', () => {
 test.describe('Level 3 · teaching feedback', () => {
   test('a new database becomes a replica of the primary; connections say writes and reads', async ({ page }) => {
     await freshPage(page, '#level-3/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     const [id] = await addReplicas(page, ['XL']);
     await expect(page.locator(`[data-node="${id}"] .node-name`)).toHaveText('Read replica');
     await expect(page.locator('[data-node="b"] .node-name')).toHaveText('Primary DB');
@@ -138,6 +149,7 @@ test.describe('Level 3 · teaching feedback', () => {
 
   test('three L replicas look cheap but each also applies every write: 75% busy', async ({ page }) => {
     await freshPage(page, '#level-3/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     await addReplicas(page, ['L', 'L', 'L']);
     await calm(page);
     const r = await measure(page);
@@ -152,6 +164,7 @@ test.describe('Level 3 · teaching feedback', () => {
 
   test('the inspector splits a replica\'s load into reads and copied writes', async ({ page }) => {
     await freshPage(page, '#level-3/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     const [id] = await addReplicas(page, ['XL', 'XL']);
     await page.click('#playBtn');
     await fastForward(page, 1);
@@ -161,6 +174,7 @@ test.describe('Level 3 · teaching feedback', () => {
 
   test('two L replicas overload', async ({ page }) => {
     await freshPage(page, '#level-3/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     await addReplicas(page, ['L', 'L']);
     await calm(page);
     expect((await measure(page)).served).toBeCloseTo(97.3, 1);
@@ -171,6 +185,7 @@ test.describe('Level 3 · teaching feedback', () => {
 
   test('a web server connected only to replicas cannot write, and the banner says so', async ({ page }) => {
     await freshPage(page, '#level-3/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     await addReplicas(page, ['XL', 'XL']);
     await page.evaluate(() => { const s = window.__sdl; s.S.edges = s.S.edges.filter((e) => !(e.from === 'w1' && e.to === 'b')); s.afterDesignChange(); });
     await calm(page);
@@ -182,6 +197,7 @@ test.describe('Level 3 · teaching feedback', () => {
 
   test('with its only replica down, reads go to the primary', async ({ page }) => {
     await freshPage(page, '#level-3/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     await addReplicas(page, ['XL']);
     await page.click('#playBtn');
     await page.click('#exp-crash-replica');
@@ -193,6 +209,7 @@ test.describe('Level 3 · teaching feedback', () => {
 
   test('Mission 2: the Mission 1 design is 75% busy, and L replicas cannot keep up with the writes', async ({ page }) => {
     await freshPage(page, '#level-3/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     const ids = await addReplicas(page, ['XL', 'XL']);
     await openMission(page, 1, { estimate: true });
     await calm(page);
@@ -207,6 +224,7 @@ test.describe('Level 3 · teaching feedback', () => {
 
   test('Mission 2: with only two XL replicas, a replica crash leaves too little', async ({ page }) => {
     await freshPage(page, '#level-3/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     await addReplicas(page, ['XL', 'XL']);
     await openMission(page, 1, { estimate: true });
     await page.click('#playBtn');
@@ -223,6 +241,7 @@ test.describe('Level 3 · teaching feedback', () => {
 
   test('Mission 3: a crashed primary fails every write until a replica is promoted', async ({ page }) => {
     await freshPage(page, '#level-3/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     await addReplicas(page, ['XL', 'XL', 'XL']);
     await openMission(page, 2, { estimate: true });
     await page.click('#playBtn');
@@ -247,6 +266,7 @@ test.describe('Level 3 · teaching feedback', () => {
 
   test('a crashed replica cannot be promoted; a planned promotion loses nothing', async ({ page }) => {
     await freshPage(page, '#level-3/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     const [a, b] = await addReplicas(page, ['XL', 'XL']);
     await page.click('#playBtn');
     await page.click('#exp-crash-replica');
@@ -262,6 +282,7 @@ test.describe('Level 3 · teaching feedback', () => {
 
   test('roles survive a reload; bad saved roles load as replicas with one primary', async ({ page }) => {
     await freshPage(page, '#level-3/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     await addReplicas(page, ['XL', 'XL']);
     await reloadGame(page);
     expect(await state(page, () => window.__sdl.S.nodes.filter((n) => n.type === 'db').map((n) => n.role))).toEqual(['primary', 'replica', 'replica']);
@@ -277,7 +298,7 @@ test.describe('Level 3 · teaching feedback', () => {
 
   test('the estimate box asks for peak writes and gives specific hints', async ({ page }) => {
     await freshPage(page, '#level-3/build');
-    await page.evaluate(() => { const S = window.__sdl.S; S.done[0] = true; S.verified[0] = true; S.mission = 1; window.__sdl.afterChange(true); });
+    await openMission(page, 1);
     await page.fill('#estIn', '200');
     await page.click('#estBtn');
     await expect(page.locator('#estFb')).toContainText('average write rate');
@@ -354,6 +375,7 @@ test.describe('Level 3 · fixes from QA', () => {
     test(`${w} px: a primary and three replicas, with no label overflow and no line under a database`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: h });
       await freshPage(page, '#level-3/build');
+      await openMission(page, 0); // a one-page lesson opens each mission from its card
       await addReplicas(page, ['XL', 'XL', 'XL']);
       const bad = await page.evaluate(() => {
         const problems = [], svg = document.getElementById('cv');
@@ -380,6 +402,7 @@ test.describe('Level 3 · fixes from QA', () => {
 
   test('sentences name the primary database in full, and Promote has room under it', async ({ page }) => {
     await freshPage(page, '#level-3/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     const [r] = await addReplicas(page, ['XL']);
     await selectNode(page, 'b');
     await expect(page.locator('#insp [data-focus-key="remove"]')).toHaveText('Remove primary database');
@@ -395,6 +418,7 @@ test.describe('Level 3 · fixes from QA', () => {
 test.describe('Level 3 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-3/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     for (let i = 0; i < 2; i++) await pressEnterOn(page, '.pal-item[data-type="db"]');
     const ids = await state(page, () => window.__sdl.S.nodes.filter((n) => n.role === 'replica').map((n) => n.id));
     for (const id of ids) {
@@ -419,10 +443,32 @@ test.describe('Level 3 · layout and accessibility', () => {
     phone: { title: 'with every database', setup: (page) => addReplicas(page, ['XL', 'XL', 'XL']) },
     onTab: {
       build: async (page) => {
+        await openMission(page, 0);
         const [id] = await addReplicas(page, ['XL', 'XL']);
         await page.click('#playBtn'); await playFor(page, 0.5);
         await selectNode(page, id);
       },
     },
   });
+});
+
+test.describe('Level 3 · saved data', () => {
+  test('a save from before the one-page lesson opens every mission it could already open', async ({ page }) => {
+    await freshPage(page, '#level-3/build');
+    await page.evaluate(() => {
+      const old = { ...JSON.parse(JSON.stringify(window.__sdl.S)), v: 2, mission: 1, done: [true, false, false], verified: [true, false, false] };
+      delete old.opened;
+      localStorage.setItem('sdl-level3-v1', JSON.stringify(old));
+    });
+    await reloadGame(page);
+    const s = await state(page, () => { const S = window.__sdl.S; return { done: S.done, mission: S.mission, v: S.v, opened: S.opened }; });
+    expect(s.done).toEqual([true, false, false]);
+    expect(s.mission).toBe(1);
+    expect(s.v).toBe(3);
+    expect(s.opened).toEqual([true, true, false]); // Mission 1, and Mission 2 because Mission 1 is done
+  });
+});
+
+test.describe('Level 3 · one-page lesson', () => {
+  registerPageLessonTests({ level: 3 });
 });

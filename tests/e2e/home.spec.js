@@ -26,7 +26,8 @@ test.describe('Home page', () => {
     await expect(level(page, 1)).toContainText('One server to two tiers');
     await expect(level(page, 1)).toContainText('Not started · 30 min'); // 3 + 7 + 9 + 11: Start here and the parts
     await expect(level(page, 2).locator('.home-state')).toHaveText('○Not started · 24 min'); // 9 + 9 + 6: its three parts
-    await expect(level(page, 3).locator('.home-state')).toHaveText('○Not started'); // no minutes until its lesson is on one page
+    await expect(level(page, 3).locator('.home-state')).toHaveText('○Not started · 25 min'); // 10 + 7 + 8: its three parts
+    await expect(level(page, 4).locator('.home-state')).toHaveText('○Not started'); // no minutes until its lesson is on one page
     await expect(page.locator('#homeContinue')).toHaveText('Start: Level 1 · One server to two tiers →');
     // The level's own page is hidden, and so are its tabs; the header shows only the product name.
     await expect(page.locator('#view-lesson')).toBeHidden();
@@ -47,7 +48,7 @@ test.describe('Home page', () => {
     });
     await expect(level(page, 1).locator('.home-state')).toHaveText('✓Done · 30 min');
     await expect(level(page, 2).locator('.home-state')).toHaveText('◐In progress · 1 of 3 missions');
-    await expect(level(page, 3).locator('.home-state')).toHaveText('○Not started');
+    await expect(level(page, 3).locator('.home-state')).toHaveText('○Not started · 25 min');
     await expect(page.locator('#homeContinue')).toHaveText('Continue: Level 2 · Load balancer and horizontal scaling →');
     await page.click('#homeContinue');
     await page.waitForFunction(() => !!window.__sdl);
