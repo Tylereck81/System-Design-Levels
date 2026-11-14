@@ -1,6 +1,6 @@
 // Which missions were opened from the lesson, in Node, on Level 1 (a one-page lesson, save version 3): saved, kept,
-// migrated from older saves, and the one rule that says whether a mission is open. saves.test.mjs covers a level
-// whose lesson is not on one page.
+// migrated from older saves, and the one rule that says whether a mission is open. saves-no-opened.test.mjs covers a
+// level whose lesson is not on one page.
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadLevel } from './harness.mjs';

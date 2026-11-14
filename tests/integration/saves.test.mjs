@@ -1,4 +1,4 @@
-// Saved progress in Node, on Level 3 (save version 2, quiz version 1, database roles, component limits): a valid save
+// Saved progress in Node, on Level 3 (save version 3, quiz version 1, database roles, component limits): a valid save
 // loads back as it was, an old save is migrated, and a broken save never leaves the game in a bad state.
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -42,7 +42,7 @@ test('a valid save loads back as it was saved, with default settings filled in',
   const s = S;
   s.nodes.push(replica('r7', 640));
   s.edges.push({ id: 'e8', from: 'w1', to: 'r7' });
-  Object.assign(s, { seq: 12, mission: 1, done: [true, false, false], verified: [true, true, false], est: true, estVal: '2000',
+  Object.assign(s, { seq: 12, mission: 1, done: [true, false, false], opened: [true, true, false], verified: [true, true, false], est: true, estVal: '2000',
     exp: [{ 'crash-replica': true }, { 'crash-replica': true }, { 'crash-primary': false }], quiz: { 0: 1, 2: 0 }, tab: 'build' });
   const saved = plain(s);
   save();
@@ -67,25 +67,21 @@ test('loading or resetting keeps the same state object, so every module holding 
   assert.equal(S.mission, 0);
 });
 
-test('without a one-page lesson nothing about opened missions is saved: a mission opens when the one before it is done', () => {
-  assert.equal('opened' in fresh(), false);
-  startFrom({ ...plain(fresh()), done: [true, false, false], opened: [false, false, false] });
-  assert.equal('opened' in S, false);
-  assert.deepEqual([0, 1, 2].map((i) => state.missionOpen(i)), [true, true, false]);
-});
-
-test('a save from before per-mission results is migrated to version 2', () => {
+test('a save from before per-mission results is migrated to version 3', () => {
   const old = { ...plain(fresh()), v: 1, mission: 1, done: [true, false, false], verified: [true, false, false],
     exp: { 'crash-replica': true, 'crash-primary': true }, quiz: { 0: 1 } };
   delete old.qv;
+  delete old.opened;
   startFrom(old);
   // Mission 1 is finished: its goals stay passed. Mission 2 was open: it keeps the old result. Mission 3 was not open.
   assert.deepEqual(S.exp, [{ 'crash-replica': true }, { 'crash-replica': true }, { 'crash-primary': false }]);
   assert.deepEqual(S.done, [true, false, false]);
   // Version 1 had the same quiz as quiz version 1, so the answers stay.
   assert.deepEqual(S.quiz, { 0: 1 });
-  assert.equal(S.v, 2);
+  assert.equal(S.v, 3);
   assert.equal(S.qv, 1);
+  // Version 3 records which missions were opened from the lesson: Mission 1, and Mission 2 because Mission 1 is done.
+  assert.deepEqual(S.opened, [true, true, false]);
 });
 
 test('quiz answers from another quiz version are dropped; the rest of the save stays', () => {
