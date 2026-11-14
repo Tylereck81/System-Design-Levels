@@ -7,7 +7,12 @@ import level from '../../levels/level-04.js';
 import { lessonWarnings } from '../../js/validate-lesson.js';
 
 const [first, second, third] = level.lesson.parts;
-const calcOf = (section) => section.body.find((b) => b.calc).calc;
+const sections = level.lesson.parts.flatMap((p) => p.sections);
+/** The section with this title, so reordering the parts or sections does not break a check. */
+const section = (title) => sections.find((x) => x.title === title);
+const calcOf = (title) => section(title).body.find((b) => b.calc).calc;
+/** The paragraphs of a section, joined, for checking a sentence wherever it sits. */
+const prose = (title) => section(title).body.filter((b) => b.p).map((b) => b.p).join(' ');
 const hitGoalOf = (i) => level.missions[i].goals.find((g) => g.id === 'hit');
 
 test('"each replica costs as much as your largest server": the level starts on XL replicas, the largest size', () => {
@@ -26,12 +31,12 @@ test('the new part card: every cache size handles the same lookups, in a fractio
 
 test('memory against disk: 10 ms is 100,000 times 100 ns', () => {
   // 10 ms = 10,000,000 ns; 10,000,000 ÷ 100 = 100,000.
-  assert.match(first.sections[0].body[2].p, /about 100 nanoseconds, and finding data on a disk about 10 milliseconds, which is 100,000 times longer\./);
+  assert.match(prose('How does a web server use a cache?'), /about 100 nanoseconds, and finding data on a disk about 10 milliseconds, which is 100,000 times longer\./);
 });
 
 test('the sizing example: a quarter of 2,400 reads, and 3 GB for the hot 20% of 500,000 articles', () => {
   // 2,400 × (1 − 0.75) = 600, a quarter. 500,000 × 20% = 100,000; 100,000 × 30 KB = 3,000,000 KB = 3 GB.
-  const calc = calcOf(first.sections[2]);
+  const calc = calcOf('How to size a cache');
   assert.deepEqual(calc.rows.map((r) => r.result), ['600 reads/s', '100,000 articles', '3 GB']);
   assert.match(calc.result, /^At a 75% hit rate the database sees a quarter of the reads\./);
 });
@@ -41,7 +46,7 @@ test('the game\'s catalog follows the 80/20 rule the lesson states: 20% of it is
   const { lo, hi } = level.missions[0].gate;
   const hot = level.workload.catalogGB * 0.2;
   assert.ok(hot >= lo && hot <= hi);
-  assert.match(first.sections[1].body[0].p, /80% of reads go to 20% of the items\./);
+  assert.match(prose('What belongs in a cache?'), /80% of reads go to 20% of the items\./);
 });
 
 test('the hit-rate goals the mission cards name are the ones the missions check', () => {
@@ -54,7 +59,9 @@ test('the hit-rate goals the mission cards name are the ones the missions check'
 
 test('losing one of two caches: 2,000 reads at 90% hits send 200, then 1,100, and 2,000 with a single cache', () => {
   // 2,000 × 0.1 = 200; one cache lost halves the hit rate: 2,000 × (1 − 0.45) = 1,100; no cache: 2,000.
-  const calc = calcOf(second.sections[1]);
+  // These are our example's numbers; that the game also halves the hit rate is pinned in tests/e2e/level-04.spec.js
+  // ("with two caches, losing one halves the hit rate and the replica copes").
+  const calc = calcOf('How to survive losing a cache');
   assert.deepEqual(calc.rows.map((r) => r.result), ['200 reads/s to the database', '1,100 reads/s to the database', '2,000 reads/s to the database']);
 });
 
