@@ -225,7 +225,7 @@
  */
 
 /**
- * One block of a lesson step's body. Exactly one of these keys names its type; js/validate-lesson.js lists them.
+ * One block of a lesson section's body. Exactly one of these keys names its type; js/validate-lesson.js lists them.
  * Text may hold inline markup (`<b>`, `<code>`). `figure` names an svg the level's drawFigures draws; `calc` is
  * a worked calculation (`Calc`); `assume` states a rule of the game.
  * @typedef {{ p: string } | { ul: string[] } | { ol: string[] }
@@ -237,33 +237,8 @@
  */
 
 /**
- * One answer to a step's question; `right` marks the one right answer, `why` explains it.
+ * One answer to a lesson question; `right` marks the one right answer, `why` explains it.
  * @typedef {{ t: string, why: string, right?: boolean }} CheckOption
- */
-
-/**
- * One step of a lesson: one idea, titled as a question.
- * @typedef {object} LessonStep
- * @property {string} title   a question
- * @property {string} hook    the problem the step answers
- * @property {{ kind: 'guess' | 'turn', q: string, options: CheckOption[] }} [check]
- *   `guess`: asked before the explanation; `turn`: practice after it
- * @property {LessonBlock[]} body
- * @property {string} takeaway  one sentence
- * @property {number[]} missions  indexes of the missions that use this step
- * @property {number[]} quiz      indexes of the quiz questions that review this step
- */
-
-/**
- * A lesson as steps, all read before the missions, then a recap that hands over to them.
- * @typedef {object} StepLesson
- * @property {string} kicker @property {string} title
- * @property {string} promise   what the player will know by the end
- * @property {number} minutes   time to read it
- * @property {LessonStep[]} steps
- * @property {{ numbers: [string, string][], bridge: string[] }} recap
- *   numbers worth remembering (value, what it is); `bridge` has one line per mission, in mission order
- * @property {string} rules     the game's rules the lesson relies on, in one paragraph
  */
 
 /**
@@ -323,8 +298,8 @@
  */
 
 /**
- * A lesson as data, in steps or on one page. Levels move from steps to one page one by one.
- * @typedef {StepLesson | PageLesson} Lesson
+ * A lesson as data, on one page. Levels move from authored HTML (`lessonHtml`) to this one by one.
+ * @typedef {PageLesson} Lesson
  */
 
 /**
