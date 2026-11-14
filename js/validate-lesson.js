@@ -1,18 +1,14 @@
-// Checks a lesson written as steps or on one page (`StepLesson`, `PageLesson` in types.js). Pure: it reads a level
+// Checks a lesson on one page (`PageLesson` in types.js). Pure: it reads a level
 // and returns its problems. The word limits are the rule: when a lesson cannot meet one, raise it with the owner;
 // never loosen the check.
 
-/** Blocks whose text counts towards a step's word limit. */
+/** Blocks whose text counts towards a section's word limit. */
 const PROSE = ['p', 'ul', 'ol', 'calc', 'assume'];
-/** Blocks a step may have one of; their text is not counted. */
+/** Blocks a section may have one of; their text is not counted. */
 const VISUAL = ['table', 'code', 'figure'];
 
-export const LIMITS = {
-  minSteps: 5, maxSteps: 8,
-  promiseWords: 60, hookWords: 50, bodyWords: 120,
-  minChecks: 3, minOptions: 2, maxOptions: 3,
-  maxCalcRows: 4,
-};
+/** The limits on a question's options and a calculation's rows. */
+export const LIMITS = { minOptions: 2, maxOptions: 3, maxCalcRows: 4 };
 
 /**
  * The limits for a lesson on one page. A calculation's rows and the option counts are as in `LIMITS`. A part's words
@@ -89,41 +85,22 @@ function drawnFigures(level) {
   return { ids, error: null };
 }
 
-/** Problems with the lesson's own fields: kicker, title, promise, rules, minutes and the number of steps. */
-function lessonProblems(lesson, steps) {
-  const problems = [];
-  for (const key of ['kicker', 'title', 'promise', 'rules']) if (!isText(lesson[key])) problems.push(`the lesson needs a ${key}`);
-  if (!(Number.isFinite(lesson.minutes) && lesson.minutes > 0)) problems.push('the lesson needs its reading time in minutes');
-  const promiseWords = wordCount(lesson.promise ?? '');
-  if (promiseWords > LIMITS.promiseWords) problems.push(`the promise has ${promiseWords} words, more than ${LIMITS.promiseWords}`);
-  if (steps.length < LIMITS.minSteps || steps.length > LIMITS.maxSteps) problems.push(`the lesson has ${steps.length} steps, not ${LIMITS.minSteps} to ${LIMITS.maxSteps}`);
-  const numbers = lesson.recap?.numbers;
-  if (!(Array.isArray(numbers) && numbers.length > 0 && numbers.every(isPair))) {
-    problems.push('recap.numbers needs at least one [value, meaning] pair');
-  }
-  return problems;
-}
-
 /** A pair of texts: [value, what it is]. */
 const isPair = (n) => Array.isArray(n) && n.length === 2 && n.every(isText);
 
 /**
- * Problems with a step's or a section's title, hook and takeaway. `limits` gives the hook's word limit (a section's
- * hook is counted with its body instead) and, for a section, the takeaway's; `howTo` lets a title be "How to …".
- * @param {any} step @param {{ hookWords?: number, takeawayWords?: number, howTo?: boolean }} limits
+ * Problems with a section's title, hook and takeaway: the title is a question or starts "How to ", the hook is optional
+ * (a section may open with its body, and its words count with the body), the takeaway is one short sentence.
  */
-function textProblems(step, limits) {
+function textProblems(section) {
   const problems = [];
-  const title = isText(step.title) ? step.title.trim() : '';
-  if (limits.howTo) {
-    if (!title.endsWith('?') && !title.startsWith('How to ')) problems.push('the title must be a question ending in "?" or start with "How to "');
-  } else if (!title.endsWith('?')) problems.push('the title must be a question ending in "?"');
-  if (step.hook === undefined && limits.optionalHook) { /* a section may open with its body */ }
-  else if (!isText(step.hook)) problems.push('needs a hook');
-  else if (limits.hookWords && wordCount(step.hook) > limits.hookWords) problems.push(`the hook has ${wordCount(step.hook)} words, more than ${limits.hookWords}`);
-  if (!isText(step.takeaway)) problems.push('needs a takeaway');
-  else if (!isOneSentence(step.takeaway)) problems.push('the takeaway must be one sentence');
-  else if (limits.takeawayWords && wordCount(step.takeaway) > limits.takeawayWords) problems.push(`the takeaway has ${wordCount(step.takeaway)} words, more than ${limits.takeawayWords}`);
+  const title = isText(section.title) ? section.title.trim() : '';
+  if (!title.endsWith('?') && !title.startsWith('How to ')) problems.push('the title must be a question ending in "?" or start with "How to "');
+  if (section.hook !== undefined && !isText(section.hook)) problems.push('needs a hook');
+  const { takeawayWords } = PAGE_LIMITS;
+  if (!isText(section.takeaway)) problems.push('needs a takeaway');
+  else if (!isOneSentence(section.takeaway)) problems.push('the takeaway must be one sentence');
+  else if (wordCount(section.takeaway) > takeawayWords) problems.push(`the takeaway has ${wordCount(section.takeaway)} words, more than ${takeawayWords}`);
   return problems;
 }
 
@@ -159,7 +136,7 @@ function proseWords(body) {
 }
 
 /**
- * Problems with a step's or a section's body. `words` limits its prose: at most `max` words, together with `counted`
+ * Problems with a section's body. `words` limits its prose: at most `max` words, together with `counted`
  * more words, and `what` names the text counted in messages (a section's hook is counted with its body). `drawn` holds
  * the figure ids the level draws, or is null when they are unknown.
  * @param {any} body @param {Set<string> | null} drawn @param {{ max: number, counted: number, what: string }} words
@@ -198,16 +175,7 @@ function questionProblems(check) {
   return problems;
 }
 
-/** Problems with a step's check, if it has one. */
-function checkProblems(check) {
-  if (!check) return [];
-  if (Array.isArray(check)) return ['has more than one check; at most one'];
-  const problems = [];
-  if (check.kind !== 'guess' && check.kind !== 'turn') problems.push('the check kind must be guess or turn');
-  return [...problems, ...questionProblems(check)];
-}
-
-/** Problems with a step's mission or quiz indexes (`what` says which); each index that exists is added to `used`. */
+/** Problems with a section's quiz indexes (`what` names them); each index that exists is added to `used`. */
 function indexProblems(list, count, what, used) {
   if (!Array.isArray(list)) return [`needs a ${what} list (it may be empty)`];
   const problems = [];
@@ -221,18 +189,6 @@ function indexProblems(list, count, what, used) {
 /** Indexes from 0 to count − 1 that are not in `used`. */
 const unused = (count, used) => Array.from({ length: count }, (_, n) => n).filter((n) => !used.has(n));
 
-/** Problems with what the steps cover together: the number of checks, every mission and question, the recap bridge. */
-function coverageProblems(lesson, steps, missions, questions) {
-  const problems = [];
-  const checks = steps.filter((s) => isObject(s?.check)).length;
-  if (checks < LIMITS.minChecks) problems.push(`the lesson has ${checks} checks, fewer than ${LIMITS.minChecks}`);
-  for (const n of unused(missions.count, missions.used)) problems.push(`mission index ${n} is in no step's missions`);
-  for (const n of unused(questions.count, questions.used)) problems.push(`quiz question index ${n} is in no step's quiz`);
-  const bridge = lesson.recap?.bridge;
-  if (!Array.isArray(bridge) || bridge.length !== missions.count) problems.push(`recap.bridge needs one line per mission (${missions.count}); it has ${Array.isArray(bridge) ? bridge.length : 'none'}`);
-  return problems;
-}
-
 /**
  * The figure ids the level draws, found only when `needed`; null when they are unknown (not needed, or drawFigures
  * failed, which `problems` then says).
@@ -243,28 +199,7 @@ function figureIds(level, needed, problems) {
   if (figures.error) problems.push(`drawFigures failed while listing its figures: ${figures.error.message}`);
   return figures.error ? null : figures.ids;
 }
-const hasFigure = (body) => Array.isArray(body) && body.some((b) => isObject(b) && 'figure' in b);
 const prefixed = (where, problems) => problems.map((p) => `${where}: ${p}`);
-
-/** Problems with a lesson written as steps. */
-function stepLessonProblems(level) {
-  const lesson = level.lesson;
-  const steps = Array.isArray(lesson.steps) ? lesson.steps : [];
-  const missions = { count: level.missions?.length ?? 0, used: new Set() };
-  const questions = { count: level.quiz?.questions?.length ?? 0, used: new Set() };
-  const problems = lessonProblems(lesson, steps);
-
-  // The level's drawFigures is run only when a step has a figure; if it fails, figure names cannot be checked.
-  const drawn = figureIds(level, steps.some((s) => hasFigure(s?.body)), problems);
-  steps.forEach((step, i) => {
-    if (!isObject(step)) { problems.push(`step ${i + 1}: is not a step object`); return; }
-    problems.push(...prefixed(`step ${i + 1}`, [...textProblems(step, LIMITS), ...bodyProblems(step.body, drawn, { max: LIMITS.bodyWords, counted: 0, what: 'the body' }),
-      ...checkProblems(step.check),
-      ...indexProblems(step.missions, missions.count, 'mission', missions.used),
-      ...indexProblems(step.quiz, questions.count, 'quiz question', questions.used)]));
-  });
-  return [...problems, ...coverageProblems(lesson, steps, missions, questions)];
-}
 
 /** Problems with a picture: it names a figure the level draws (unknown when `drawn` is null), with alt text. */
 function pictureProblems(part, drawn) {
@@ -298,7 +233,7 @@ function introProblems(intro, drawn) {
 /** Problems with a section's own text: its title, its hook when it has one, its body and its Remember line. */
 function sectionTextProblems(section, drawn) {
   const L = PAGE_LIMITS, hook = isText(section.hook) ? wordCount(section.hook) : 0;
-  return [...textProblems(section, { takeawayWords: L.takeawayWords, howTo: true, optionalHook: true }),
+  return [...textProblems(section),
     ...bodyProblems(section.body, drawn, { max: L.sectionWords, counted: hook, what: 'the hook and body' })];
 }
 
@@ -485,15 +420,9 @@ export function newPartProblems(levels) {
   return problems;
 }
 
-/**
- * Problems with a level's lesson, in steps or on one page. An empty list means the lesson is fine. Until every level
- * is on one page, a level may use either shape, but not both.
- */
+/** Problems with a level's lesson. An empty list means the lesson is fine. */
 export function validateLesson(level) {
-  const lesson = level.lesson;
-  if (!isObject(lesson)) return ['the lesson must be an object'];
-  if (!('parts' in lesson)) return stepLessonProblems(level);
-  return 'steps' in lesson ? ['the lesson has both steps and parts; it needs one or the other'] : pageLessonProblems(level);
+  return isObject(level.lesson) ? pageLessonProblems(level) : ['the lesson must be an object'];
 }
 
 /** Every piece of text under `value`, except code samples (shown as written) and figure ids. */
@@ -509,10 +438,6 @@ const bigNumbers = (text) => (plain(text).match(/\d(?:[\d,]*\d)?(?:\.\d+)?/g) ??
 /** The parts of a lesson with the words that name where each is: [where, part]. */
 function placesIn(lesson) {
   const list = (v) => (Array.isArray(v) ? v : []);
-  if (!('parts' in lesson)) {
-    const { steps, ...rest } = lesson;
-    return [['', rest], ...list(steps).map((step, i) => [`step ${i + 1}: `, step])];
-  }
   const { parts, ...rest } = lesson;
   return [['', rest], ...list(parts).flatMap((part, p) => {
     const { sections, ...own } = isObject(part) ? part : {};

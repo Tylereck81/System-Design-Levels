@@ -33,7 +33,7 @@ function guideProblems(guide, i) {
   return problems;
 }
 
-/** Problems that would make a level misbehave silently (a step lesson's own checks are in validate-lesson.js). An empty list means the level is fine. */
+/** Problems that would make a level misbehave silently (a lesson's own checks are in validate-lesson.js). An empty list means the level is fine. */
 export function validateLevel(data) {
   const problems = [], ids = new Set();
   if ((data.lesson === undefined) === (data.lessonHtml === undefined)) problems.push('a level needs exactly one of lesson and lessonHtml');

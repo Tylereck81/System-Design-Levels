@@ -119,19 +119,7 @@ table.t td.n { font-family: var(--f-mono); font-variant-numeric: tabular-nums; w
 .steps4 b { display: block; font-size: 16px; }
 .steps4 span { font: 14px var(--f-mono); color: var(--accent); }
 .lesson-cta { display: flex; justify-content: flex-end; padding-top: 22px; border-top: 1px solid var(--line); }
-/* Step lesson (js/ui/lesson.js): one step at a time, every control at least 44 px tall. */
-.step-lesson button { min-height: 44px; }
-.lesson .lesson-meta { font: 500 14px var(--f-mono); color: var(--ink-3); margin: 0 0 12px; max-width: none; }
-.lesson-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
-.lesson-bar nav { flex: 1 1 100%; }
-.lesson-bar .lesson-cta { padding: 0; border: 0; margin-left: auto; }
-.lesson .dots { display: flex; flex-wrap: wrap; gap: 4px; list-style: none; padding: 0; margin: 0; }
-.lesson .dots li { margin: 0; }
-.dot { min-width: 44px; padding: 0 10px; border: 1px solid var(--line); border-radius: 22px; background: var(--surface); font: 500 14px var(--f-mono); color: var(--ink-2); }
-.dot[aria-current="step"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-.lstep h2:focus { outline: none; }
-.lstep h2:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
-.lstep h3 { font-size: 20px; margin: 20px 0 6px; }
+/* Lesson blocks (js/ui/lesson.js): a section's hook and its questions. */
 .hook { font-size: 20px; color: var(--ink-2); }
 .check { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin: 14px 0; }
 .check-q { font-weight: 600; margin: 4px 0 10px; }
@@ -156,15 +144,10 @@ table.t td.n { font-family: var(--f-mono); font-variant-numeric: tabular-nums; w
 .takeaway { border-left: 3px solid var(--accent); padding: 4px 0 4px 12px; font-weight: 500; }
 .takeaway b { display: block; font: 500 14px var(--f-mono); letter-spacing: .07em; text-transform: uppercase; color: var(--accent); }
 .lstep-nav { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
-.step-lesson.all .lstep-nav [data-go] { display: none; }
 .recap-nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 0; }
 .recap-nums div { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
 .recap-nums dt { font: 600 18px var(--f-mono); }
 .recap-nums dd { margin: 0; font-size: 14px; color: var(--ink-2); }
-.lesson .bridge { list-style: none; padding: 0; display: grid; gap: 8px; }
-.lesson .bridge li { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 0; }
-.bridge b { display: block; }
-.step-lesson .fig svg, .step-lesson table.t { min-width: 0; }
 /* One-page lesson (js/ui/lesson.js): the intro, the links to each part, the parts with their mission cards, the wrap-up.
    One column: text, boxes and pictures share both edges and fill the lesson's 760 px, as wide as the quiz and the home
    page. By the 24em rule above, 760 px at 18 px (42.2em) holds at most 105 characters a line; tests/e2e/text-size.spec.js
