@@ -240,6 +240,15 @@ export function registerPageLessonTests({ level }) {
 
   test('one-page lesson: a mission is locked on the Build tab until its Start button in the lesson is pressed', async ({ page }) => {
     const lesson = await load(), count = lesson.parts.length;
+    // An open mission can be played, unless it starts with an estimate: then the estimate box shows and Play waits for it.
+    const gated = !!(await loadLevel()).missions[0].gate;
+    const expectOpen = async () => {
+      await expect(page.locator('#missionLocked')).toHaveCount(0);
+      if (gated) {
+        await expect(page.locator('#estIn')).toBeVisible();
+        await expect(page.locator('#playBtn')).toBeDisabled();
+      } else await expect(page.locator('#playBtn')).toBeEnabled();
+    };
     await freshPage(page, routeHash(level, 'build'));
     await expect(page.locator('#missionLocked')).toHaveText('Read Part 1 of the lesson, then press Start Mission 1.');
     await expect(page.locator('#playBtn')).toBeDisabled();
@@ -252,13 +261,12 @@ export function registerPageLessonTests({ level }) {
     await expect(page.locator('.mcard[data-part="1"]')).toBeHidden();
     await page.getByRole('button', { name: 'Start Mission 1' }).click();
     await expect(page.locator('#view-build')).toBeVisible();
-    await expect(page.locator('#missionLocked')).toHaveCount(0);
-    await expect(page.locator('#playBtn')).toBeEnabled();
+    await expectOpen();
     expect(await page.evaluate(() => window.__sdl.S.opened)).toEqual(lesson.parts.map((_, i) => i === 0));
     // Opened stays opened after a reload; the mission card leads back to its part.
     await reloadGame(page);
     await expect(page.locator('#view-build')).toBeVisible();
-    await expect(page.locator('#playBtn')).toBeEnabled();
+    await expectOpen();
     expect(await page.evaluate(() => window.__sdl.S.opened)).toEqual(lesson.parts.map((_, i) => i === 0));
     await page.getByRole('button', { name: 'Read Part 1 again' }).click();
     await expect(page.locator('#lp-part-0')).toBeFocused();

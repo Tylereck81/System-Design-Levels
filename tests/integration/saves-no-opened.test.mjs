@@ -1,5 +1,5 @@
-// Which missions are open, in Node, on Level 4, whose lesson is not on one page yet: nothing about opened missions
-// is saved, and a mission opens when the one before it is done. Move it to the next such level when Level 4's
+// Which missions are open, in Node, on Level 5, whose lesson is not on one page yet: nothing about opened missions
+// is saved, and a mission opens when the one before it is done. Move it to the next such level when Level 5's
 // lesson moves to one page. saves-opened.test.mjs covers a one-page lesson.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -12,7 +12,7 @@ Object.defineProperty(globalThis, 'localStorage', {
   value: { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) },
 });
 
-const { level, state } = await loadLevel(4);
+const { level, state } = await loadLevel(5);
 const { S, fresh, load, replaceState, missionOpen, LS_KEY } = state;
 
 test('without a one-page lesson nothing about opened missions is saved: a mission opens when the one before it is done', () => {
