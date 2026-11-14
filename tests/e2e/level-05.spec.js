@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures.js';
-import { registerCommonTests } from '../shared-checks.js';
+import { registerCommonTests, registerPageLessonTests } from '../shared-checks.js';
 import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, sampleRoutes, openMission, selectNode, setProps, calm, pressEnterOn } from '../helpers.js';
 
 // Level 5: CDN for static content.
@@ -31,8 +31,16 @@ const measure = (page) => page.evaluate(() => {
 test.describe('Level 5 · playthrough', () => {
   test('all three missions can be completed', async ({ page }) => {
     const errors = trackErrors(page);
-    await freshPage(page, '#level-5/build');
+    await freshPage(page, '#level-5/lesson');
     await expect(page.locator('#lvlChip')).toHaveText('Level 5 / 21');
+    // Each mission opens from its card in the lesson, and a finished one leads back there.
+    const start = async (n) => {
+      await page.click('#doneBanner [data-act="debrief"]');
+      await expect(page.locator(`#lp-m${n - 2}`)).toBeFocused();
+      await page.getByRole('button', { name: `Start Mission ${n}` }).click();
+      await expect(page.locator('#view-build')).toBeVisible();
+    };
+    await page.getByRole('button', { name: 'Start Mission 1' }).click();
 
     // Mission 1: estimate the data, add a CDN with a 1-hour TTL.
     await page.fill('#estIn', '52 TB');
@@ -44,7 +52,7 @@ test.describe('Level 5 · playthrough', () => {
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
 
     // Mission 2: fall back to the origin (through the inspector), then take the CDN down.
-    await page.click('#mission .complete button');
+    await start(2);
     await selectNode(page, id);
     await page.locator('#insp').getByRole('button', { name: /^Load from the origin/ }).click();
     await page.click('#playBtn');
@@ -56,7 +64,7 @@ test.describe('Level 5 · playthrough', () => {
     expect(await state(page, () => window.__sdl.S.done[1])).toBe(true);
 
     // Mission 3: give changed files a new name, then ship the logo.
-    await page.click('#mission .complete button');
+    await start(3);
     await selectNode(page, id);
     await page.locator('#insp').getByRole('button', { name: /^Give it a new name/ }).click();
     await page.click('#playBtn');
@@ -289,6 +297,7 @@ test.describe('Level 5 · teaching feedback', () => {
 
   test('the data estimate shows the traffic, accepts "52 TB" and gives specific hints', async ({ page }) => {
     await freshPage(page, '#level-5/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     await expect(page.locator('#hud')).toContainText('4,000');
     for (const [v, hint] of [['104', 'uses the peak'], ['51,840', 'looks like GB'], ['1.7', 'one day']]) {
       await page.fill('#estIn', v);
@@ -330,6 +339,7 @@ test.describe('Level 5 · fixes from QA', () => {
 test.describe('Level 5 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-5/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     await page.fill('#estIn', '52');
     await pressEnterOn(page, '#estBtn');
     await pressEnterOn(page, '.pal-item[data-type="cdn"]');
@@ -358,4 +368,25 @@ test.describe('Level 5 · layout and accessibility', () => {
       },
     },
   });
+});
+
+test.describe('Level 5 · saved data', () => {
+  test('a save from before the one-page lesson opens every mission it could already open', async ({ page }) => {
+    await freshPage(page, '#level-5/build');
+    await page.evaluate(() => {
+      const old = { ...JSON.parse(JSON.stringify(window.__sdl.S)), v: 1, mission: 1, done: [true, false, false], verified: [true, false, false] };
+      delete old.opened;
+      localStorage.setItem('sdl-level5-v1', JSON.stringify(old));
+    });
+    await reloadGame(page);
+    const s = await state(page, () => { const S = window.__sdl.S; return { done: S.done, mission: S.mission, v: S.v, opened: S.opened }; });
+    expect(s.done).toEqual([true, false, false]);
+    expect(s.mission).toBe(1);
+    expect(s.v).toBe(2);
+    expect(s.opened).toEqual([true, true, false]); // Mission 1, and Mission 2 because Mission 1 is done
+  });
+});
+
+test.describe('Level 5 · one-page lesson', () => {
+  registerPageLessonTests({ level: 5 });
 });
