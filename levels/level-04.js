@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { Level, Goal } from '../js/types.js' */
+/** @import { Level, Goal, Lesson } from '../js/types.js' */
 // Level 4: Cache tier.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { servedGoal, latGoal, costGoal, spofGoal, servedAtLeast } from './shared/goals.js';
@@ -9,10 +9,22 @@ import { lbText, replicaText, levelComplete } from './shared/text.js';
 import { ONE_DNS, TWO_LBS, THREE_CACHES } from './shared/limits.js';
 import { failText, passText } from './shared/quiz.js';
 import { catalogWorkload } from './shared/workload.js';
-import { lessonSteps } from './shared/lesson.js';
+import { fmt, percent, ms } from '../js/format.js';
+import { COMPONENTS, SIZES } from '../js/engine/catalog.js';
+import { STEPS } from './mock-steps.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 const DB_BUSY = 0.7;
+/** Peak traffic in req/s and the share of requests that write, the same in all three missions. */
+const LOAD = { qps: 2000, writes: 0.2 };
+/** Monthly budget of every mission, in dollars. */
+const BUDGET = 2100;
+/** The cache hit rate each mission asks for, in percent. */
+const HIT_PCT = [80, 80, 86];
+/** Mission 3's flash sale: how many prices change, and how soon shoppers must see them, in seconds. */
+const SALE = { products: 300, freshSecs: 60 };
+/** Reads a second at peak: the requests that do not write. */
+const READS = LOAD.qps * (1 - LOAD.writes);
 
 const served99 = servedAtLeast(targets.servedPct);
 /** @type {(min: number) => Goal} */
@@ -30,11 +42,362 @@ const dbBusyGoal = {
 };
 const duration = (s) => ({ 10: '10 seconds', 60: '1 minute', 600: '10 minutes', 3600: '1 hour' }[s] || `${s} seconds`);
 
+// ---------------- Lesson ----------------
+const smallestCache = Object.values(COMPONENTS.cache.sizes)[0];
+const cacheSizeCount = Object.keys(COMPONENTS.cache.sizes).length;
+const [scope, sketch, deep, stress] = STEPS.map((step) => `<b>${step.name}</b>`);
+/** "1 read in 5" reaches the database at an 80% hit rate. */
+const missOneIn = (pct) => Math.round(100 / (100 - pct));
+
+// Timing figures: rounded teaching values from the widely published latency list, not game numbers.
+const memoryNs = 100, seekMs = 10;
+const timesFaster = (seekMs * 1e6) / memoryNs;
+/** The rule of thumb for uneven reads, which the game's catalog also follows: this share of reads goes to this share of items. */
+const HOT = { reads: 0.8, items: 0.2 };
+
+// Hit-rate example (our load, not a game number): 2,400 reads/s at 75% hits.
+const hr = { reads: 2400, hit: 0.75 };
+hr.db = hr.reads * (1 - hr.hit);
+// Check yourself: other numbers again.
+const hrCheck = { reads: 5000, hit: 0.8 };
+hrCheck.db = hrCheck.reads * (1 - hrCheck.hit);
+
+// Memory example (ours): a news site that caches its hot articles.
+const mem = { items: 500000, kb: 30 };
+mem.hot = mem.items * HOT.items;
+mem.gb = (mem.hot * mem.kb) / 1e6; // 1 GB = 1,000,000 KB, as the mission's estimate uses
+
+// Losing one of two caches (our load): 2,000 reads/s at 90% hits, keys split evenly.
+const lose = { reads: 2000, hit: 0.9 };
+lose.normal = lose.reads * (1 - lose.hit);
+lose.half = lose.reads * (1 - lose.hit / 2);
+
+/** @type {Lesson} */
+const lesson = {
+  intro: {
+    kicker: 'Level 4 · Part 1: Grow one app',
+    title: 'Cache tier',
+    story: 'Your replicas answer the same questions all day: the same popular products, read from disk again and again. Each replica costs as much as your largest server. In this level you keep the popular answers in memory.',
+    picture: 'figBuilt',
+    alt: 'The finished design: web servers check two cache servers first. On a miss they read a database replica. Writes go to the primary database.',
+    outcomes: [
+      'explain how a web server uses a cache',
+      'say which data is worth caching',
+      'estimate a hit rate and the memory a cache needs',
+      'say what happens when a cache restarts',
+      'keep cached data fresh when the real data changes',
+    ],
+  },
+  last: 'Level 3 spread the reads over replicas. But most reads fetch the same popular products from disk again and again, and every extra replica is another large server to pay for.',
+  parts: [
+    {
+      title: 'Cache the hot products',
+      mission: 0,
+      minutes: 10,
+      lead: 'Reading from disk is slow. Reading the same thing from disk a thousand times is waste.',
+      newParts: [
+        { type: 'cache', what: 'A server that keeps data in memory, each item stored under a key.', does: 'Answers a lookup in a fraction of a millisecond. Web servers ask it before they ask the database.', game: `${cacheSizeCount} memory sizes, from ${smallestCache.mem} GB for $${smallestCache.cost} a month. Each handles ${fmt(smallestCache.cap)} lookups/s.` },
+      ],
+      sections: [
+        {
+          title: 'How does a web server use a cache?',
+          hook: 'For every read, the web server asks the cache first.',
+          body: [
+            {
+              figure: 'figAside',
+              alt: 'On a hit, the web server asks the cache for product 42 and gets it back; the database is not used. On a miss, the cache does not have it, so the web server reads the database and then stores the answer in the cache.',
+              caption: 'A hit ends in memory. A miss reads the database, then fills the cache',
+            },
+            { ul: [
+              '<b>Hit:</b> the cache has the item. The database is not touched.',
+              '<b>Miss:</b> the cache does not have it. The web server reads the database, then stores the answer in the cache for next time.',
+            ] },
+            { p: `This pattern is called <b>cache-aside</b>. It pays off because memory is fast: reading from memory takes about ${memoryNs} nanoseconds, and finding data on a disk about ${seekMs} milliseconds, which is ${fmt(timesFaster)} times longer.` },
+          ],
+          takeaway: 'Check the cache first, and on a miss read the database and fill the cache.',
+          quiz: [0],
+        },
+        {
+          title: 'What belongs in a cache?',
+          hook: 'A cache can be far smaller than the database and still answer most reads. Why?',
+          body: [
+            { p: `Reads are uneven. A few popular items, the <b>hot</b> data, get most of the reads. A common rule of thumb: ${percent(HOT.reads)} of reads go to ${percent(HOT.items)} of the items.` },
+            { table: { head: ['Good to cache', 'Bad to cache'], rows: [
+              ['Read often, changed rarely: product pages', 'Changed on almost every read: a live stock count'],
+              ['Fine if slightly old', 'Must never be old: a payment'],
+              ['Can be rebuilt from the database', 'The only copy of anything'],
+            ] } },
+            { p: 'The last row matters most. Cache memory is emptied by a restart. The database stays the real copy, and the cache only holds a second copy of what is popular.' },
+          ],
+          takeaway: 'Cache what is read often and changed rarely, and never keep the only copy there.',
+          quiz: [1, 8, 9],
+        },
+        {
+          title: 'How to size a cache',
+          hook: 'The <b>hit rate</b> is the share of reads the cache answers. Only the misses reach the database.',
+          body: [
+            {
+              calc: {
+                formula: 'Reads reaching the database = reads × (1 − hit rate). Memory = items to hold × size of one item.',
+                rows: [
+                  { label: 'Database load', work: `${fmt(hr.reads)} reads/s × (1 − ${hr.hit})`, result: `${fmt(hr.db)} reads/s` },
+                  { label: 'Hot items', work: `${fmt(mem.items)} articles × ${percent(HOT.items)}`, result: `${fmt(mem.hot)} articles` },
+                  { label: 'Memory', work: `${fmt(mem.hot)} articles × ${mem.kb} KB`, result: `${mem.gb} GB` },
+                ],
+                // "a quarter": tests/unit/level-04-lesson.test.mjs checks it against the example's hit rate.
+                result: `At a ${percent(hr.hit)} hit rate the database sees a quarter of the reads. A news site with ${fmt(mem.items)} articles of ${mem.kb} KB needs about ${mem.gb} GB for its hot ${percent(HOT.items)}.`,
+              },
+            },
+            { p: 'Buy more than the sum says. Entries expire, and the hot set grows.' },
+          ],
+          takeaway: 'A cache is sized by the hot items, and the database by the misses.',
+          quiz: [6, 7],
+        },
+      ],
+      checks: [
+        {
+          q: `Reads arrive at ${fmt(hrCheck.reads)} a second and the hit rate is ${percent(hrCheck.hit)}. How many reach the database?`,
+          options: [
+            { t: `${fmt(hrCheck.reads * hrCheck.hit)} reads/s`, why: 'Those are the hits. They end in the cache.' },
+            { t: `${fmt(hrCheck.db)} reads/s`, right: true, why: `${fmt(hrCheck.reads)} × (1 − ${hrCheck.hit}) = ${fmt(hrCheck.db)}. Only the misses reach the database.` },
+            { t: `${fmt(hrCheck.reads)} reads/s`, why: 'That would be a hit rate of zero.' },
+          ],
+        },
+      ],
+      youWill: [
+        'estimate the memory for the most-viewed products (Play stays locked until you do)',
+        'add a cache, connect the web servers to it, and remove a replica you no longer need',
+        `reach a hit rate of at least ${HIT_PCT[0]}% for at most $${fmt(BUDGET)} a month`,
+      ],
+      debrief: {
+        saw: 'Most reads ended in memory, so one replica was enough and the bill went down.',
+        number: [`${HIT_PCT[0]}% hit rate`, `only 1 read in ${missOneIn(HIT_PCT[0])} reached the database`],
+        next: 'The database is now sized for the misses only. What happens when the cache restarts and every read is a miss?',
+      },
+    },
+    {
+      title: 'The cache goes down',
+      mission: 1,
+      minutes: 6,
+      lead: 'You saved money by shrinking the database tier. That made the cache something the shop cannot lose.',
+      sections: [
+        {
+          title: 'What happens when a cache restarts?',
+          hook: 'No data is lost: the database has it all. The problem is load.',
+          body: [
+            {
+              figure: 'figCold',
+              alt: 'With a warm cache, nine reads in ten stop at the cache and one reaches the database. Just after a restart the cache is empty, so all ten reads reach the database, which is overloaded.',
+              caption: 'A cache that has just restarted answers nothing',
+            },
+            { p: 'A cache comes back empty, a <b>cold cache</b>. Every read is a miss until it refills. The database was sized for the misses alone, and now it gets every read at once.' },
+            { p: 'So a single cache server is a single point of failure, even though it holds no data you cannot rebuild.' },
+          ],
+          takeaway: 'Losing a cache loses no data, but it sends every read to the database.',
+          quiz: [4],
+        },
+        {
+          title: 'How to survive losing a cache',
+          hook: 'Run more than one cache server and divide the keys between them. Losing one then empties only its share.',
+          body: [
+            {
+              calc: {
+                formula: `${fmt(lose.reads)} reads/s at a ${percent(lose.hit)} hit rate, with the keys split over two cache servers:`,
+                rows: [
+                  { label: 'Both caches up', work: `${fmt(lose.reads)} reads/s × (1 − ${lose.hit})`, result: `${fmt(lose.normal)} reads/s to the database` },
+                  { label: 'One cache lost', work: `${fmt(lose.reads)} reads/s × (1 − ${lose.hit / 2})`, result: `${fmt(lose.half)} reads/s to the database` },
+                  { label: 'A single cache, lost', work: `${fmt(lose.reads)} reads/s × (1 − 0)`, result: `${fmt(lose.reads)} reads/s to the database` },
+                ],
+                result: `With two caches the database must survive ${fmt(lose.half)} reads a second, not ${fmt(lose.reads)}.`,
+              },
+            },
+            { p: 'Size the database for the day one cache is cold, not for a normal day.' },
+          ],
+          takeaway: 'Split the keys over several caches, and size the database for losing one.',
+          quiz: [],
+        },
+      ],
+      checks: [
+        {
+          q: 'Your only cache server restarts. The database holds every product. What do shoppers notice?',
+          options: [
+            { t: 'Nothing: the data is safe', why: 'The data is safe, but the database now gets every read and may not carry them.' },
+            { t: 'Slow or failed pages until the cache refills', right: true, why: 'Every read misses, so the full read load lands on a database sized for a fraction of it.' },
+            { t: 'Missing products', why: 'Nothing is missing. The cache only held copies.' },
+          ],
+        },
+      ],
+      youWill: [
+        'run two cache servers, each connected to every web server',
+        `keep the hit rate at least ${HIT_PCT[1]}% with no single point of failure, for at most $${fmt(BUDGET)} a month`,
+        'crash a cache and stay above the Served target',
+      ],
+      debrief: {
+        saw: 'One cache crashed and only its half of the keys missed. The replica carried the extra reads.',
+        number: ['half', 'of the hits lost when one of two caches fails'],
+        next: `A flash sale will change ${SALE.products} prices at noon. The cache still holds the old ones.`,
+      },
+    },
+    {
+      title: 'Prices must be fresh',
+      mission: 2,
+      minutes: 8,
+      lead: 'A cached copy is a second copy. When the real data changes, the copy is wrong until something fixes it.',
+      sections: [
+        {
+          title: 'How long can a cached price be wrong?',
+          hook: 'Every cached item gets a lifetime, its <b>TTL</b> (time to live). When it runs out, the item is dropped and the next read fetches a fresh copy.',
+          body: [
+            { table: { head: ['TTL', 'Hit rate', 'A change shows up'], rows: [
+              ['Short (seconds)', 'Lower: items keep expiring', 'Quickly'],
+              ['Long (an hour)', 'Higher', 'Up to an hour late'],
+              ['None', 'Highest', 'Never, until a restart'],
+            ] } },
+            { p: 'Data that is out of date is called <b>stale</b>. With only a TTL, the worst case is stale for the whole TTL. So the TTL is a trade: fresher data against more hits.' },
+          ],
+          takeaway: 'A longer TTL means more hits and staler data.',
+          quiz: [2],
+        },
+        {
+          title: 'How to update the cache when a price changes',
+          hook: 'Do not wait for the TTL. When the price changes, delete the cached copy. The next read misses and loads the new price.',
+          body: [
+            {
+              figure: 'figOrder',
+              alt: 'Right order: write the new price to the database, then delete the cached price; the next read caches the new price. Wrong order: delete the cached price first; a read arrives, misses, and caches the old price from the database; then the database is written. The cache now holds the old price.',
+              caption: 'Write the database first, then delete the cached copy',
+            },
+            { p: 'The order matters. Write the database first, then delete the key. If you delete first, a read can slip in between, miss, and put the old price back.' },
+            { p: 'Now you can keep a long TTL for the hit rate and still show changes at once. The TTL stays as a safety net.' },
+          ],
+          takeaway: 'On a change, write the database, then delete the cached copy.',
+          quiz: [5],
+        },
+        {
+          title: 'What happens when the cache is full?',
+          hook: 'Memory is limited. To store a new item, a full cache must throw one out. This is <b>eviction</b>.',
+          body: [
+            { table: { head: ['Policy', 'Throws out'], rows: [
+              ['<b>LRU</b>, least recently used', 'The item nobody has read for the longest time. The usual choice.'],
+              ['<b>LFU</b>, least frequently used', 'The item read the fewest times'],
+              ['<b>FIFO</b>, first in first out', 'The oldest item, however popular'],
+            ] } },
+            { p: 'LRU fits a shop: products that were popular a moment ago will probably be read again soon.' },
+          ],
+          takeaway: 'A full cache evicts, and LRU drops what was used longest ago.',
+          quiz: [3],
+        },
+      ],
+      checks: [
+        {
+          q: 'A cache has a 10-minute TTL and nothing deletes keys on a change. A price changes. For how long can a shopper see the old one?',
+          options: [
+            { t: 'Not at all', why: 'Nothing tells the cache about the change. It keeps its copy until the TTL runs out.' },
+            { t: 'Up to 10 minutes', right: true, why: 'The copy may have been cached just before the change, so it can live for the whole TTL.' },
+            { t: 'Until the cache restarts', why: 'That is the case with no TTL at all.' },
+          ],
+        },
+      ],
+      youWill: [
+        `reach a hit rate of at least ${HIT_PCT[2]}%, which a short TTL cannot give`,
+        `press Change prices and make sure shoppers see the new prices within ${duration(SALE.freshSecs)}`,
+        `keep Response under ${ms(targets.latencyMs)} for at most $${fmt(BUDGET)} a month`,
+      ],
+    },
+  ],
+  wrap: {
+    picture: 'figBuiltEnd',
+    alt: 'The design you built: web servers check two cache servers first. On a miss they read a database replica. Writes go to the primary database.',
+    say: [
+      '"I cache data that is read often and changed rarely. The web server checks the cache first."',
+      '"A restart empties a cache, so I run several and size the database for a cold one."',
+      '"On a change I write the database, then delete the cached copy, and keep a TTL as a safety net."',
+    ],
+    numbers: [
+      [`${memoryNs} nanoseconds`, 'to read from memory'],
+      [`${seekMs} milliseconds`, 'to find data on a disk'],
+      [`${percent(HOT.reads)} of reads`, `go to ${percent(HOT.items)} of the items (rule of thumb)`],
+    ],
+    loop: `The interview steps again: ${scope} (the memory for the hot products), ${sketch} (cache beside the database), ${deep} (memory size, TTL, delete on change), ${stress} (you crashed a cache and changed ${SALE.products} prices).`,
+    broken: 'Every photo, stylesheet and script still comes from your own servers, however far away the shopper is. Level 5 moves those files close to them.',
+  },
+};
+
+/**
+ * The finished design, shown on the intro and again on the wrap-up: one drawing, two svgs.
+ * @param {Record<string, Function>} f the drawing helpers `drawFigures` is given
+ * @param {SVGSVGElement} svg
+ */
+function drawBuilt(f, svg) {
+  const { figNode, figArrow, figDefs, figLabel, figDash } = f;
+  svg.textContent = ''; svg.setAttribute('viewBox', '0 0 640 580'); figDefs(svg);
+  figNode(svg, 'users', 320, 50, 'Users', 'Browser + app');
+  figNode(svg, 'lb', 150, 160, 'Load balancer', 'Active');
+  figNode(svg, 'lb', 490, 160, 'Load balancer', 'Standby');
+  figArrow(svg, 280, 80, 190, 130, 'requests', null, 252, 102, 'end');
+  figArrow(svg, 244, 150, 396, 150, 'heartbeat', null, 320, 142, 'middle');
+  figArrow(svg, 396, 170, 244, 170, '', null, 0, 0);
+  figNode(svg, 'web', 150, 280, 'Web server', 'Private IP');
+  figNode(svg, 'web', 490, 280, 'Web server', 'Private IP');
+  figArrow(svg, 150, 190, 150, 250, '', null, 0, 0);
+  figArrow(svg, 190, 190, 450, 250, '', null, 0, 0);
+  // Every web server checks both caches; reads that miss run down the left side, writes down the right.
+  figNode(svg, 'cache', 215, 400, 'Cache 1', 'Hot products');
+  figNode(svg, 'cache', 425, 400, 'Cache 2', 'Hot products');
+  figArrow(svg, 190, 310, 200, 370, '', null, 0, 0);
+  figArrow(svg, 230, 310, 400, 370, 'check first', '1', 282, 300);
+  figArrow(svg, 410, 310, 240, 370, '', null, 0, 0);
+  figArrow(svg, 450, 310, 440, 370, '', null, 0, 0);
+  figArrow(svg, 80, 310, 80, 500, 'on a miss', '2', 110, 470);
+  figArrow(svg, 560, 310, 560, 500, 'writes', null, 550, 470, 'end');
+  figNode(svg, 'db', 150, 530, 'Read replica', 'Reads on a miss');
+  figNode(svg, 'db', 490, 530, 'Primary DB', 'Every write');
+  figDash(svg, 'M396 530 H244');
+  figLabel(svg, 320, 518, 'copies every write');
+}
+
+/**
+ * Two timelines of a price change: the right order (database, then delete) and the wrong one (delete, then database).
+ * @param {Record<string, Function>} f the drawing helpers `drawFigures` is given
+ * @param {SVGSVGElement} svg
+ */
+function drawOrder(f, svg) {
+  const { svgEl, figArrow, figDefs, figLabel } = f;
+  svg.textContent = ''; svg.setAttribute('viewBox', '0 0 640 396'); figDefs(svg);
+  /** A numbered event on a lane, written just above it. */
+  const step = (x, y, n, text) => {
+    svgEl('circle', { cx: x, cy: y - 4, r: 9, class: 'd-step' }, svg);
+    figLabel(svg, x, y, n, 'middle', 'd-step-t');
+    figLabel(svg, x + 16, y, text, 'start');
+  };
+  /** A dashed panel with a database lane and a cache lane; returns the two lanes' heights. */
+  const panel = (y, label) => {
+    svgEl('rect', { x: 10, y, width: 620, height: 180, rx: 12, class: 'tier-box' }, svg);
+    figLabel(svg, 24, y + 20, label, 'start', 'tier-label');
+    const lanes = { db: y + 74, cache: y + 154 };
+    for (const [name, ly] of [['Database', lanes.db], ['Cache', lanes.cache]]) {
+      figLabel(svg, 24, ly + 4, name, 'start', 'tier-label');
+      svgEl('line', { x1: 120, y1: ly, x2: 610, y2: ly, class: 'tier-box' }, svg);
+    }
+    return lanes;
+  };
+  const right = panel(10, 'Right order');
+  figLabel(svg, 610, 30, 'time →', 'end', 'tier-label');
+  step(150, right.db - 14, '1', 'write the new price');
+  step(300, right.cache - 14, '2', 'delete the key');
+  figArrow(svg, 460, right.db + 4, 460, right.cache - 4, 'caches new price', '3', 486, right.db + 44);
+  const wrong = panel(206, 'Wrong order');
+  step(150, wrong.cache - 14, '1', 'delete the key');
+  figArrow(svg, 300, wrong.db + 4, 300, wrong.cache - 4, 'caches old price', '2', 326, wrong.db + 44);
+  step(450, wrong.db - 14, '3', 'write the new price');
+  figLabel(svg, 610, wrong.cache - 14, 'old price stays', 'end');
+}
+
 /** @type {Level} */
 export default {
   id: 4,
   saveKey: 'sdl-level4-v1',
-  saveVersion: 1,
+  saveVersion: 2, // 2: which missions were opened from the lesson (`opened`)
   targets,
   // The product catalog the cache holds: its size, and how often a cached product is read (see the lesson's assumptions).
   workload: catalogWorkload(),
@@ -97,7 +460,7 @@ export default {
 
   missions: [
     {
-      title: 'Cache the hot products', ref: 'Cache-aside', qps: 2000, writes: 0.2, budget: 2100,
+      title: 'Cache the hot products', ref: 'Cache-aside', ...LOAD, budget: BUDGET,
       gate: {
         hidesTraffic: false,
         lo: 3.5, hi: 4.5,
@@ -114,35 +477,35 @@ export default {
         ],
         fallback: 'Not quite. Take 20% of 2,000,000 products, times 10 KB each, then convert KB to GB (÷ 1,000,000).',
       },
-      story: 'Most of the 1,600 reads a second are product pages, and the same popular products are read again and again. Finance wants the bill under $2,100 a month. Today it is $2,295, and each XL replica costs $450. Put a cache in front of the database: web servers check it first, and only misses reach a replica. Then one replica is enough.',
+      story: `Most of the ${fmt(READS)} reads a second are product pages, and the same popular products are read again and again. Finance wants the bill under $${fmt(BUDGET)} a month. Today it is $2,295, and each XL replica costs $${fmt(SIZES.XL.cost)}. Put a cache in front of the database: web servers check it first, and only misses reach a replica. Then one replica is enough.`,
       goals: [
         { id: 'est', type: 'gate', text: 'Estimate the memory for the most-viewed products' },
-        hitGoal(80), dbBusyGoal,
-        servedGoal(targets), latGoal(targets), costGoal(2100),
+        hitGoal(HIT_PCT[0]), dbBusyGoal,
+        servedGoal(targets), latGoal(targets), costGoal(BUDGET),
       ],
       hint: 'Remove one replica, add a cache and connect both web servers to it. 4 GB holds the top 20% of products, but entries also expire, so give it room to spare: more memory, a longer TTL, or both. Select the cache to see its hit rate.',
       takeaway: 'Most reads now end in memory, so one replica is enough and the bill went down. A cache works because a few items get most of the reads. Size it with room to spare: entries expire, and the hot set grows.',
     },
     {
-      title: 'The cache goes down', ref: 'Cache failure', qps: 2000, writes: 0.2, budget: 2100,
-      story: 'The cache is now a single point of failure. A cache server that restarts comes back empty, so every read it used to answer goes to the database until it refills. With one cache, that is all 1,600 reads a second, on one replica. Make sure the site survives losing a cache.',
+      title: 'The cache goes down', ref: 'Cache failure', ...LOAD, budget: BUDGET,
+      story: `The cache is now a single point of failure. A cache server that restarts comes back empty, so every read it used to answer goes to the database until it refills. With one cache, that is all ${fmt(READS)} reads a second, on one replica. Make sure the site survives losing a cache.`,
       goals: [
-        hitGoal(80), spofGoal(), dbBusyGoal,
-        servedGoal(targets), latGoal(targets), costGoal(2100),
-        { id: 'crash-cache', type: 'exp', text: 'Break it: crash a cache and still serve at least 99%' },
+        hitGoal(HIT_PCT[1]), spofGoal(), dbBusyGoal,
+        servedGoal(targets), latGoal(targets), costGoal(BUDGET),
+        { id: 'crash-cache', type: 'exp', text: `Break it: crash a cache and still serve at least ${targets.servedPct}%` },
       ],
       hint: 'Run two cache servers: the web servers split the keys between them, so losing one costs only its half of the hits. Two 4 GB caches hold as much as one 8 GB cache. Connect both web servers to both caches.',
       takeaway: 'With two caches, losing one sent only its half of the keys to the database, and the replica coped. A real cache comes back empty after a restart and refills as reads miss. Until then the database carries the extra load, so plan for it.',
     },
     {
-      title: 'Prices must be fresh', ref: 'Cache consistency', qps: 2000, writes: 0.2, budget: 2100,
-      story: 'A flash sale starts at noon: 300 products drop their price at once, and shoppers must see the new price within a minute. For the sale, the database team also wants a hit rate of at least 86%. Change the prices, then check how long shoppers can still see the old ones.',
+      title: 'Prices must be fresh', ref: 'Cache consistency', ...LOAD, budget: BUDGET,
+      story: `A flash sale starts at noon: ${SALE.products} products drop their price at once, and shoppers must see the new price within ${duration(SALE.freshSecs)}. For the sale, the database team also wants a hit rate of at least ${HIT_PCT[2]}%. Change the prices, then check how long shoppers can still see the old ones.`,
       goals: [
-        hitGoal(86), spofGoal(), dbBusyGoal,
-        servedGoal(targets), latGoal(targets), costGoal(2100),
-        { id: 'price-change', type: 'exp', text: 'Break it: change prices; shoppers see them within a minute' },
+        hitGoal(HIT_PCT[2]), spofGoal(), dbBusyGoal,
+        servedGoal(targets), latGoal(targets), costGoal(BUDGET),
+        { id: 'price-change', type: 'exp', text: `Break it: change prices; shoppers see them within ${duration(SALE.freshSecs)}` },
       ],
-      hint: 'A 1-minute TTL keeps prices fresh, but 1 read in 7 then finds its item expired, so the hit rate can\'t reach 86%. Keep a long TTL instead, and set "When a product changes" to delete the cached copy on each cache server.',
+      hint: `A 1-minute TTL keeps prices fresh, but 1 read in 7 then finds its item expired, so the hit rate can't reach ${HIT_PCT[2]}%. Keep a long TTL instead, and set "When a product changes" to delete the cached copy on each cache server.`,
       takeaway: 'Deleting the cached copy on every change keeps prices fresh without giving up a long TTL. The order matters: write the database first, then delete the key. Delete it first and a read in between can put the old price back into the cache.',
     },
   ],
@@ -165,9 +528,9 @@ export default {
       id: 'price-change', kind: 'event',
       label: 'Change prices', labelOn: 'End the sale',
       needsDesign: 'Build the design first, then change prices.',
-      on: 'Flash sale: 300 product prices just dropped in the database.', onTone: '',
+      on: `Flash sale: ${SALE.products} product prices just dropped in the database.`, onTone: '',
       off: 'Sale over.',
-      expect: (m) => m.staleSecs <= 60,
+      expect: (m) => m.staleSecs <= SALE.freshSecs,
       notMet: (m) => `Shoppers can see the old price for up to ${duration(m.staleSecs)}: cached pages keep it until their TTL ends. Shorten the TTL, or delete the cached copy when a product changes.`,
       observed: (m) => (m.staleSecs === 0
         ? 'Observed: the web servers deleted the changed products from the cache, so the next reads loaded the new prices.'
@@ -183,143 +546,61 @@ export default {
     passText: passText(4, 'CDN for static content'),
     failText,
     questions: [
-      { q: 'A web server uses cache-aside, and the cache does not have product 42. What happens next?', o: ['The cache loads it from the database', 'The request fails, and the shopper retries later', 'The web server reads the DB and caches it', 'It waits for the cache to refresh'], a: 2, e: 'In cache-aside the web server does the work: on a miss it reads the database, stores the answer in the cache, and returns it. The next read of product 42 is a hit.', r: 'Cache-aside' },
-      { q: 'Which data is the best fit for a cache?', o: ['Read often, changed rarely', 'Written often, read rarely', 'Read once, then thrown away', 'Changed on every request'], a: 0, e: 'A cache pays off when the same item is read many times before it changes. Data that changes all the time is stale as soon as it is cached, and data read once never gets a hit.', r: 'When to cache' },
-      { q: 'You raise the cache TTL from 1 minute to 1 hour. What changes?', o: ['Fewer hits, but every read is always fresh', 'More hits, but changes show up later', 'Nothing, since memory stays the same', 'The cache needs twice the memory'], a: 1, e: 'Items stay cached longer, so fewer reads find them expired and the hit rate goes up. But a changed item can now be served from the cache for up to an hour, unless you delete it when it changes.', r: 'Expiration (TTL)' },
-      { q: 'The cache is full and a new item arrives. Which item does LRU evict?', o: ['The one used the fewest times', 'The one added first', 'The biggest one in memory', 'The one used longest ago'], a: 3, e: 'LRU (least recently used) removes the item that has gone longest without a read. LFU removes the one used the fewest times, and FIFO the one added first.', r: 'Eviction' },
-      { q: 'Your one cache server fails. The data is safe in the database, so why is that a problem?', o: ['Its data is lost for good when it fails', 'Its reads all fall on the database', 'It slows down every write', 'Users have to log in again'], a: 1, e: 'Every read the cache used to answer now goes to the database, which may not be sized for it. Run several cache servers, so losing one costs only its share, and give the database room for that.', r: 'Cache failure' },
-      { q: 'A price changes. In which order should the web server update the database and the cache?', o: ['Delete the cache key, then write the database', 'Update the cache only; the database follows', 'Write the database, then delete the cache key', 'Write both in one shared transaction'], a: 2, e: 'Write the database first, then delete the key: the next read loads the new price. Deleting first leaves a gap where a read can load the old price and cache it again. The database and the cache share no transaction.', r: 'Cache consistency' },
-      { q: '3,000,000 users each have a 2 KB profile. Roughly how much memory caches the most active 20%?', o: ['~120 MB', '~1.2 GB', '~6 GB', '~12 GB'], a: 1, e: '20% of 3,000,000 is 600,000 profiles. 600,000 × 2 KB = 1,200,000 KB ≈ 1.2 GB. ~6 GB is every profile.', r: 'Estimating cache memory' },
-      { q: 'Reads arrive at 1,000/s and the cache hit rate is 90%. How many reads/s reach the database?', o: ['900', '10', '100', '1,000'], a: 2, e: 'Only misses reach the database: 1,000 × (1 − 0.9) = 100 reads/s. The other 900 are answered from memory.', r: 'Hit rate' },
-      { q: 'Why can a cache much smaller than the database answer most reads?', o: ['A few items get most of the reads', 'Memory is faster than any disk', 'Every item is read about equally often', 'The cache compresses every item'], a: 0, e: 'Popularity is skewed: a small share of items gets most of the reads. Keep those in memory and most reads become hits. If every item were read equally, a cache holding 10% of the data would hit only about 10%.', r: 'Hot data' },
-      { q: 'Why not keep the shop\'s data in the cache only?', o: ['Caches can only store short text', 'A lookup in memory is slower', 'Each key can hold just one item', 'A restart empties the memory'], a: 3, e: 'Cache servers keep data in volatile memory: a restart or crash loses it. Keep the authoritative copy in a database, and treat the cache as a fast, disposable copy.', r: 'When to cache' },
+      { q: 'A web server uses cache-aside, and the cache does not have product 42. What happens next?', o: ['The cache loads it from the database', 'The request fails, and the shopper retries later', 'The web server reads the DB and caches it', 'It waits for the cache to refresh'], a: 2, e: 'In cache-aside the web server does the work: on a miss it reads the database, stores the answer in the cache, and returns it. The next read of product 42 is a hit.', r: 'How does a web server use a cache?' },
+      { q: 'Which data is the best fit for a cache?', o: ['Read often, changed rarely', 'Written often, read rarely', 'Read once, then thrown away', 'Changed on every request'], a: 0, e: 'A cache pays off when the same item is read many times before it changes. Data that changes all the time is stale as soon as it is cached, and data read once never gets a hit.', r: 'What belongs in a cache?' },
+      { q: 'You raise the cache TTL from 1 minute to 1 hour. What changes?', o: ['Fewer hits, but every read is always fresh', 'More hits, but changes show up later', 'Nothing, since memory stays the same', 'The cache needs twice the memory'], a: 1, e: 'Items stay cached longer, so fewer reads find them expired and the hit rate goes up. But a changed item can now be served from the cache for up to an hour, unless you delete it when it changes.', r: 'How long can a cached price be wrong?' },
+      { q: 'The cache is full and a new item arrives. Which item does LRU evict?', o: ['The one used the fewest times', 'The one added first', 'The biggest one in memory', 'The one used longest ago'], a: 3, e: 'LRU (least recently used) removes the item that has gone longest without a read. LFU removes the one used the fewest times, and FIFO the one added first.', r: 'What happens when the cache is full?' },
+      { q: 'Your one cache server fails. The data is safe in the database, so why is that a problem?', o: ['Its data is lost for good when it fails', 'Its reads all fall on the database', 'It slows down every write', 'Users have to log in again'], a: 1, e: 'Every read the cache used to answer now goes to the database, which may not be sized for it. Run several cache servers, so losing one costs only its share, and give the database room for that.', r: 'What happens when a cache restarts?' },
+      { q: 'A price changes. In which order should the web server update the database and the cache?', o: ['Delete the cache key, then write the database', 'Update the cache only; the database follows', 'Write the database, then delete the cache key', 'Write both in one shared transaction'], a: 2, e: 'Write the database first, then delete the key: the next read loads the new price. Deleting first leaves a gap where a read can load the old price and cache it again. The database and the cache share no transaction.', r: 'How to update the cache when a price changes' },
+      { q: '3,000,000 users each have a 2 KB profile. Roughly how much memory caches the most active 20%?', o: ['~120 MB', '~1.2 GB', '~6 GB', '~12 GB'], a: 1, e: '20% of 3,000,000 is 600,000 profiles. 600,000 × 2 KB = 1,200,000 KB ≈ 1.2 GB. ~6 GB is every profile.', r: 'How to size a cache' },
+      { q: 'Reads arrive at 1,000/s and the cache hit rate is 90%. How many reads/s reach the database?', o: ['900', '10', '100', '1,000'], a: 2, e: 'Only misses reach the database: 1,000 × (1 − 0.9) = 100 reads/s. The other 900 are answered from memory.', r: 'How to size a cache' },
+      { q: 'Why can a cache much smaller than the database answer most reads?', o: ['A few items get most of the reads', 'Memory is faster than any disk', 'Every item is read about equally often', 'The cache compresses every item'], a: 0, e: 'Popularity is skewed: a small share of items gets most of the reads. Keep those in memory and most reads become hits. If every item were read equally, a cache holding 10% of the data would hit only about 10%.', r: 'What belongs in a cache?' },
+      { q: 'Why not keep the shop\'s data in the cache only?', o: ['Caches can only store short text', 'A lookup in memory is slower', 'Each key can hold just one item', 'A restart empties the memory'], a: 3, e: 'Cache servers keep data in volatile memory: a restart or crash loses it. Keep the authoritative copy in a database, and treat the cache as a fast, disposable copy.', r: 'What belongs in a cache?' },
     ],
   },
 
-  // Lesson tab content (HTML). The diagram below draws into its figAside.
-  lessonHtml: `
-    <p class="label">Level 4 · The cache tier</p>
-    <h1>Cache tier</h1>
-    <p class="lede">Replicas share the reads, but every read still waits for a database, and replicas are expensive. Most reads ask for the same popular items again and again. In this level you keep those items in memory, size the cache, choose how long entries live, and see what happens when the cache fails or the data changes.</p>
-    <div class="goals-box">
-      <div><b>You will learn</b>How cache-aside works, and how memory and TTL set the hit rate.</div>
-      <div><b>You will decide</b>Cache size, TTL, how many cache servers, and what to do when data changes.</div>
-      <div><b>You will estimate</b>The memory that holds the most-read items.</div>
-    </div>
+  lesson,
 
-    <section>
-      <h2>Why a cache</h2>
-      <p class="src">Cache tier · latency numbers</p>
-      <p>A cache is a temporary store in memory for data that is expensive to fetch and asked for often. Reading memory takes about 100 nanoseconds; a disk seek takes about 10 milliseconds, some 100,000 times longer. A cache tier sits next to the database: it answers repeat reads quickly, takes load off the database, and can be scaled on its own.</p>
-    </section>
-
-    <section>
-      <h2>Cache-aside</h2>
-      <p class="src">Cache-aside (lazy loading)</p>
-      <figure class="fig"><svg id="figAside" viewBox="0 0 640 260" role="img" aria-label="The web server first asks the cache for product 42. On a miss it reads the database, then stores the answer in the cache, so the next read is a hit."></svg><figcaption>On a miss, the web server reads the database and fills the cache</figcaption></figure>
-      <ol>
-        <li>The web server asks the cache for the item. If it is there (a <b>hit</b>), done.</li>
-        <li>If not (a <b>miss</b>), the web server reads the database.</li>
-        <li>It stores the answer in the cache with a time to live, then returns it.</li>
-      </ol>
-<pre class="code">product = cache.get('product:42')
-if product is None:                      # miss
-    product = db.query_product(42)
-    cache.set('product:42', product, ttl=600)
-return product</pre>
-      <p>Only items someone asked for get cached, so memory holds what is actually read. Some guides call this read-through. Strictly, in read-through the cache itself loads from the database; in cache-aside the application does.</p>
-    </section>
-
-    <section>
-      <h2>What to cache, and how much memory</h2>
-      <p class="src">Hot data</p>
-      <p>Cache data that is <b>read often and changed rarely</b>, such as product pages, profiles and settings. Keep the real copy in the database: a cache keeps data in volatile memory, and a restart empties it.</p>
-      <p>A cache much smaller than the database still answers most reads, because popularity is skewed: a few items get most of the reads. In this level, 80% of views go to the most-viewed 20% of products, and the same holds within that 20%. Memory for that hot share answers most reads:</p>
-      <div class="tbl-wrap"><table class="t">
-        <thead><tr><th>Cache memory (game)</th><th>Share of the catalog</th><th>Share of reads it holds</th><th>Cost / month</th></tr></thead>
-        <tbody>
-          <tr><td>2 GB</td><td class="n">10%</td><td class="n">73%</td><td class="n">$20</td></tr>
-          <tr><td>4 GB</td><td class="n">20%</td><td class="n">80%</td><td class="n">$40</td></tr>
-          <tr><td>8 GB</td><td class="n">40%</td><td class="n">88%</td><td class="n">$80</td></tr>
-          <tr><td>16 GB</td><td class="n">80%</td><td class="n">97%</td><td class="n">$160</td></tr>
-        </tbody>
-      </table></div>
-      <p>Give the cache room to spare: the hot set grows, and you want headroom before memory runs out.</p>
-    </section>
-
-    <section>
-      <h2>Expiration: how long an entry lives</h2>
-      <p class="src">Expiration (TTL)</p>
-      <p>Each entry gets a <b>time to live</b>. When it expires it is removed, and the next read misses and reloads it from the database. Without one, entries stay in memory forever.</p>
-      <ul>
-        <li><b>Too short:</b> entries keep expiring, so many reads miss and the database does the work again.</li>
-        <li><b>Too long:</b> when the data changes, the cache keeps serving the old copy until it expires.</li>
-      </ul>
-    </section>
-
-    <section>
-      <h2>Keeping the cache and the database in step</h2>
-      <p class="src">Cache consistency</p>
-      <p>The database and the cache are separate systems, and no transaction covers both, so they can disagree for a while. The common fix in cache-aside: <b>write the database, then delete the key</b> from the cache. The next read misses and loads the new value.</p>
-      <p>Order matters. Delete first, and a read can arrive in between, load the old value from the database and put it back in the cache. Even the right order leaves rare races, and keeping caches consistent across regions is harder still. Large systems add extra safeguards on top.</p>
-    </section>
-
-    <section>
-      <h2>When the cache fails</h2>
-      <p class="src">Cache failure</p>
-      <p>One cache server is a single point of failure: not for the data, which is safe in the database, but for the load. When it goes, every read it answered falls on the database at once. A restarted cache is empty (a <b>cold cache</b>), so the database carries that load until reads refill it.</p>
-      <ul>
-        <li>Run <b>several cache servers</b>, ideally in different places. The web servers split the keys over them, so losing one costs only its share.</li>
-        <li><b>Overprovision memory</b> by a margin, so growth does not push out the hot data.</li>
-        <li>Size the database for what it would face with part of the cache gone.</li>
-      </ul>
-    </section>
-
-    <section>
-      <h2>Eviction: when the cache is full</h2>
-      <p class="src">Eviction policies</p>
-      <p>A full cache must remove an entry to add a new one. That is <b>eviction</b>.</p>
-      <ul>
-        <li><b>LRU</b>, least recently used: remove the entry that has gone longest without a read. The most common choice.</li>
-        <li><b>LFU</b>, least frequently used: remove the entry read the fewest times.</li>
-        <li><b>FIFO</b>, first in, first out: remove the oldest entry, however popular.</li>
-      </ul>
-    </section>
-
-    <section>
-      <h2>How this level is simulated</h2>
-      <p class="src">Game assumptions</p>
-      <p>Each web server sends its reads to its cache servers first, with the keys split evenly over them. A cache's hit rate = the share of reads its memory holds × TTL ÷ (TTL + 10 s). Misses, and every write, go to the databases as in Level 3. A crashed cache's keys go straight to the database.</p>
-      <p class="assume">Game assumptions: the catalog is 20 GB (2,000,000 products at 10 KB each). Popularity follows the 80/20 rule at every scale, so memory holding a share x of the catalog holds x<sup>0.139</sup> of reads. A cached product is read about every 10 seconds, so a share TTL ÷ (TTL + 10 s) of its reads find it fresh. A cache server handles 10,000 lookups/s, takes 0.1 ms per lookup and costs $10 per GB a month. A restarted cache is warm again at once. Products change rarely, so deleting changed ones adds no misses worth counting. Orders and carts are written to the database and do not touch cached product pages.</p>
-    </section>
-
-    <section>
-      <h2>Numbers to carry into the interview</h2>
-      <p class="src">Cache sizing</p>
-      <p><b>Database reads</b> = reads × (1 − hit rate). At 90% hits, the database sees one read in ten.</p>
-      <p><b>Cache memory</b> = items × size of each × the hot share you want to hold, plus headroom. For example, 1,000,000 profiles at 5 KB with the top 20% cached: 200,000 × 5 KB = 1 GB, so plan for about 1.5 GB.</p>
-    </section>
-
-    <section>
-      ${lessonSteps([
-        'Which data is read often? Estimate its size.',
-        'Cache-aside next to the database.',
-        'Memory, TTL, invalidation, eviction.',
-        'Crash the cache. Change the data.',
-      ])}
-      <p>When you add a cache in an interview, say what you cache, the TTL, how you invalidate on writes, and what happens to the database when the cache is cold.</p>
-    </section>
-`,
-
-  // Lesson diagram. `f` provides the engine's drawing helpers.
+  // Lesson diagrams. `f` provides the engine's drawing helpers. Each figure sets its own viewBox.
   drawFigures(f) {
-    const { $, figNode, figArrow, figDefs } = f;
-    const f1 = $('figAside'); f1.textContent = ''; figDefs(f1);
-    figNode(f1, 'web', 104, 130, 'Web server', 'GET product 42');
-    figNode(f1, 'cache', 536, 50, 'Cache', 'In memory');
-    figNode(f1, 'db', 536, 210, 'Read replica', 'On disk');
-    figArrow(f1, 198, 104, 442, 40, '1 · get: miss', null, 310, 56, 'middle');
-    figArrow(f1, 198, 124, 442, 66, '3 · set, TTL 10 min', null, 346, 112, 'middle');
-    figArrow(f1, 198, 150, 442, 202, '2 · read the database', null, 330, 200, 'middle');
+    const { $, svgEl, figNode, figArrow, figDefs, figLabel } = f;
+    /** A dashed frame with its label, for one panel of a before-and-after picture. */
+    const panel = (svg, y, height, label) => {
+      svgEl('rect', { x: 10, y, width: 620, height, rx: 12, class: 'tier-box' }, svg);
+      figLabel(svg, 24, y + 20, label, 'start', 'tier-label');
+    };
+
+    // Hit: the cache answers. Miss: the web server asks the cache, reads the database, then stores the answer.
+    const f1 = $('figAside'); f1.textContent = ''; f1.setAttribute('viewBox', '0 0 640 396'); figDefs(f1);
+    panel(f1, 10, 150, 'Hit: the cache has it');
+    figNode(f1, 'web', 104, 96, 'Web server', 'Wants product 42');
+    figNode(f1, 'cache', 536, 96, 'Cache', 'Has product 42');
+    figArrow(f1, 198, 86, 442, 86, 'get product 42', null, 320, 78, 'middle');
+    figArrow(f1, 442, 106, 198, 106, 'product 42', null, 320, 126, 'middle');
+    panel(f1, 176, 210, 'Miss: the cache does not have it');
+    figNode(f1, 'web', 104, 286, 'Web server', 'Wants product 42');
+    figNode(f1, 'cache', 536, 236, 'Cache', 'No product 42');
+    figNode(f1, 'db', 536, 346, 'Read replica', 'On disk');
+    figArrow(f1, 198, 262, 442, 230, 'get: miss', '1', 262, 236);
+    figArrow(f1, 198, 300, 442, 346, 'read product 42', '2', 214, 350);
+    figArrow(f1, 198, 280, 442, 250, 'store it', '3', 330, 286);
+
+    // Warm: nine reads in ten end at the cache. Just restarted: the cache is empty and the database takes all ten.
+    const f2 = $('figCold'); f2.textContent = ''; f2.setAttribute('viewBox', '0 0 640 436'); figDefs(f2);
+    for (const { y, label, cacheSub, dbSub, toCache, toDb } of [
+      { y: 10, label: 'Warm cache', cacheSub: 'Answers 9 in 10', dbSub: 'Sized for misses', toCache: '9 reads in 10', toDb: '1 read in 10' },
+      { y: 226, label: 'Cache just restarted', cacheSub: 'Empty after restart', dbSub: 'Overloaded', toCache: '10 misses', toDb: '10 reads in 10' },
+    ]) {
+      panel(f2, y, 200, label);
+      figNode(f2, 'web', 320, y + 66, 'Web server', 'Reads');
+      figNode(f2, 'cache', 150, y + 160, 'Cache', cacheSub);
+      figNode(f2, 'db', 490, y + 160, 'Read replica', dbSub);
+      figArrow(f2, 270, y + 96, 190, y + 130, toCache, null, 216, y + 114, 'end');
+      figArrow(f2, 370, y + 96, 450, y + 130, toDb, null, 426, y + 114);
+    }
+
+    drawOrder(f, $('figOrder'));
+    drawBuilt(f, $('figBuilt'));
+    drawBuilt(f, $('figBuiltEnd'));
   },
 };

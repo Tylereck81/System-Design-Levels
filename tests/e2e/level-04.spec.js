@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures.js';
-import { registerCommonTests } from '../shared-checks.js';
+import { registerCommonTests, registerPageLessonTests } from '../shared-checks.js';
 import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, sampleRoutes, openMission, selectNode, calm, pressEnterOn } from '../helpers.js';
 
 // Level 4: cache tier.
@@ -29,8 +29,16 @@ const measure = (page) => page.evaluate(() => {
 test.describe('Level 4 · playthrough', () => {
   test('all three missions can be completed', async ({ page }) => {
     const errors = trackErrors(page);
-    await freshPage(page, '#level-4/build');
+    await freshPage(page, '#level-4/lesson');
     await expect(page.locator('#lvlChip')).toHaveText('Level 4 / 21');
+    // Each mission opens from its card in the lesson, and a finished one leads back there.
+    const start = async (n) => {
+      await page.click('#doneBanner [data-act="debrief"]');
+      await expect(page.locator(`#lp-m${n - 2}`)).toBeFocused();
+      await page.getByRole('button', { name: `Start Mission ${n}` }).click();
+      await expect(page.locator('#view-build')).toBeVisible();
+    };
+    await page.getByRole('button', { name: 'Start Mission 1' }).click();
 
     // Mission 1: estimate the memory, drop a replica, add an 8 GB cache with a 10-minute TTL.
     await page.fill('#estIn', '4 GB');
@@ -42,7 +50,7 @@ test.describe('Level 4 · playthrough', () => {
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
 
     // Mission 2: a second cache, then crash one.
-    await page.click('#mission .complete button');
+    await start(2);
     await setup(page, { caches: [['L', '600']], dropReplica: false });
     expect((await measure(page)).cost).toBe(2005); // $1,925 + a second L cache $80
     await page.click('#playBtn');
@@ -54,7 +62,7 @@ test.describe('Level 4 · playthrough', () => {
     expect(await logText(page)).toContain('one cache down');
 
     // Mission 3: delete changed products from both caches (through the inspector), then change prices.
-    await page.click('#mission .complete button');
+    await start(3);
     const caches = await state(page, () => window.__sdl.S.nodes.filter((n) => n.type === 'cache').map((n) => n.id));
     expect(caches[0]).toBe(c1);
     for (const id of caches) {
@@ -97,6 +105,7 @@ test.describe('Level 4 · numbers', () => {
 
   test('hit rate follows memory and TTL; two caches hold as much as one twice the size', async ({ page }) => {
     await freshPage(page, '#level-4/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     const hit = async (caches) => {
       await page.evaluate(() => { const S = window.__sdl.S; S.nodes = S.nodes.filter((n) => n.type !== 'cache'); S.edges = S.edges.filter((e) => window.__sdl.S.nodes.some((n) => n.id === e.to)); });
       await setup(page, { caches, dropReplica: false });
@@ -214,6 +223,7 @@ test.describe('Level 4 · teaching feedback', () => {
 
   test('cache settings survive a reload; bad saved settings load as the defaults', async ({ page }) => {
     await freshPage(page, '#level-4/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     await setup(page, { caches: [['L', '3600', 'delete']] });
     await reloadGame(page);
     expect(await state(page, () => { const n = window.__sdl.S.nodes.find((x) => x.type === 'cache'); return [n.size, n.ttl, n.onWrite]; })).toEqual(['L', '3600', 'delete']);
@@ -228,6 +238,7 @@ test.describe('Level 4 · teaching feedback', () => {
 
   test('the memory estimate shows the traffic, accepts "4 GB" and gives specific hints', async ({ page }) => {
     await freshPage(page, '#level-4/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     await expect(page.locator('#hud')).toContainText('2,000');
     await page.fill('#estIn', '20');
     await page.click('#estBtn');
@@ -273,6 +284,7 @@ test.describe('Level 4 · fixes from QA', () => {
 test.describe('Level 4 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-4/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     await page.fill('#estIn', '4');
     await pressEnterOn(page, '#estBtn');
     await pressEnterOn(page, '[data-node="r2"]');
@@ -304,4 +316,25 @@ test.describe('Level 4 · layout and accessibility', () => {
       },
     },
   });
+});
+
+test.describe('Level 4 · saved data', () => {
+  test('a save from before the one-page lesson opens every mission it could already open', async ({ page }) => {
+    await freshPage(page, '#level-4/build');
+    await page.evaluate(() => {
+      const old = { ...JSON.parse(JSON.stringify(window.__sdl.S)), v: 1, mission: 1, done: [true, false, false], verified: [true, false, false] };
+      delete old.opened;
+      localStorage.setItem('sdl-level4-v1', JSON.stringify(old));
+    });
+    await reloadGame(page);
+    const s = await state(page, () => { const S = window.__sdl.S; return { done: S.done, mission: S.mission, v: S.v, opened: S.opened }; });
+    expect(s.done).toEqual([true, false, false]);
+    expect(s.mission).toBe(1);
+    expect(s.v).toBe(2);
+    expect(s.opened).toEqual([true, true, false]); // Mission 1, and Mission 2 because Mission 1 is done
+  });
+});
+
+test.describe('Level 4 · one-page lesson', () => {
+  registerPageLessonTests({ level: 4 });
 });
