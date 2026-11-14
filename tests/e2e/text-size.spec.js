@@ -21,18 +21,14 @@ const smallText = (page, selector, min) => page.evaluate(({ selector, min }) => 
 }, { selector, min });
 
 /**
- * Shows the whole lesson: every step of a step lesson with each explanation, or every part of a one-page lesson (its
- * missions marked done, which opens them). A hand-written lesson needs nothing.
+ * Shows the whole lesson: every part of a one-page lesson (its missions marked done, which opens them). A
+ * hand-written lesson needs nothing.
  */
 async function showWholeLesson(page) {
   if (await page.locator('#pageLesson').count()) {
     const missions = await page.evaluate(() => window.__sdl.S.done.length);
-    return finishMissions(page, Array.from({ length: missions }, () => true), 0);
+    await finishMissions(page, Array.from({ length: missions }, () => true), 0);
   }
-  if (!(await page.locator('[data-act="all"]').count())) return;
-  await page.click('[data-act="all"]');
-  for (const skip of await page.locator('[data-act="reveal"]').all()) await skip.click();
-  await page.click('[data-act="rules"]');
 }
 
 const fontSize = (page, selector) => page.locator(selector).first().evaluate((e) => parseFloat(getComputedStyle(e).fontSize));

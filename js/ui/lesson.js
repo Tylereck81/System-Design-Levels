@@ -1,15 +1,13 @@
-// Lesson tab: a lesson written as steps or on one page (`level.lesson`, see Lesson in types.js) or authored HTML
+// Lesson tab: a lesson on one page (`level.lesson`, see Lesson in types.js) or authored HTML
 // (`level.lessonHtml`), and the helpers a level's diagrams are drawn with.
-import { level, inParts, lessonMinutes } from '../level.js';
+import { level, lessonMinutes } from '../level.js';
 import { $, svgEl, html, raw, prependHtml, setHtml } from '../dom.js';
 import { hooks } from '../hooks.js';
 import { drawIcon } from '../view/icons.js';
 import { MISSIONS, S, mayOpen } from '../state.js';
 import { openFromLesson } from './mission.js';
 
-/* ---------------- Step lesson ---------------- */
-// All steps are in the page from the start; the ones not shown are `hidden`, so their figures can still be drawn.
-// Nothing here is scored or saved.
+/* ---------------- Lesson blocks ---------------- */
 
 /** One body block (`LessonBlock`). Lesson text is authored markup; code is shown as written. */
 function blockHtml(b) {
@@ -46,16 +44,6 @@ const questionHtml = (check, key) => html`<p class="check-q" id="q-${key}">${raw
       <button type="button" class="btn opt" data-act="answer" data-opt="${i}" aria-pressed="false">${raw(o.t)}</button>`)}</div>
     <div class="check-fb" aria-live="polite"></div>`;
 
-/** A step's question (`s` keys its ids): "Guess first" comes before the explanation, "Your turn" after it. */
-function checkHtml(check, s) {
-  const guess = check.kind === 'guess';
-  return html`<div class="check">
-    <p class="label">${guess ? 'Guess first' : 'Your turn'}</p>
-    ${questionHtml(check, s)}
-    ${guess ? html`<button type="button" class="btn sm" data-act="reveal">Skip the question and show me</button>` : ''}
-  </div>`;
-}
-
 /**
  * Marks the pressed option and explains it in its question's feedback; a wrong answer also shows the right one.
  * `options` are the question's options (`CheckOption`).
@@ -68,124 +56,8 @@ function showAnswer(btn, options) {
     : html`<p><b>Not quite.</b> ${raw(chosen.why)}</p><p>The right answer: <b>${raw(right.t)}</b>. ${raw(right.why)}</p>`);
 }
 
-/**
- * A step: the label, the title (heading `st-<s>`), the hook, the question and the body a "Guess first" question hides
- * until it is answered, ending with the takeaway.
- */
-function stepParts(step, s, label) {
-  const guess = step.check?.kind === 'guess';
-  return html`<p class="label">${label}</p>
-    <h2 id="st-${s}" tabindex="-1">${raw(step.title)}</h2>
-    <p class="hook">${raw(step.hook)}</p>
-    ${guess ? checkHtml(step.check, s) : ''}
-    <div class="lstep-body" tabindex="-1"${guess ? raw(' hidden') : ''}>
-      ${step.body.map(blockHtml)}
-      ${step.check && !guess ? checkHtml(step.check, s) : ''}
-      <p class="takeaway"><b>Remember</b> ${raw(step.takeaway)}</p>
-    </div>`;
-}
 /** Numbers worth remembering, as [value, what it is] pairs. */
 const numbersHtml = (numbers) => html`<dl class="recap-nums">${numbers.map(([value, meaning]) => html`<div><dt>${raw(value)}</dt><dd>${raw(meaning)}</dd></div>`)}</dl>`;
-/** The step lesson's "Game rules" button and the rules it shows. */
-const rulesHtml = (rules) => html`<button type="button" class="btn sm" data-act="rules" aria-expanded="false" aria-controls="lessonRules">Game rules</button>
-    <p class="assume" id="lessonRules" hidden>${raw(rules)}</p>`;
-
-function stepHtml(step, s, count) {
-  return html`<section class="lstep" data-step="${s}" aria-labelledby="st-${s}"${s ? raw(' hidden') : ''}>
-    ${stepParts(step, s, `Step ${s + 1} of ${count}`)}
-    <div class="lstep-nav">
-      ${s ? html`<button type="button" class="btn" data-go="${s - 1}">Back</button>` : ''}
-      <button type="button" class="btn primary" data-go="${s + 1}">Next</button>
-    </div>
-  </section>`;
-}
-
-function recapHtml(lesson, s) {
-  const { numbers, bridge } = lesson.recap;
-  return html`<section class="lstep recap" data-step="${s}" aria-labelledby="st-${s}" hidden>
-    <p class="label">Recap</p>
-    <h2 id="st-${s}" tabindex="-1">What you now know</h2>
-    <ul>${lesson.steps.map((step) => html`<li>${raw(step.takeaway)}</li>`)}</ul>
-    <h3>Numbers to carry</h3>
-    ${numbersHtml(numbers)}
-    <h3>Your missions</h3>
-    <ol class="bridge">${bridge.map((line, i) => html`<li><b>Mission ${i + 1} · ${level.missions[i].title}</b> ${raw(line)}</li>`)}</ol>
-    ${rulesHtml(lesson.rules)}
-    <div class="lstep-nav">
-      <button type="button" class="btn" data-go="${s - 1}">Back</button>
-      <button type="button" class="btn primary" data-act="build">Start mission 1 <span aria-hidden="true">→</span></button>
-    </div>
-  </section>`;
-}
-
-function lessonHtml(lesson) {
-  const count = lesson.steps.length, missions = level.missions.length;
-  const dot = (i) => (i < count
-    ? html`<li><button type="button" class="dot" data-go="${i}" aria-label="Step ${i + 1}: ${lesson.steps[i].title}">${i + 1}</button></li>`
-    : html`<li><button type="button" class="dot" data-go="${i}">Recap</button></li>`);
-  return html`<div class="step-lesson" id="stepLesson">
-    <p class="label">${raw(lesson.kicker)}</p>
-    <h1>${raw(lesson.title)}</h1>
-    <p class="lede">${raw(lesson.promise)}</p>
-    <p class="lesson-meta">${count} short steps · about ${lesson.minutes} minutes · then ${missions} missions</p>
-    <div class="lesson-bar" id="lessonBar">
-      <nav aria-label="Lesson steps"><ol class="dots">${Array.from({ length: count + 1 }, (_, i) => dot(i))}</ol></nav>
-      <button type="button" class="btn sm" data-act="all">Show all steps on one page</button>
-    </div>
-    ${lesson.steps.map((step, s) => stepHtml(step, s, count))}
-    ${recapHtml(lesson, count)}
-  </div>`;
-}
-
-/**
- * Answers a step's question or skips it, and reveals the explanation it hides. Returns true when the click was one
- * of these.
- */
-function checkClick(btn, lesson) {
-  const sec = btn.closest('.lstep'), act = btn.dataset.act;
-  if (act !== 'answer' && act !== 'reveal') return false;
-  const body = sec.querySelector('.lstep-body'), skip = sec.querySelector('[data-act="reveal"]');
-  body.hidden = false;
-  if (skip) skip.hidden = true;
-  if (act === 'reveal') body.focus();
-  else showAnswer(btn, lesson.steps[Number(sec.dataset.step)].check.options);
-  return true;
-}
-
-/** Shows or hides the game rules under the "Game rules" button. */
-function toggleRules(btn) {
-  const open = btn.getAttribute('aria-expanded') !== 'true';
-  btn.setAttribute('aria-expanded', String(open));
-  $('lessonRules').hidden = !open;
-}
-
-/** Wires a rendered step lesson: one listener for every button in it. */
-function wireSteps(root, lesson) {
-  const sections = [...root.querySelectorAll('.lstep')];
-  const dots = [...root.querySelectorAll('.dot')];
-  let current = 0, all = false;
-  const allBtn = root.querySelector('[data-act="all"]');
-
-  const paint = () => {
-    sections.forEach((sec, i) => { sec.hidden = !all && i !== current; });
-    dots.forEach((d, i) => (i === current && !all ? d.setAttribute('aria-current', 'step') : d.removeAttribute('aria-current')));
-    root.classList.toggle('all', all);
-    allBtn.textContent = all ? 'Show one step at a time' : 'Show all steps on one page';
-  };
-  const go = (i) => { current = i; all = false; paint(); $(`st-${i}`).focus(); };
-
-  root.addEventListener('click', (e) => {
-    const btn = /** @type {HTMLElement} */ (e.target).closest('button');
-    if (!btn) return;
-    if (btn.dataset.go) return go(Number(btn.dataset.go));
-    if (checkClick(btn, lesson)) return;
-    const act = btn.dataset.act;
-    if (act === 'all') { all = !all; paint(); }
-    else if (act === 'rules') toggleRules(btn);
-    else if (act === 'build') hooks.setTab('build');
-  });
-  paint();
-}
 
 /* ---------------- One-page lesson ---------------- */
 // The intro, a line of links to each part, one part per mission (its sections, its questions, its mission card),
@@ -438,17 +310,14 @@ function wireParts(root, lesson) {
 }
 
 /**
- * Fills the lesson tab. A step lesson or a one-page lesson also takes over the tab's start button as its "Skip to the
- * missions".
+ * Fills the lesson tab. A one-page lesson also takes over the tab's start button as its "Skip to the missions".
  */
 export function renderLesson() {
   const view = $('view-lesson');
   if (!level.lesson) { prependHtml(view, raw(level.lessonHtml)); return; } // a lesson is authored markup
-  const onePage = inParts();
-  prependHtml(view, onePage ? pageLessonHtml(level.lesson) : lessonHtml(level.lesson));
+  prependHtml(view, pageLessonHtml(level.lesson));
   const cta = view.querySelector('.lesson-cta');
   $('startBuild').firstChild.textContent = 'Skip to the missions ';
-  if (!onePage) { $('lessonBar').appendChild(cta); wireSteps($('stepLesson'), level.lesson); return; }
   pageView.root = $('pageLesson');
   pageView.root.querySelector('.lintro').appendChild(cta);
   drawCardIcons(pageView.root);
