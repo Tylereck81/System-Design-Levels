@@ -7,3 +7,6 @@ export const LB_PUBLIC_IP = '203.0.113.10';
 
 /** Private IPs of the first two web servers behind the load balancer. */
 export const WEB_PRIVATE_IPS = ['10.0.0.11', '10.0.0.12'];
+
+/** The private range every web server's IP is taken from, as the levels write it. */
+export const WEB_PRIVATE_IP_RANGE = '10.0.0.x';
