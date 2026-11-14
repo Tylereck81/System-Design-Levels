@@ -267,7 +267,7 @@ const lesson = {
               alt: 'A shopper places order 501. The primary saves it and answers at once. The primary crashes before the copy reaches the replica, so the replica never receives order 501.',
               caption: 'A write confirmed on the primary but not yet copied',
             },
-            { p: `Writes made in that gap exist only on the primary. If it dies, they are gone, even though the shopper was told "saved". (In the game the lag is ${T.lag === 1 ? '1 second' : `${T.lag} seconds`}.)` },
+            { p: `Writes made in that gap exist only on the primary. If it dies, they are gone, even though the shopper was told "saved". (In the game the lag is ${T.lag} second${T.lag === 1 ? '' : 's'}.)` },
             { p: 'You can make the primary <b>wait</b> for one replica to confirm each write before it answers. Then nothing confirmed is lost, but every write is slower, and it stalls if that replica is slow. Not waiting is faster and risks the newest writes.' },
           ],
           takeaway: 'A replica can be slightly behind, so a failover can lose the newest writes.',
