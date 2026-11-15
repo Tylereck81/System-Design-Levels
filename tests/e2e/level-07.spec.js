@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures.js';
-import { registerCommonTests } from '../shared-checks.js';
+import { registerCommonTests, registerPageLessonTests } from '../shared-checks.js';
 import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, sampleRoutes, openMission, selectNode, setProps, calm, pressEnterOn } from '../helpers.js';
 
 // Level 7: Multiple data centers.
@@ -25,8 +25,10 @@ const connect = (page, a, b) => page.evaluate(([x, y]) => window.__sdl.tryConnec
 test.describe('Level 7 · playthrough', () => {
   test('both missions can be completed', async ({ page }) => {
     const errors = trackErrors(page);
-    await freshPage(page, '#level-7/build');
+    await freshPage(page, '#level-7/lesson');
     await expect(page.locator('#lvlChip')).toHaveText('Level 7 / 21');
+    // Each mission opens from its card in the lesson, and a finished one leads back there.
+    await page.getByRole('button', { name: 'Start Mission 1' }).click();
 
     // Mission 1: Virginia, GeoDNS and a smaller Frankfurt, through the inspector.
     await page.locator('.pal-item[data-type="dc"]').click();
@@ -44,7 +46,10 @@ test.describe('Level 7 · playthrough', () => {
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
 
     // Mission 2: estimate, make Frankfurt big enough, replicate Virginia to it, take Virginia offline.
-    await page.click('#mission .complete button');
+    await page.click('#doneBanner [data-act="debrief"]');
+    await expect(page.locator('#lp-m0')).toBeFocused();
+    await page.getByRole('button', { name: 'Start Mission 2' }).click();
+    await expect(page.locator('#view-build')).toBeVisible();
     await page.fill('#estIn', '2,000');
     await page.click('#estBtn');
     await selectNode(page, 'f');
@@ -180,6 +185,7 @@ test.describe('Level 7 · teaching feedback', () => {
 
   test('the inspector shows each data center\'s location, size and load', async ({ page }) => {
     await freshPage(page, '#level-7/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     await expect(page.locator('[data-node="f"] .node-sub')).toHaveText('L · 2,400 pages/s');
     await expect(page.locator('[data-node="d"] .node-sub')).toHaveText('Same answer for all');
     await selectNode(page, 'f');
@@ -227,6 +233,7 @@ test.describe('Level 7 · teaching feedback', () => {
 test.describe('Level 7 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-7/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     await pressEnterOn(page, '.pal-item[data-type="dc"]');
     const v = await state(page, () => window.__sdl.S.nodes.at(-1).id);
     await pressEnterOn(page, `[data-node="${v}"]`);
@@ -248,6 +255,7 @@ test.describe('Level 7 · layout and accessibility', () => {
     phone: { title: 'with two data centers', setup: (page) => addVirginia(page) },
     onTab: {
       build: async (page) => {
+        await openMission(page, 0); // a one-page lesson opens each mission from its card
         const v = await addVirginia(page);
         await connect(page, v, 'f');
         await page.click('#playBtn'); await playFor(page, 0.5);
@@ -255,4 +263,25 @@ test.describe('Level 7 · layout and accessibility', () => {
       },
     },
   });
+});
+
+test.describe('Level 7 · saved data', () => {
+  test('a save from before the one-page lesson opens every mission it could already open', async ({ page }) => {
+    await freshPage(page, '#level-7/build');
+    await page.evaluate(() => {
+      const old = { ...JSON.parse(JSON.stringify(window.__sdl.S)), v: 1, mission: 1, done: [true, false], verified: [true, false] };
+      delete old.opened;
+      localStorage.setItem('sdl-level7-v1', JSON.stringify(old));
+    });
+    await reloadGame(page);
+    const s = await state(page, () => { const S = window.__sdl.S; return { done: S.done, mission: S.mission, v: S.v, opened: S.opened }; });
+    expect(s.done).toEqual([true, false]);
+    expect(s.mission).toBe(1);
+    expect(s.v).toBe(2);
+    expect(s.opened).toEqual([true, true]); // Mission 1, and Mission 2 because Mission 1 is done
+  });
+});
+
+test.describe('Level 7 · one-page lesson', () => {
+  registerPageLessonTests({ level: 7 });
 });
