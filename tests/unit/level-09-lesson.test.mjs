@@ -10,6 +10,8 @@ const [first, second, third] = level.lesson.parts;
 const sections = level.lesson.parts.flatMap((p) => p.sections);
 /** The section with this title, so reordering the parts or sections does not break a check. */
 const section = (title) => sections.find((x) => x.title === title);
+/** The first block of this kind (calc, table, …) in a section, so reordering its blocks does not break a check. */
+const block = (title, kind) => section(title).body.find((b) => b[kind])[kind];
 const [split, famous, room] = level.missions;
 
 test('the story: 60% of queries are writes, and the primary is already the largest size', () => {
@@ -31,14 +33,14 @@ test('the new part cards: shards are chosen in the inspector; NoSQL is $200, 20,
 });
 
 test('which shard: 2,347 = 4 × 586 + 3, so account 2,347 is on shard 3 (the quiz uses 1006)', () => {
-  const calc = section('How does sharding split a database?').body[2].calc;
+  const calc = block('How does sharding split a database?', 'calc');
   assert.deepEqual(calc.rows.map((r) => [r.work, r.result]), [['ID 2,347 ÷ 4 shards', '586, remainder 3']]);
   assert.equal(calc.result, 'Account 2,347 lives on shard 3. Every query for it goes there and nowhere else.');
 });
 
 test('the shard count example: L takes 800/s, 800 × 0.7 = 560, 2,500 ÷ 560 = 4.5, so 5 shards', () => {
   assert.equal(SIZES.L.cap, 800);
-  const calc = section('How many shards do you need?').body[0].calc;
+  const calc = block('How many shards do you need?', 'calc');
   assert.deepEqual(calc.rows.map((r) => r.work), ['800 queries/s × 0.7', '2,500 queries/s ÷ 560 queries/s']);
   assert.deepEqual(calc.rows.map((r) => r.result), ['560 queries/s', '4.5, so 5 shards']);
 });
@@ -57,9 +59,9 @@ test('the lesson\'s shard counts are not answers the Mission 1 estimate accepts'
 });
 
 test('resharding from 3 to 4: of every 12 keys only 0, 1 and 2 stay, so 9 of 12 = 75% move', () => {
-  const calc = section('What does adding a shard cost?').body[1].calc;
+  const calc = block('What does adding a shard cost?', 'calc');
   assert.deepEqual(calc.rows.map((r) => r.result), ['3 keys', '9 keys = 75%']);
-  const rows = section('What does adding a shard cost?').body[0].table.rows;
+  const rows = block('What does adding a shard cost?', 'table').rows;
   assert.deepEqual(rows.map((r) => r[3]), ['no', 'no', 'no', 'yes', 'yes', 'yes']);
   // The game's own "Add a shard" reports N ÷ (N + 1): 3 ÷ 4 = 75%.
   assert.match(level.experiments[0].observed({ shardCount: 3 }), /puts 75% of accounts/);
