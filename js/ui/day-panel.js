@@ -4,7 +4,7 @@
 import { fmt } from '../format.js';
 import { $, svgEl } from '../dom.js';
 import { S, run, MISSIONS, WORKLOAD } from '../state.js';
-import { activeExps, dayHour } from '../engine/experiments.js';
+import { activeExps, dayHour, expectMet, textOf } from '../engine/experiments.js';
 
 const HOURS = 24;
 const W = 240, H = 40; // each chart's viewBox; it stretches to the panel's width
@@ -12,8 +12,13 @@ const clock = (h) => String(h).padStart(2, '0') + ':00';
 
 /**
  * What the panel saw of the day it shows: per hour, the traffic and the servers each web server ran. `day` is the
- * running experiment's own state object, so starting the day again starts a new record.
- * @type {{ day: object, mission: number, hours: ({ qps: number, web: number[] } | undefined)[], lost: number, design?: string, closed?: boolean } | null}
+ * running experiment's own state object, so starting the day again starts a new record. `fail` is the first hour the
+ * day's required outcome did not hold, judged as the game judges it (the engine keeps its own, `day.fail`, only while
+ * the day can still count for the mission). `cost` is the monthly bill of the design that ran the day.
+ * @typedef {{ at: number, msg: string }} DayFail
+ * @typedef {{ qps: number, web: number[] }} DayHour
+ * @type {{ day: { fail?: DayFail }, mission: number, hours: (DayHour | undefined)[], lost: number, cost: number,
+ *   fail?: DayFail, design?: string, closed?: boolean } | null}
  */
 let rec = null;
 
@@ -35,9 +40,12 @@ function record(m) {
   const exp = activeExps().find((e) => e.kind === 'day');
   if (exp) {
     const day = run.on[exp.id];
-    if (!rec || rec.day !== day) rec = { day, mission: S.mission, hours: [], lost: 0 };
+    if (!rec || rec.day !== day) rec = { day, mission: S.mission, hours: [], lost: 0, cost: 0 };
     rec.hours[dayHour()] = { qps: m.base, web: webCounts(m) };
     rec.lost = Math.max(rec.lost, m.lostPct || 0);
+    rec.cost = m.cost;
+    const peak = m.atPeak || m; // the outcome is judged on the peak result, as the game judges it
+    if (!rec.fail && !expectMet(exp, peak)) rec.fail = { at: dayHour(), msg: textOf(exp.notMet, peak) };
     return { h: dayHour(), t: Math.min(1, day.t / exp.secs), over: false };
   }
   if (!rec) return null;
@@ -63,6 +71,22 @@ function chart(svg, planned, seen, max, steps) {
     else d += `${seen[h - 1] == null ? `M${x(h)}` : 'V'} ${y(v)} H${x(h + 1)}`;
   });
   if (d) svgEl('path', { d, class: steps ? 'day-steps' : 'day-fill' }, svg);
+}
+
+/**
+ * What the day comes to so far: the first hour its required outcome failed, or a bill over the mission's budget (the
+ * day can hold and the mission still fail on cost), or, once it is over, that it held. Null while nothing is wrong yet.
+ * @param {boolean} over the day has ended
+ * @param {number | undefined} budget the mission's monthly budget
+ * @returns {{ tone: 'bad' | 'warn' | 'ok', text: string } | null}
+ */
+function verdict(over, budget) {
+  const fail = rec.day.fail || rec.fail;
+  if (fail) return { tone: 'bad', text: `${over ? 'The day does not count' : 'This day will not count'}. At ${clock(fail.at)}: ${fail.msg}` };
+  if (budget && rec.cost > budget) {
+    return { tone: 'warn', text: `${over ? 'The day held' : 'Holding so far'}, but the bill is $${fmt(rec.cost)} a month, over the $${fmt(budget)} budget.` };
+  }
+  return over ? { tone: 'ok', text: 'The day held, within the budget.' } : null;
 }
 
 /**
@@ -98,6 +122,13 @@ export function paintDay(m) {
   $('dayWeb').textContent = at.over ? range : (last.web.join(' + ') || '—');
   $('dayLostRow').hidden = !M.sessions;
   $('dayLost').textContent = lostText(rec.lost);
+  const cost = $('dayCost');
+  cost.textContent = `$${fmt(rec.cost)} a month`;
+  cost.classList.toggle('over', !!M.budget && rec.cost > M.budget);
+  $('dayCostRow').hidden = !M.budget;
+  const v = verdict(at.over, M.budget), line = $('dayVerdict');
+  line.hidden = !v;
+  if (v) { line.className = `day-verdict ${v.tone}`; line.textContent = v.text; }
   $('dayClose').hidden = !at.over;
 }
 

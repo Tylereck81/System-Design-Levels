@@ -253,6 +253,8 @@ test.describe('Level 6 · teaching feedback', () => {
     await expect(panel('Of')).toHaveText('the day is over');
     await expect(panel('Qps')).toHaveText('600 to 4,000 req/s');
     await expect(panel('Web')).toHaveText('2 to 10 in all');
+    await expect(panel('Cost')).toHaveText('$2,758 a month'); // the design priced in the cost test above: within $2,900
+    await expect(panel('Verdict')).toHaveText('The day held, within the budget.');
     await panel('Close').click();
     await expect(page.locator('#dayPanel')).toBeHidden();
     // A day stopped early leaves no panel.
@@ -261,6 +263,27 @@ test.describe('Level 6 · teaching feedback', () => {
     await expect(page.locator('#dayPanel')).toBeVisible();
     await page.click('#exp-run-day');
     await expect(page.locator('#dayPanel')).toBeHidden();
+  });
+
+  test('the day panel says when a day holds but the bill is over budget, and when the day will not count', async ({ page }) => {
+    await freshPage(page, '#level-6/build');
+    await openMission(page, 2, { estimate: true });
+    const at = (h) => page.evaluate((x) => { const s = window.__sdl; s.run.playing = false; s.run.on['run-day'].t = x; s.afterChange(); }, h);
+    // The starting design: two fixed XL servers, round robin, no session store. Half the pages miss their cart.
+    await page.click('#exp-run-day');
+    await at(0.5);
+    await expect(page.locator('#dayVerdict')).toHaveClass(/bad/);
+    await expect(page.locator('#dayVerdict')).toContainText('This day will not count. At 00:00: Only');
+    await page.click('#exp-run-day');
+    // With a session store nobody is logged out, but two fixed XL servers cost the peak price all day.
+    await addStore(page);
+    await page.click('#exp-run-day');
+    await at(4.5);
+    await expect(page.locator('#dayLost')).toHaveText('nobody');
+    await expect(page.locator('#dayWeb')).toHaveText('1 + 1');
+    await expect(page.locator('#dayCost')).toHaveClass(/over/);
+    await expect(page.locator('#dayVerdict')).toHaveClass(/warn/);
+    await expect(page.locator('#dayVerdict')).toContainText(/^Holding so far, but the bill is \$[\d,]+ a month, over the \$2,900 budget\.$/);
   });
 
   test('a fixed server cannot follow the day: the bill stays at the peak', async ({ page }) => {
