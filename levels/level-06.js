@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { Level } from '../js/types.js' */
+/** @import { Level, Lesson } from '../js/types.js' */
 // Level 6: Stateless web tier and autoscaling.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 import { servedGoal, latGoal, costGoal, spofGoal, servedAtLeast, fmtPct } from './shared/goals.js';
@@ -9,11 +9,17 @@ import { lbText, replicaText, NO_ORIGIN, levelComplete } from './shared/text.js'
 import { ONE_DNS, TWO_LBS, THREE_DBS, THREE_CACHES, ONE_CDN } from './shared/limits.js';
 import { failText, passText } from './shared/quiz.js';
 import { filesWorkload, dayTraffic } from './shared/workload.js';
-import { lessonSteps } from './shared/lesson.js';
+import { fmt, percent, ms, rate } from '../js/format.js';
+import { SIZES, COMPONENTS, T } from '../js/engine/catalog.js';
+import { STEPS } from './mock-steps.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
+/** Peak traffic in req/s, the share that writes, the share that are files and the share of shoppers far away: the same in all three missions. */
+const LOAD = { qps: 4000, writes: 0.2, files: 0.5, far: 0.3 };
 const PCT = { wholeFrom: 10 }; // percentages: whole numbers from 10% up
+/** Monthly budget of Missions 1 and 2, in dollars. */
 const BUDGET = 3300;
+/** Monthly budget of Mission 3, once the web tier follows the traffic, in dollars. */
 const NIGHT_BUDGET = 2900;
 const LOST_MAX = 0.05; // % of shoppers: below this, nobody was logged out
 
@@ -24,11 +30,297 @@ const clock = (h) => String(h).padStart(2, '0') + ':00';
 const day = dayTraffic(); // share of the 20:00 peak, hour by hour
 const shopLb = lb();
 
+// ---------------- Lesson ----------------
+const store = COMPONENTS.session;
+const target = T.scaleAt; // the autoscaler keeps servers at most this busy
+const [scope, sketch, deep, stress] = STEPS.map((step) => `<b>${step.name}</b>`);
+
+/**
+ * Servers for `load` req/s on servers of `size`, each kept at most `target` busy, rounded up: the formula the lesson
+ * teaches. The unit test checks it against the autoscaler's own count (copiesFor) for every number the lesson draws.
+ */
+const serversFor = (load, size) => Math.ceil(load / (size.cap * target));
+
+// Autoscaling example (ours): 1,800 req/s at the peak on L servers, 20% of that at night.
+const auto = { peak: 1800, size: SIZES.L, night: 0.2 };
+const autoUsable = auto.size.cap * target; // 800 × 0.6 = 480 req/s
+const autoNight = auto.peak * auto.night; // 360 req/s
+const autoAtPeak = serversFor(auto.peak, auto.size); // 1,800 ÷ 480 = 3.75, so 4
+const autoAtNight = serversFor(autoNight, auto.size); // 360 ÷ 480 = 0.75, so 1
+// Check yourself: 2,000 req/s on S servers.
+const autoCheck = { peak: 2000, size: SIZES.S };
+const checkUsable = autoCheck.size.cap * target; // 200 × 0.6 = 120 req/s
+const checkN = serversFor(autoCheck.peak, autoCheck.size); // 2,000 ÷ 120 = 16.7, so 17
+
+/** @type {Lesson} */
+const lesson = {
+  intro: {
+    kicker: 'Level 6 · Part 1: Grow one app',
+    title: 'Stateless web tier and autoscaling',
+    story: 'Shoppers can now log in and fill a cart, and carts keep vanishing. The cause is where your servers keep what they know about each shopper. Fix that, and the web tier can grow and shrink by itself.',
+    picture: 'figBuilt',
+    alt: 'The finished design: the load balancer shares requests over a group of web servers that grows and shrinks with traffic. Every web server reads and writes one shared session store.',
+    outcomes: [
+      'say what state is and what makes a server stateful',
+      'explain sticky sessions and why they are a weak fix',
+      'move session data to a shared store',
+      'explain why autoscaling needs stateless servers',
+      'work out how many servers run at the peak',
+    ],
+  },
+  last: 'Level 5 moved files close to shoppers. Your web servers still remember things about each shopper between requests. That did not matter until shoppers had carts.',
+  parts: [
+    {
+      title: 'Empty carts',
+      mission: 0,
+      minutes: 7,
+      lead: 'Two web servers, one load balancer, and a cart that is there on one click and gone on the next.',
+      newParts: [
+        { type: 'session', before: 1, what: 'A fast store that every web server shares.', does: 'Keeps each shopper\'s login and cart under their session ID. Any web server can look a session up or change it.', game: `$${store.cost} a month. Handles ${fmt(store.cap)} lookups/s, ${ms(store.base)} each.` },
+      ],
+      sections: [
+        {
+          title: 'Why did the cart disappear?',
+          hook: 'Because the server that answered this click is not the server that holds the cart.',
+          body: [
+            {
+              figure: 'figStateful',
+              alt: 'Ana\'s first request goes to server 1, which keeps her cart of two items in its memory. The load balancer sends her next request to server 2, which has never heard of Ana and shows an empty cart.',
+              caption: 'The cart is on server 1. The request went to server 2',
+            },
+            { p: '<b>State</b> is anything a server remembers about a user from one request to the next. A login and a cart together are a <b>session</b>. A server that keeps sessions in its own memory is <b>stateful</b>.' },
+            { p: 'Behind a load balancer that takes each server in turn, a shopper lands on the wrong server half the time.' },
+          ],
+          takeaway: 'A stateful server only works for the users whose data it happens to hold.',
+          quiz: [0, 1],
+        },
+        {
+          title: 'How can every page find its cart?',
+          hook: 'There are two ways. Send the shopper to the cart, or put the cart where every server can reach it.',
+          body: [
+            { table: { head: ['', 'Sticky sessions', 'Shared session store'], rows: [
+              ['<b>How</b>', 'The load balancer sends all of a shopper\'s requests to the same server', 'Servers keep sessions in one store they all share'],
+              ['<b>Where the cart lives</b>', 'Still in one server\'s memory', 'Outside every web server'],
+              ['<b>Cost</b>', 'A setting on the load balancer', 'One more part to run, and a lookup on every page'],
+            ] } },
+            { p: 'Both make this mission pass. They are not equally good, and the next mission shows why.' },
+          ],
+          takeaway: 'Either route each user to their server, or move the session out of the servers.',
+          quiz: [2],
+        },
+      ],
+      checks: [
+        {
+          q: 'Three web servers keep sessions in their own memory. The load balancer uses round robin. Out of 3 clicks, how many reach the server that has the shopper\'s cart?',
+          options: [
+            { t: 'All 3', why: 'Round robin takes each server in turn, so only one click in three returns to the same server.' },
+            { t: '1', right: true, why: 'Each server gets one click in three. Only one of them holds the cart.' },
+          ],
+        },
+      ],
+      youWill: [
+        'watch pages fail to find their cart with two stateful servers',
+        'fix it with sticky sessions on the load balancer, or with a session store',
+        `keep Served at least ${targets.servedPct}% for at most $${fmt(BUDGET)} a month`,
+      ],
+      debrief: {
+        saw: 'Every page found its cart again.',
+        number: ['2 fixes', 'sticky sessions, or a shared session store'],
+        next: 'At 10:00 you deploy a new version, and one web server leaves the pool while it restarts.',
+      },
+    },
+    {
+      title: 'An update at 10:00',
+      mission: 1,
+      minutes: 7,
+      lead: 'Servers leave the pool all the time: updates, crashes, resizing. What they hold leaves with them.',
+      sections: [
+        {
+          title: 'What happens to carts when a server leaves?',
+          hook: 'Sticky sessions sent each shopper to their cart. They did not move the cart.',
+          body: [
+            { p: 'When a server restarts, its memory is wiped. Every shopper pinned to it loses their cart and is logged out. The load balancer then sends them to another server, which has never heard of them.' },
+            { p: 'Sticky sessions have two more costs. A busy server cannot hand its shoppers to an idle one, so the load is uneven. And you cannot add or remove servers freely, which is the whole point of a pool.' },
+          ],
+          takeaway: 'Sticky sessions keep the cart on one server, so losing the server loses the cart.',
+          quiz: [3],
+        },
+        {
+          title: 'What makes a web tier stateless?',
+          hook: 'Take the sessions out of the web servers and keep them in one shared store.',
+          body: [
+            {
+              figure: 'figStateless',
+              alt: 'Requests from Ana and Ben go to any of three web servers, which hold no session data. Each server reads and writes a shared session store that holds both carts. One web server is removed and nothing is lost.',
+              caption: 'Any server can answer any shopper, and any server can leave',
+            },
+            { p: 'The browser keeps only a <b>session ID</b>. Each web server uses it to look the session up. The servers now hold nothing between requests: they are <b>stateless</b>, and all alike.' },
+            { p: 'A session is fetched whole by its key, so a key-value NoSQL store fits, and it is easy to scale out.' },
+            { p: `One warning: the store is now on every page's path. Each lookup adds time (${ms(store.base)} in the game), and the store must not be a single point of failure.` },
+          ],
+          takeaway: 'Stateless servers keep nothing between requests, so any of them can be removed.',
+          quiz: [4, 5, 9],
+        },
+      ],
+      checks: [
+        {
+          q: 'A stateless web server crashes in the middle of the day. What do its shoppers lose?',
+          options: [
+            { t: 'Their carts', why: 'The carts are in the session store, not in the server.' },
+            { t: 'Nothing: their next request goes to another server', right: true, why: 'Every server reads the same store, so any of them can carry on.' },
+          ],
+        },
+      ],
+      youWill: [
+        'add a session store and connect every web server to it',
+        'take a web server out with the Break it button: no shopper may lose their cart',
+        `finish with no single point of failure, for at most $${fmt(BUDGET)} a month`,
+      ],
+      debrief: {
+        saw: 'A web server left the pool and nobody noticed. The other server read every cart from the session store.',
+        number: [ms(store.base), 'added to a page for the session lookup'],
+        next: `Traffic peaks at ${rate(LOAD.qps)} in the evening and falls to a fraction of that at night. Your servers run at full size all night.`,
+      },
+    },
+    {
+      title: 'Quiet nights',
+      mission: 2,
+      minutes: 8,
+      lead: 'Servers sized for the evening peak sit idle most of the day, and you pay for every hour.',
+      sections: [
+        {
+          title: 'What does an autoscaler do?',
+          hook: '<b>Autoscaling</b> adds web servers when traffic rises and removes them when it falls.',
+          body: [
+            {
+              figure: 'figDay',
+              alt: 'Traffic over one day is lowest at four in the morning and highest at eight in the evening. The number of servers follows it in steps. A flat line shows servers sized for the peak running all day.',
+              caption: 'Servers follow the traffic instead of staying at the peak',
+            },
+            { p: `An autoscaler watches how busy the servers are and keeps them near a target. In the game the target is ${percent(target)} busy: above it, a server is added; well below it, one is removed.` },
+            { p: 'It removes servers every night. That is safe only if they are stateless. Removing a stateful server would log its shoppers out, every night.' },
+          ],
+          takeaway: 'Autoscaling follows the traffic, and it needs servers that can leave at any time.',
+          quiz: [6, 7],
+        },
+        {
+          title: 'How many servers run at the peak?',
+          hook: `Each server is kept at most ${percent(target)} busy, so count only that share of its capacity.`,
+          body: [
+            {
+              calc: {
+                formula: 'Servers = traffic ÷ (capacity of one server × target), rounded up.',
+                rows: [
+                  { label: 'Usable per server', work: `${rate(auto.size.cap)} × ${target}`, result: rate(autoUsable) },
+                  { label: 'At the peak', work: `${rate(auto.peak)} ÷ ${rate(autoUsable)}`, result: `${auto.peak / autoUsable}, so ${autoAtPeak} servers` },
+                  { label: 'At night', work: `${rate(autoNight)} ÷ ${rate(autoUsable)}`, result: `${autoNight / autoUsable}, so ${autoAtNight} server` },
+                ],
+                result: `${autoAtPeak} servers in the evening and ${autoAtNight} at night, where a fixed design would run ${autoAtPeak} all day.`,
+              },
+            },
+            { p: 'Smaller servers follow the traffic in finer steps, because a group cannot shrink below one server.' },
+          ],
+          takeaway: 'Divide the traffic by the usable share of one server, and round up.',
+          quiz: [8],
+        },
+      ],
+      checks: [
+        {
+          q: `Peak traffic is ${rate(autoCheck.peak)}. One server carries ${rate(autoCheck.size.cap)} and is kept at most ${percent(target)} busy. How many servers run at the peak?`,
+          options: [
+            { t: `${autoCheck.peak / autoCheck.size.cap}`, why: `That fills every server to 100%. Count only ${percent(target)} of each: ${rate(checkUsable)}.` },
+            { t: `${checkN}`, right: true, why: `${percent(target)} of ${fmt(autoCheck.size.cap)} is ${fmt(checkUsable)}. ${fmt(autoCheck.peak)} ÷ ${fmt(checkUsable)} = ${(autoCheck.peak / checkUsable).toFixed(1)}, rounded up.` },
+            { t: `${checkN - 1}`, why: `Round up, not down. ${checkN - 1} servers would be over the target.` },
+          ],
+        },
+      ],
+      youWill: [
+        'estimate the servers one group runs at the peak (Play stays locked until you do)',
+        'set each web server to autoscale and pick a size that follows the traffic closely',
+        `run a whole day: nobody is logged out, and the bill is at most $${fmt(NIGHT_BUDGET)} a month`,
+      ],
+    },
+  ],
+  wrap: {
+    picture: 'figBuiltEnd',
+    alt: 'The design you built: the load balancer shares requests over a group of web servers that grows and shrinks with traffic. Every web server reads and writes one shared session store.',
+    say: [
+      '"I keep the web tier stateless: sessions live in a shared store, so any server can take any request."',
+      '"Sticky sessions break when a server is removed, because the session is still on that server."',
+      '"Stateless servers can be autoscaled, so I pay for the peak only at the peak."',
+    ],
+    numbers: [
+      [percent(target), 'how busy the autoscaler keeps each server, in the game'],
+      [ms(store.base), 'for a session lookup, in the game'],
+    ],
+    loop: `The interview steps again: ${scope} (the servers at the peak), ${sketch} (session store beside the web tier), ${deep} (autoscaling and server size), ${stress} (you took a server out and ran a whole day).`,
+    broken: 'Everything you built stands in one building. If that data center loses power, the whole shop is gone. Level 7 opens a second one.',
+  },
+};
+
+/**
+ * The finished design, shown on the intro and again on the wrap-up: one drawing, two svgs.
+ * @param {Record<string, Function>} f the drawing helpers `drawFigures` is given
+ * @param {SVGSVGElement} svg
+ */
+function drawBuilt(f, svg) {
+  const { svgEl, figNode, figArrow, figDefs, figLabel } = f;
+  svg.textContent = ''; svg.setAttribute('viewBox', '0 0 640 460'); figDefs(svg);
+  figNode(svg, 'users', 320, 46, 'Users', 'Browser + app');
+  figNode(svg, 'lb', 320, 156, 'Load balancers', 'Active + standby');
+  figArrow(svg, 320, 76, 320, 126, 'requests', null, 332, 106);
+  figArrow(svg, 320, 186, 320, 226, 'any server', null, 332, 210);
+  // The autoscaled group: the third server is one the autoscaler adds for the peak and removes at night.
+  svgEl('rect', { x: 10, y: 226, width: 620, height: 130, rx: 12, class: 'tier-box' }, svg);
+  figLabel(svg, 24, 246, 'Autoscaled group: grows and shrinks', 'start', 'tier-label');
+  figNode(svg, 'web', 110, 306, 'Web server', 'Keeps nothing');
+  figNode(svg, 'web', 320, 306, 'Web server', 'Keeps nothing');
+  figNode(svg, 'web', 530, 306, 'Web server', 'Added for the peak');
+  figNode(svg, 'session', 220, 420, 'Session store', 'Every cart, by ID');
+  figNode(svg, 'db', 530, 420, 'Data', 'Cache and databases');
+  figArrow(svg, 110, 336, 170, 390, '', null, 0, 0);
+  figArrow(svg, 320, 336, 250, 390, '', null, 0, 0);
+  figArrow(svg, 530, 336, 300, 390, '', null, 0, 0);
+  figLabel(svg, 300, 374, 'sessions', 'start');
+  figArrow(svg, 590, 336, 590, 390, '', null, 0, 0);
+  figLabel(svg, 602, 370, 'data', 'start');
+}
+
+/**
+ * A day of traffic and the servers that follow it, for the lesson's example (on the game's day curve and its
+ * autoscaling rule), against a fixed design sized for the peak.
+ * @param {Record<string, Function>} f the drawing helpers `drawFigures` is given
+ * @param {SVGSVGElement} svg
+ */
+function drawDay(f, svg) {
+  const { svgEl, figLabel } = f;
+  svg.textContent = ''; svg.setAttribute('viewBox', '0 0 640 250');
+  const top = autoAtPeak + 1, X = (h) => 56 + h * 23, Y = (n) => 220 - (n / top) * 190;
+  for (let n = 1; n <= top; n++) {
+    svgEl('line', { x1: X(0), y1: Y(n), x2: X(24), y2: Y(n), class: 'ch-grid' }, svg);
+    figLabel(svg, X(0) - 8, Y(n) + 4, String(n), 'end', 'ch-t');
+  }
+  // Traffic in servers' worth of work (load ÷ usable capacity), drawn through the middle of each hour.
+  const pts = day.map((share, h) => `${X(h + 0.5).toFixed(1)} ${Y((auto.peak * share) / autoUsable).toFixed(1)}`);
+  svgEl('path', { d: `M${X(0.5)} ${Y(0)} L${pts.join(' L')} L${X(23.5)} ${Y(0)}Z`, class: 'ch-area' }, svg);
+  svgEl('path', { d: `M${pts.join(' L')}`, class: 'ch-curve' }, svg);
+  // Servers running, hour by hour.
+  const steps = day.map((share, h) => `H${X(h)} V${Y(serversFor(auto.peak * share, auto.size))} H${X(h + 1)}`);
+  svgEl('path', { d: `M${X(0)} ${Y(0)} ${steps.join(' ')}`, class: 'd-line' }, svg);
+  svgEl('path', { d: `M${X(0)} ${Y(autoAtPeak)} H${X(24)}`, class: 'd-line d-dash' }, svg);
+  figLabel(svg, X(0) + 6, Y(autoAtPeak) - 8, 'servers sized for the peak, running all night', 'start', 'ch-t');
+  svgEl('line', { x1: X(0), y1: Y(0), x2: X(24), y2: Y(0), class: 'ch-axis' }, svg);
+  for (const h of [0, 4, 8, 12, 16, 20, 24]) figLabel(svg, X(h), Y(0) + 18, clock(h), 'middle', 'ch-t');
+  figLabel(svg, 18, Y(top) - 12, 'servers', 'start', 'ch-t');
+  figLabel(svg, X(0.8), Y(0) - 8, 'traffic', 'start', 'ch-t');
+  figLabel(svg, X(8), Y(3) - 8, 'servers running', 'start', 'ch-t');
+}
+
 /** @type {Level} */
 export default {
   id: 6,
   saveKey: 'sdl-level6-v1',
-  saveVersion: 1,
+  saveVersion: 2, // 2: which missions were opened from the lesson (`opened`)
   targets,
   workload: { ...filesWorkload(), day },
 
@@ -124,14 +416,14 @@ export default {
 
   missions: [
     {
-      title: 'Empty carts', ref: 'Sessions', qps: 4000, writes: 0.2, files: 0.5, far: 0.3, sessions: true, budget: BUDGET,
+      title: 'Empty carts', ref: 'Sessions', ...LOAD, sessions: true, budget: BUDGET,
       story: 'Shoppers can now log in and fill a cart. Each web server keeps the carts of the shoppers it served in its own memory. The load balancer sends each request to the next server in turn, so half the time a shopper lands on the other server and finds an empty cart. Make every page find its cart.',
       goals: [servedGoal(targets), latGoal(targets), costGoal(BUDGET)],
       hint: 'Two fixes work. Select a load balancer and pick sticky sessions, so each shopper stays on one server. Or add a session store and connect both web servers to it, so any server can find any cart.',
       takeaway: 'Every page finds its cart now. With sticky sessions, each cart still lives on one server, and Mission 2 takes one away. With a session store, the web servers keep nothing between requests: they are stateless.',
     },
     {
-      title: 'An update at 10:00', ref: 'Stateless web tier', qps: 4000, writes: 0.2, files: 0.5, far: 0.3, sessions: true, budget: BUDGET,
+      title: 'An update at 10:00', ref: 'Stateless web tier', ...LOAD, sessions: true, budget: BUDGET,
       story: 'You deploy a new version at 10:00, when traffic is 2,160 req/s: one web server leaves the pool while it restarts. Every shopper on it must keep their cart and stay logged in.',
       goals: [
         servedGoal(targets), latGoal(targets), spofGoal(), costGoal(BUDGET),
@@ -141,7 +433,7 @@ export default {
       takeaway: 'Nobody noticed: the other web server read every cart from the session store. A stateless server can be removed, replaced or added at any time, which is what an autoscaler does all day.',
     },
     {
-      title: 'Quiet nights', ref: 'Autoscaling', qps: 4000, writes: 0.2, files: 0.5, far: 0.3, sessions: true, budget: NIGHT_BUDGET,
+      title: 'Quiet nights', ref: 'Autoscaling', ...LOAD, sessions: true, budget: NIGHT_BUDGET,
       gate: {
         hidesTraffic: false,
         lo: 4.1, hi: 5,
@@ -213,119 +505,53 @@ export default {
     passText: passText(6, 'Multiple data centers'),
     failText,
     questions: [
-      { q: 'What makes a web server stateful?', o: ['It runs on a private IP address in the data center', 'It remembers client data between requests', 'It reads data from a database', 'It sits behind a load balancer'], a: 1, e: 'A stateful server keeps client data, such as a session, from one request to the next. A stateless server keeps nothing between requests and fetches what it needs from a shared store.', r: 'State and sessions' },
-      { q: 'Ana\'s cart is in Server 2\'s memory. Her next request goes to Server 3. What does she see?', o: ['Her cart, copied over by the load balancer', 'An error page until Server 2 recovers', 'An empty cart, and maybe a login page', 'Her cart, read from the browser cookie'], a: 2, e: 'Server 3 has no record of Ana\'s session, so her cart looks empty, and if her login was kept there too, she is logged out. Her cookie only holds a session ID.', r: 'State and sessions' },
-      { q: 'What do sticky sessions do?', o: ['Send all of a user\'s requests to one server', 'Copy every session to every web server', 'Store sessions in the browser', 'Keep a server in the pool after it fails its check'], a: 0, e: 'The load balancer sends every request from one user to the same server, usually remembered in a cookie. Sessions in that server\'s memory are then always found.', r: 'Sticky sessions' },
-      { q: 'Why are sticky sessions a weak fix?', o: ['They need a bigger load balancer', 'They slow every request by a full extra round trip', 'They only work with NoSQL databases', 'Removing or losing a server drops its sessions'], a: 3, e: 'Each session still lives on one server. Remove it for an update or because traffic fell, or lose it to a failure, and its users are logged out. Adding servers helps slowly too, since existing users stay where they are.', r: 'Sticky sessions' },
-      { q: 'In a stateless web tier, where does session data live?', o: ['In each web server\'s own memory, as before', 'In a data store every web server shares', 'In the load balancer\'s routing table', 'In the CDN edge nearest the user'], a: 1, e: 'Sessions move to a shared store: a relational database, Redis or Memcached, or a NoSQL database. Any web server can then handle any request.', r: 'A stateless web tier' },
-      { q: 'Why is NoSQL a common choice for the session store?', o: ['It joins tables faster than SQL', 'It needs no network hop', 'It is easy to scale out', 'Browsers can read it directly'], a: 2, e: 'Session data is simple: one value per session ID, with no joins. A key-value or NoSQL store handles that well and grows by adding machines.', r: 'A stateless web tier' },
-      { q: 'What does autoscaling do?', o: ['Moves sessions between servers', 'Adds and removes servers as load changes', 'Picks the fastest server for each request', 'Resizes the database every night'], a: 1, e: 'An autoscaler watches a measure such as how busy the servers are. It adds servers when that rises and removes them when it falls, and you pay only for the hours they run.', r: 'Autoscaling' },
-      { q: 'Why does autoscaling need a stateless web tier?', o: ['Removing a stateful server drops its sessions', 'Stateless servers boot faster', 'Stateful servers cannot be monitored', 'The load balancer cannot reach stateful servers'], a: 0, e: 'When traffic falls, the autoscaler removes servers. A stateful server takes its sessions with it, so those users are logged out. With sessions in a shared store, any server can go.', r: 'Autoscaling' },
-      { q: 'Peak traffic is 3,000 req/s. Each server handles 500 req/s, and the autoscaler keeps each one at most 60% busy. How many servers run at the peak?', o: ['12', '6', '10', '8'], a: 2, e: '60% of 500 is 300 req/s per server, and 3,000 ÷ 300 = 10 servers. Six would run every server at 100% busy.', r: 'Numbers to carry into the interview' },
-      { q: 'The session store is now on every page\'s path. What must you plan for?', o: ['It must also serve static files', 'It must sit in front of the load balancer', 'It must hold the product catalog', 'It must not be a single point of failure'], a: 3, e: 'If the session store fails, no web server can find any session. Run it on several machines, or use a managed service that does.', r: 'A stateless web tier' },
+      { q: 'What makes a web server stateful?', o: ['It runs on a private IP address in the data center', 'It remembers client data between requests', 'It reads data from a database', 'It sits behind a load balancer'], a: 1, e: 'A stateful server keeps client data, such as a session, from one request to the next. A stateless server keeps nothing between requests and fetches what it needs from a shared store.', r: 'Why did the cart disappear?' },
+      { q: 'Ana\'s cart is in Server 2\'s memory. Her next request goes to Server 3. What does she see?', o: ['Her cart, copied over by the load balancer', 'An error page until Server 2 recovers', 'An empty cart, and maybe a login page', 'Her cart, read from the browser cookie'], a: 2, e: 'Server 3 has no record of Ana\'s session, so her cart looks empty, and if her login was kept there too, she is logged out. Her cookie only holds a session ID.', r: 'Why did the cart disappear?' },
+      { q: 'What do sticky sessions do?', o: ['Send all of a user\'s requests to one server', 'Copy every session to every web server', 'Store sessions in the browser', 'Keep a server in the pool after it fails its check'], a: 0, e: 'The load balancer sends every request from one user to the same server, usually remembered in a cookie. Sessions in that server\'s memory are then always found.', r: 'How can every page find its cart?' },
+      { q: 'Why are sticky sessions a weak fix?', o: ['They need a bigger load balancer', 'They slow every request by a full extra round trip', 'They only work with NoSQL databases', 'Removing or losing a server drops its sessions'], a: 3, e: 'Each session still lives on one server. Remove it for an update or because traffic fell, or lose it to a failure, and its users are logged out. Adding servers helps slowly too, since existing users stay where they are.', r: 'What happens to carts when a server leaves?' },
+      { q: 'In a stateless web tier, where does session data live?', o: ['In each web server\'s own memory, as before', 'In a data store every web server shares', 'In the load balancer\'s routing table', 'In the CDN edge nearest the user'], a: 1, e: 'Sessions move to a shared store: a relational database, Redis or Memcached, or a NoSQL database. Any web server can then handle any request.', r: 'What makes a web tier stateless?' },
+      { q: 'Why is NoSQL a common choice for the session store?', o: ['It joins tables faster than SQL', 'It needs no network hop', 'It is easy to scale out', 'Browsers can read it directly'], a: 2, e: 'Session data is simple: one value per session ID, with no joins. A key-value or NoSQL store handles that well and grows by adding machines.', r: 'What makes a web tier stateless?' },
+      { q: 'What does autoscaling do?', o: ['Moves sessions between servers', 'Adds and removes servers as load changes', 'Picks the fastest server for each request', 'Resizes the database every night'], a: 1, e: 'An autoscaler watches a measure such as how busy the servers are. It adds servers when that rises and removes them when it falls, and you pay only for the hours they run.', r: 'What does an autoscaler do?' },
+      { q: 'Why does autoscaling need a stateless web tier?', o: ['Removing a stateful server drops its sessions', 'Stateless servers boot faster', 'Stateful servers cannot be monitored', 'The load balancer cannot reach stateful servers'], a: 0, e: 'When traffic falls, the autoscaler removes servers. A stateful server takes its sessions with it, so those users are logged out. With sessions in a shared store, any server can go.', r: 'What does an autoscaler do?' },
+      { q: 'Peak traffic is 3,000 req/s. Each server handles 500 req/s, and the autoscaler keeps each one at most 60% busy. How many servers run at the peak?', o: ['12', '6', '10', '8'], a: 2, e: '60% of 500 is 300 req/s per server, and 3,000 ÷ 300 = 10 servers. Six would run every server at 100% busy.', r: 'How many servers run at the peak?' },
+      { q: 'The session store is now on every page\'s path. What must you plan for?', o: ['It must also serve static files', 'It must sit in front of the load balancer', 'It must hold the product catalog', 'It must not be a single point of failure'], a: 3, e: 'If the session store fails, no web server can find any session. Run it on several machines, or use a managed service that does.', r: 'What makes a web tier stateless?' },
     ],
   },
 
-  // Lesson tab content (HTML). The diagrams below draw into figStateful and figStateless.
-  lessonHtml: `
-    <p class="label">Level 6 · Stateless web tier and autoscaling</p>
-    <h1>Stateless web tier and autoscaling</h1>
-    <p class="lede">Shoppers now log in and fill a cart. Where does that cart live between two requests? In this level you see what goes wrong when each web server keeps its own carts, move them to a shared session store, and then let the web tier grow and shrink over a day of traffic.</p>
-    <div class="goals-box">
-      <div><b>You will learn</b>Stateful and stateless servers, sticky sessions, and autoscaling.</div>
-      <div><b>You will decide</b>Where sessions live, how the load balancer routes, and how the web tier scales.</div>
-      <div><b>You will estimate</b>How many servers an autoscaled group runs at the peak.</div>
-    </div>
+  lesson,
 
-    <section>
-      <h2>State and sessions</h2>
-      <p class="src">Stateful and stateless servers</p>
-      <p>A <b>session</b> is what a site remembers about one user between requests: who they are once logged in, and what is in their cart. The browser keeps only a cookie with a session ID. The data itself is kept on the server side.</p>
-      <p>A <b>stateful</b> server keeps that data in its own memory, so it remembers a user from one request to the next. A <b>stateless</b> server keeps nothing between requests: for each one, it fetches what it needs from a shared store.</p>
-      <figure class="fig"><svg id="figStateful" viewBox="0 0 640 280" role="img" aria-label="Ana's requests reach a load balancer that uses round robin. Her first request, adding a jacket to her cart, goes to Server 2, which keeps the cart in its memory. Her next request goes to Server 3, which has no cart for her."></svg><figcaption>Each cart lives on one server, so a request that lands elsewhere finds nothing</figcaption></figure>
-      <p>With stateful servers, every request from a user must reach the server that holds their session. Ana adds a jacket to her cart on Server 2. Her next request goes to Server 3, which has never seen her: her cart is empty, and if her login was kept there too, she is logged out.</p>
-    </section>
-
-    <section>
-      <h2>Sticky sessions</h2>
-      <p class="src">Load balancer session affinity</p>
-      <p>Most load balancers can send every request from one user to the same server. This is called <b>sticky sessions</b>, or session affinity. The load balancer usually remembers each user's server in a cookie.</p>
-      <p>That fixes the empty carts, but it adds overhead to the load balancer and makes the web tier hard to change:</p>
-      <ul>
-        <li><b>Removing a server</b>, for an update or because traffic fell, drops every session it holds. Those users are logged out and lose their carts.</li>
-        <li><b>Adding a server</b> helps slowly: existing users stay where they are, so only new users go to the new server.</li>
-        <li><b>A server failure</b> takes its sessions with it, and its users must start again on another server.</li>
-      </ul>
-    </section>
-
-    <section>
-      <h2>A stateless web tier</h2>
-      <p class="src">Shared session store</p>
-      <figure class="fig"><svg id="figStateless" viewBox="0 0 640 350" role="img" aria-label="Ana's requests reach a load balancer that uses round robin and sends them to any of three web servers, which keep nothing between requests. Each web server reads and writes sessions in one shared session store."></svg><figcaption>Any server can handle any request, because sessions live in the shared store</figcaption></figure>
-      <p>Move the sessions out of the web servers into a store they all share. Each web server reads the user's session from it at the start of a request and writes any change back. Now any server can handle any request, so the load balancer can use plain round robin, and servers can be added or removed at any time.</p>
-      <p>The store can be a relational database, an in-memory store such as Redis or Memcached, or a NoSQL database. NoSQL is a common choice because it is easy to scale. Whatever you pick is now on the path of every page, so it must not be a single point of failure.</p>
-    </section>
-
-    <section>
-      <h2>Autoscaling</h2>
-      <p class="src">Autoscaling</p>
-      <p><b>Autoscaling</b> adds web servers when traffic rises and removes them when it falls, based on a measure such as how busy the servers are. You pay for servers only in the hours they run.</p>
-      <p>It needs a stateless web tier. Removing a stateful server drops its sessions, and with sticky sessions a new server only gets new users. Once sessions live in a shared store, the autoscaler can add and remove servers freely.</p>
-      <p>Traffic over a day averages about half its peak, so a web tier that follows traffic runs far fewer server-hours than one sized for the peak all day. Smaller servers follow it more closely: a group can never shrink below one server, and one large server is a lot of capacity at 4 a.m.</p>
-    </section>
-
-    <section>
-      <h2>How this level is simulated</h2>
-      <p class="src">Game assumptions</p>
-      <p>Every page needs the shopper's session; files do not. A web server that is not connected to a session store keeps sessions in its own memory. With round robin, a page finds its session only if it lands on the server that holds it: with two servers, half the pages fail. With sticky sessions it is always found. When a server that holds sessions goes down or is removed, its shoppers are logged out and lose their carts.</p>
-      <p>With a session store, each page first reads its session there: one lookup of 3 ms, plus the 0.5 ms hop. An autoscaled web server is a group of servers of its size. Each hour it runs as many as keep them at most 60% busy, from 1 to 10, and you pay for the hours each one runs.</p>
-      <p class="assume">Game assumptions: the session store is a managed service that handles 10,000 lookups/s for $150 a month and is not a single point of failure. Each page does one session lookup. Traffic follows the same day every day, averaging half the 20:00 peak. The autoscaler sizes each hour for that hour's traffic, and new servers start at once; real ones take minutes, which is why autoscalers leave headroom. The load balancer gives each group the same share. Sticky sessions cost nothing extra here.</p>
-    </section>
-
-    <section>
-      <h2>Numbers to carry into the interview</h2>
-      <p class="src">Capacity estimates</p>
-      <p><b>Servers needed</b> = traffic ÷ (what one server handles × the highest share busy you allow), rounded up. For example, 1,000 req/s on servers that handle 400 req/s, kept at most 60% busy: 1,000 ÷ 240 ≈ 4.2, so 5 servers.</p>
-      <p><b>What autoscaling saves</b>: traffic averages about half its peak over a day, so a tier that followed traffic exactly would run about half the server-hours of one sized for the peak all day.</p>
-    </section>
-
-    <section>
-      ${lessonSteps([
-        'Do users log in? What state does a request need? How does traffic change over a day?',
-        'A load balancer, stateless web servers, a shared session store.',
-        'Where sessions live, sticky or shared, the scaling rule and server size.',
-        'Remove a server. Run a day of traffic.',
-      ])}
-      <p>When you scale out the web tier in an interview, say where session data lives, and why that lets you add and remove servers freely.</p>
-    </section>
-`,
-
-  // Lesson diagrams. `f` provides the engine's drawing helpers.
+  // Lesson diagrams. `f` provides the engine's drawing helpers. Each figure sets its own viewBox.
   drawFigures(f) {
-    const { $, figNode, figArrow, figDefs } = f;
-    const f1 = $('figStateful'); f1.textContent = ''; figDefs(f1);
-    figNode(f1, 'users', 320, 34, 'Ana', 'Logged in, shopping');
-    figNode(f1, 'lb', 320, 136, 'Load balancer', 'Round robin');
-    figNode(f1, 'web', 100, 246, 'Server 1', 'Other shoppers');
-    figNode(f1, 'web', 320, 246, 'Server 2', 'Ana\'s cart in memory');
-    figNode(f1, 'web', 540, 246, 'Server 3', 'No cart for Ana');
-    figArrow(f1, 320, 64, 320, 104, 'Ana\'s requests', null, 332, 89, 'start');
-    figArrow(f1, 320, 166, 320, 214, '1 · add a jacket', null, 308, 195, 'end');
-    figArrow(f1, 380, 166, 500, 214, '2 · view cart: empty', null, 452, 182, 'start');
+    const { $, svgEl, figNode, figArrow, figDefs, figLabel } = f;
+    // Stateful: Ana's cart is in server 1's memory; round robin sends her next request to server 2.
+    const f1 = $('figStateful'); f1.textContent = ''; f1.setAttribute('viewBox', '0 0 640 280'); figDefs(f1);
+    figNode(f1, 'users', 320, 40, 'Ana', 'Logged in');
+    figNode(f1, 'lb', 320, 140, 'Load balancer', 'Each server in turn');
+    figNode(f1, 'web', 150, 240, 'Server 1', 'Ana: 2 items');
+    figNode(f1, 'web', 490, 240, 'Server 2', 'Ben: 1 item');
+    figArrow(f1, 320, 70, 320, 110, 'requests', null, 332, 94);
+    figArrow(f1, 270, 170, 190, 210, 'add to cart', '1', 90, 190);
+    figArrow(f1, 370, 170, 450, 210, 'view cart: empty', '2', 470, 190);
 
-    const f2 = $('figStateless'); f2.textContent = ''; figDefs(f2);
-    figNode(f2, 'users', 320, 34, 'Ana', 'Logged in, shopping');
-    figNode(f2, 'lb', 320, 126, 'Load balancer', 'Round robin');
-    figNode(f2, 'web', 100, 220, 'Server 1', 'Keeps nothing');
-    figNode(f2, 'web', 320, 220, 'Server 2', 'Keeps nothing');
-    figNode(f2, 'web', 540, 220, 'Server 3', 'Keeps nothing');
-    figNode(f2, 'session', 320, 316, 'Session store', 'Ana\'s cart, by session ID');
-    figArrow(f2, 320, 64, 320, 94, 'Ana\'s requests', null, 332, 84, 'start');
-    figArrow(f2, 270, 156, 150, 188, '', null, 0, 0);
-    figArrow(f2, 320, 156, 320, 188, 'any server', null, 332, 177, 'start');
-    figArrow(f2, 370, 156, 490, 188, '', null, 0, 0);
-    figArrow(f2, 150, 250, 250, 286, '', null, 0, 0);
-    figArrow(f2, 320, 250, 320, 284, 'read and write sessions', null, 332, 272, 'start');
-    figArrow(f2, 490, 250, 390, 286, '', null, 0, 0);
+    // Stateless: any server answers Ana and Ben, every server uses one session store, and server 2 can leave.
+    const f2 = $('figStateless'); f2.textContent = ''; f2.setAttribute('viewBox', '0 0 640 370'); figDefs(f2);
+    figNode(f2, 'users', 180, 40, 'Ana', 'Logged in');
+    figNode(f2, 'users', 460, 40, 'Ben', 'Logged in');
+    figNode(f2, 'lb', 320, 140, 'Load balancer', 'Any server');
+    figArrow(f2, 220, 70, 290, 110, '', null, 0, 0);
+    figArrow(f2, 420, 70, 350, 110, '', null, 0, 0);
+    figNode(f2, 'web', 110, 240, 'Server 1', 'Keeps nothing');
+    figNode(svgEl('g', { class: 'fig-down' }, f2), 'web', 320, 240, 'Server 2', 'Removed: no loss');
+    figNode(f2, 'web', 530, 240, 'Server 3', 'Keeps nothing');
+    figArrow(f2, 280, 170, 150, 210, '', null, 0, 0);
+    figArrow(f2, 360, 170, 490, 210, '', null, 0, 0);
+    figNode(f2, 'session', 320, 336, 'Session store', 'Ana: 2, Ben: 1');
+    figArrow(f2, 150, 270, 250, 306, '', null, 0, 0);
+    figArrow(f2, 490, 270, 390, 306, '', null, 0, 0);
+    figLabel(f2, 320, 294, 'read and write');
+
+    drawDay(f, $('figDay'));
+    drawBuilt(f, $('figBuilt'));
+    drawBuilt(f, $('figBuiltEnd'));
   },
 };

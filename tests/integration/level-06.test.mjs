@@ -32,3 +32,14 @@ test('Mission 1 solution: cost', () => {
   // Level 5's $3,042 design plus a session store $150 = $3,192.
   assert.equal(L.model().cost, 3192);
 });
+
+test('the lesson\'s worked example and day picture count servers as the autoscaler does', async () => {
+  // The lesson rounds up load ÷ (capacity × 60%) itself; the engine's copiesFor is the autoscaler's own count.
+  const { copiesFor } = await import('../../js/engine/components.js');
+  const { SIZES, T } = await import('../../js/engine/catalog.js');
+  assert.equal(copiesFor(1800, SIZES.L.cap), 4); // 1,800 ÷ (800 × 0.6) = 3.75, so 4
+  assert.equal(copiesFor(360, SIZES.L.cap), 1); // 360 ÷ 480 = 0.75, so 1
+  // Every hour of the day picture: 1,800 req/s × that hour's share of the peak, on L servers.
+  const usable = SIZES.L.cap * T.scaleAt;
+  L.level.workload.day.forEach((share, h) => assert.equal(Math.ceil((1800 * share) / usable), copiesFor(1800 * share, SIZES.L.cap), `hour ${h}`));
+});
