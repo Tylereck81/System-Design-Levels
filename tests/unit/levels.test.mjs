@@ -51,6 +51,11 @@ for (const { entry, data, error } of levels) {
     if (data.quizVersion !== undefined) assert.ok(isPositiveInteger(data.quizVersion), 'quizVersion is a positive integer');
   });
 
+  test(`Level ${entry.id}: the quiz's pass message sends the player to Home, the only place to pick a level`, { skip: !!error }, () => {
+    assert.match(data.quiz.passText, /from Home\.$/);
+    assert.doesNotMatch(data.quiz.passText, /level menu/);
+  });
+
   test(`Level ${entry.id}: quiz is complete, balanced and not guessable by length`, { skip: !!error }, () => {
     const { questions, passScore } = data.quiz;
     assert.equal(questions.length, QUESTIONS);

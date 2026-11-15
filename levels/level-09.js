@@ -488,7 +488,7 @@ export default {
 
   quiz: {
     passScore: 8,
-    passText: 'Level 9 is done, and with it the first part: scaling from one server to millions of users. Level 10, Rate limiter, is next: open it from the level menu at the top.',
+    passText: 'Level 9 is done, and with it the first part: scaling from one server to millions of users. Level 10, Rate limiter, is next: open it from Home.',
     failText,
     questions: [
       { q: 'Why not just keep buying a bigger database server?', o: ['Bigger servers cannot run SQL', 'They hit a size limit and cost far more', 'A bigger server adds network lag to every query', 'Replicas stop working on big servers'], a: 1, e: 'Vertical scaling hits a hardware limit, the biggest server you can buy, and powerful servers cost much more for each unit of capacity. One server is also a single point of failure.', r: 'Why can the database not just keep growing?' },
