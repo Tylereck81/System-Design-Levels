@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures.js';
-import { registerCommonTests } from '../shared-checks.js';
+import { registerCommonTests, registerPageLessonTests } from '../shared-checks.js';
 import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, openMission, selectNode, setProps, calm, pressEnterOn } from '../helpers.js';
 
 // Level 9: Scale the data tier with sharding.
@@ -27,8 +27,10 @@ const measure = (page) => page.evaluate(() => {
 test.describe('Level 9 · playthrough', () => {
   test('all three missions can be completed', async ({ page }) => {
     const errors = trackErrors(page);
-    await freshPage(page, '#level-9/build');
+    await freshPage(page, '#level-9/lesson');
     await expect(page.locator('#lvlChip')).toHaveText('Level 9 / 21');
+    // Each mission opens from its card in the lesson, and a finished one leads back there.
+    await page.getByRole('button', { name: 'Start Mission 1' }).click();
 
     // Mission 1: estimate, then three XL shards by account_id (set through the inspector).
     await page.fill('#estIn', '3');
@@ -45,7 +47,10 @@ test.describe('Level 9 · playthrough', () => {
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
 
     // Mission 2: a shard for each very popular account.
-    await page.click('#mission .complete button');
+    await page.click('#doneBanner [data-act="debrief"]');
+    await expect(page.locator('#lp-m0')).toBeFocused();
+    await page.getByRole('button', { name: 'Start Mission 2' }).click();
+    await expect(page.locator('#view-build')).toBeVisible();
     await selectNode(page, z);
     await page.locator('#insp').getByRole('button', { name: /^A shard for each/ }).click();
     await page.click('#playBtn');
@@ -53,7 +58,10 @@ test.describe('Level 9 · playthrough', () => {
     expect(await state(page, () => window.__sdl.S.done[1])).toBe(true);
 
     // Mission 3: plays and likes to a NoSQL store, then add a shard.
-    await page.click('#mission .complete button');
+    await page.click('#doneBanner [data-act="debrief"]');
+    await expect(page.locator('#lp-m1')).toBeFocused();
+    await page.getByRole('button', { name: 'Start Mission 3' }).click();
+    await expect(page.locator('#view-build')).toBeVisible();
     await addNoSql(page);
     await expect(page.locator('.edge-label', { hasText: 'plays, likes' })).not.toHaveCount(0);
     await page.click('#playBtn');
@@ -200,6 +208,7 @@ test.describe('Level 9 · teaching feedback', () => {
 
   test('the shard estimate accepts "3" and gives specific hints', async ({ page }) => {
     await freshPage(page, '#level-9/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     for (const [v, hint] of [['1.9', '100% busy'], ['4', 'fewer do too']]) {
       await page.fill('#estIn', v);
       await page.click('#estBtn');
@@ -214,6 +223,7 @@ test.describe('Level 9 · teaching feedback', () => {
 test.describe('Level 9 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-9/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     await page.fill('#estIn', '3');
     await pressEnterOn(page, '#estBtn');
     for (const id of ['b', 'r']) { await pressEnterOn(page, `[data-node="${id}"]`); await pressEnterOn(page, '#insp [data-focus-key="remove"]'); }
@@ -250,4 +260,25 @@ test.describe('Level 9 · layout and accessibility', () => {
       },
     },
   });
+});
+
+test.describe('Level 9 · saved data', () => {
+  test('a save from before the one-page lesson opens every mission it could already open', async ({ page }) => {
+    await freshPage(page, '#level-9/build');
+    await page.evaluate(() => {
+      const old = { ...JSON.parse(JSON.stringify(window.__sdl.S)), v: 1, mission: 1, done: [true, false, false], verified: [true, false, false] };
+      delete old.opened;
+      localStorage.setItem('sdl-level9-v1', JSON.stringify(old));
+    });
+    await reloadGame(page);
+    const s = await state(page, () => { const S = window.__sdl.S; return { done: S.done, mission: S.mission, v: S.v, opened: S.opened }; });
+    expect(s.done).toEqual([true, false, false]);
+    expect(s.mission).toBe(1);
+    expect(s.v).toBe(2);
+    expect(s.opened).toEqual([true, true, false]); // Mission 1, and Mission 2 because Mission 1 is done
+  });
+});
+
+test.describe('Level 9 · one-page lesson', () => {
+  registerPageLessonTests({ level: 9 });
 });
