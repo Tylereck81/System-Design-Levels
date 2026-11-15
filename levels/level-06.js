@@ -34,7 +34,11 @@ const shopLb = lb();
 const store = COMPONENTS.session;
 const target = T.scaleAt; // the autoscaler keeps servers at most this busy
 const [scope, sketch, deep, stress] = STEPS.map((step) => `<b>${step.name}</b>`);
-/** Servers an autoscaled group runs for `load` req/s on servers of `size`: the game's rule, rounded up. */
+
+/**
+ * Servers for `load` req/s on servers of `size`, each kept at most `target` busy, rounded up: the formula the lesson
+ * teaches. The unit test checks it against the autoscaler's own count (copiesFor) for every number the lesson draws.
+ */
 const serversFor = (load, size) => Math.ceil(load / (size.cap * target));
 
 // Autoscaling example (ours): 1,800 req/s at the peak on L servers, 20% of that at night.
