@@ -223,7 +223,7 @@ export default {
 
   quiz: {
     passScore: 8,
-    passText: 'Level 21 is done, and with it every level. Next: a mock interview, from the level menu at the top.',
+    passText: 'Level 21 is done, and with it every level. Next: a mock interview, from Home.',
     failText,
     questions: [
       { q: 'What is delta sync?', o: ['Syncing only at night', 'Sending only the blocks that changed', 'Sending every file twice, to two regions at once', 'Syncing one device at a time'], a: 1, e: 'A file is split into blocks named by their hash. After an edit, only blocks whose hash changed are uploaded.', r: 'Block servers' },
