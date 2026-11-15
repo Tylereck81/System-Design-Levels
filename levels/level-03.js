@@ -324,8 +324,8 @@ const lesson = {
  * @param {SVGSVGElement} svg
  */
 function drawBuilt(f, svg) {
-  const { figNode, figArrow, figDefs, figLabel, figDash } = f;
-  svg.textContent = ''; svg.setAttribute('viewBox', '0 0 640 580'); figDefs(svg);
+  const { figNode, figArrow, figSvg, figLabel, figDash } = f;
+  figSvg(svg, 580);
   figNode(svg, 'users', 320, 50, 'Users', 'Browser + app');
   figNode(svg, 'lb', 150, 160, 'Load balancer', 'Active');
   figNode(svg, 'lb', 490, 160, 'Load balancer', 'Standby');
@@ -521,10 +521,10 @@ export default {
 
   // Lesson diagrams. `f` provides the engine's drawing helpers. Each figure sets its own viewBox.
   drawFigures(f) {
-    const { $, svgEl, figNode, figArrow, figDefs, figLabel, figDash } = f;
+    const { $, svgEl, figNode, figArrow, figSvg, figLabel, figDash } = f;
 
     // One web server sends writes to the primary and reads to two replicas; the primary copies every write to both.
-    const f1 = $('figReplicas'); f1.textContent = ''; f1.setAttribute('viewBox', '0 0 640 300'); figDefs(f1);
+    const f1 = figSvg($('figReplicas'), 300);
     figNode(f1, 'web', 320, 46, 'Web server', 'Private IP');
     figNode(f1, 'db', 104, 196, 'Primary', 'Every write');
     figNode(f1, 'db', 320, 196, 'Replica 1', 'Reads');
@@ -537,7 +537,7 @@ export default {
     figLabel(f1, 212, 284, 'every write, in order');
 
     // A timeline: the primary confirms order 501, then crashes before the copy leaves, so the replica never gets it.
-    const f2 = $('figLag'); f2.textContent = ''; f2.setAttribute('viewBox', '0 0 640 270'); figDefs(f2);
+    const f2 = figSvg($('figLag'), 270);
     figLabel(f2, 620, 24, 'time →', 'end', 'tier-label');
     for (const { name, y, end } of [{ name: 'Shopper', y: 60, end: 620 }, { name: 'Primary', y: 150, end: 346 }, { name: 'Replica', y: 240, end: 620 }]) {
       figLabel(f2, 24, y + 4, name, 'start', 'tier-label');

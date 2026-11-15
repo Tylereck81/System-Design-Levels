@@ -562,8 +562,8 @@ export default {
 
   // Lesson diagrams. `f` provides the engine's drawing helpers. Each figure sets its own viewBox.
   drawFigures(f) {
-    const { $, svgEl, figNode, figArrow, figDefs, figLabel } = f;
-    const f1 = $('figFlow'); f1.textContent = ''; f1.setAttribute('viewBox', '0 0 640 250'); figDefs(f1);
+    const { $, svgEl, figNode, figArrow, figSvg, figLabel } = f;
+    const f1 = figSvg($('figFlow'), 250);
     figNode(f1, 'users', 150, 52, 'User', 'Browser + app');
     figNode(f1, 'dns', 500, 52, 'DNS', 'Third-party');
     figNode(f1, 'web', 150, 205, 'Web server', address);
@@ -573,7 +573,7 @@ export default {
     figArrow(f1, 172, 173, 172, 84, 'page or data', '4', 202, 132);
 
     // Before: one machine runs code and data at part of its capacity. After: a web tier and a data tier.
-    const f2 = $('figTiers'); f2.textContent = ''; f2.setAttribute('viewBox', '0 0 640 420'); figDefs(f2);
+    const f2 = figSvg($('figTiers'), 420);
     svgEl('rect', { x: 20, y: 14, width: 600, height: 122, rx: 12, class: 'tier-box' }, f2);
     figLabel(f2, 34, 33, 'Before: one machine', 'start', 'tier-label');
     figNode(f2, 'users', 145, 76, 'User', 'Browser + app');
@@ -593,7 +593,7 @@ export default {
     figArrow(f2, 399, 364, 241, 364, 'rows', null, 320, 382, 'middle');
 
     // Time per request against how busy the server is, drawn with the simulation's own rule (qmul).
-    const f3 = $('figQueue'); f3.textContent = ''; f3.setAttribute('viewBox', '0 0 640 250');
+    const f3 = figSvg($('figQueue'), 250);
     const cap = qmul(1), X = (u) => 56 + u * 540, Y = (m) => 210 - (Math.min(m, cap) / cap) * 180;
     for (let m = 5; m <= cap; m += 5) {
       svgEl('line', { x1: X(0), y1: Y(m), x2: X(1), y2: Y(m), class: 'ch-grid' }, f3);
@@ -615,7 +615,7 @@ export default {
 
     // The finished design, shown on the intro and again on the wrap-up: one drawing, two svgs.
     const built = (svg) => {
-      svg.textContent = ''; svg.setAttribute('viewBox', '0 0 640 250'); figDefs(svg);
+      figSvg(svg, 250);
       figNode(svg, 'users', 150, 52, 'Users', 'Browser + app');
       figNode(svg, 'dns', 500, 52, 'DNS', 'Finds your server');
       figNode(svg, 'web', 150, 205, 'Web server', 'Web tier');

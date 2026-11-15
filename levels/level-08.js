@@ -295,8 +295,8 @@ const lesson = {
  * @param {SVGSVGElement} svg
  */
 function drawBuilt(f, svg) {
-  const { svgEl, figNode, figArrow, figDefs, figLabel, figDash } = f;
-  svg.textContent = ''; svg.setAttribute('viewBox', '0 0 640 446'); figDefs(svg);
+  const { svgEl, figNode, figArrow, figSvg, figLabel, figDash } = f;
+  figSvg(svg, 446);
   figNode(svg, 'users', 160, 46, 'Users', 'Listen and upload');
   figNode(svg, 'lb', 160, 156, 'Load balancer', 'Shares requests');
   figNode(svg, 'web', 160, 266, 'Web servers', 'Answer at once');
@@ -532,7 +532,7 @@ export default {
 
   // Lesson diagrams. `f` provides the engine's drawing helpers. Each figure sets its own viewBox.
   drawFigures(f) {
-    const { $, svgEl, figNode, figArrow, figDefs, figLabel, figDash } = f;
+    const { $, svgEl, figNode, figArrow, figSvg, figLabel, figDash } = f;
     /** A dashed frame with its label, for one panel of a before-and-after picture. */
     const panel = (svg, y, height, label) => {
       svgEl('rect', { x: 10, y, width: 620, height, rx: 12, class: 'tier-box' }, svg);
@@ -540,7 +540,7 @@ export default {
     };
 
     // The producer publishes (1) and answers the creator at once (2); a free consumer takes the job (3).
-    const f1 = $('figQueue'); f1.textContent = ''; f1.setAttribute('viewBox', '0 0 640 346'); figDefs(f1);
+    const f1 = figSvg($('figQueue'), 346);
     figNode(f1, 'users', 130, 46, 'Creator', 'Uploads an episode');
     figNode(f1, 'web', 130, 176, 'Web server', 'Producer');
     figNode(f1, 'queue', 435, 176, 'Message queue', 'Jobs in order');
@@ -553,7 +553,7 @@ export default {
     figArrow(f1, 470, 206, 530, 276, '', null, 0, 0);
 
     // Workers down: jobs pile up and monitoring alerts. Workers back: they work through the backlog, oldest first.
-    const f2 = $('figDown'); f2.textContent = ''; f2.setAttribute('viewBox', '0 0 640 428'); figDefs(f2);
+    const f2 = figSvg($('figDown'), 428);
     const panels = [
       { y: 10, label: 'Workers down: jobs wait', queueSub: 'Filling up', monitorSub: 'Alert: queue grows' },
       { y: 222, label: 'Workers back: oldest job first', queueSub: 'Emptying', monitorSub: 'Queue shrinking' },

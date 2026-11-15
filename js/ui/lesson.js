@@ -358,4 +358,16 @@ export function figDefs(svg) {
   const mk = svgEl('marker', { id: arrowId(svg), viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, defs);
   svgEl('path', { d: 'M0 0L10 5L0 10z', class: 'arrowhead' }, mk);
 }
-export const drawFigures = () => level.drawFigures({ $, svgEl, figNode, figArrow, figDefs, figLabel, figDash });
+/**
+ * Starts a lesson picture: empties `svg`, sets its viewBox to 640 wide and `height` tall, and adds the arrowhead.
+ * @param {SVGSVGElement} svg
+ * @param {number} height
+ * @returns {SVGSVGElement} the same svg
+ */
+export function figSvg(svg, height) {
+  svg.textContent = '';
+  svg.setAttribute('viewBox', `0 0 640 ${height}`);
+  figDefs(svg);
+  return svg;
+}
+export const drawFigures = () => level.drawFigures({ $, svgEl, figNode, figArrow, figDefs, figLabel, figDash, figSvg });

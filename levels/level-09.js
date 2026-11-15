@@ -309,8 +309,8 @@ const lesson = {
  * @param {SVGSVGElement} svg
  */
 function drawBuilt(f, svg) {
-  const { svgEl, figNode, figArrow, figDefs, figLabel } = f;
-  svg.textContent = ''; svg.setAttribute('viewBox', '0 0 640 460'); figDefs(svg);
+  const { svgEl, figNode, figArrow, figSvg, figLabel } = f;
+  figSvg(svg, 460);
   figNode(svg, 'users', 160, 46, 'Users', 'Listen and upload');
   figNode(svg, 'lb', 160, 156, 'Load balancer', 'Shares requests');
   figNode(svg, 'web', 160, 266, 'Web servers', 'Find the shard');
@@ -508,10 +508,10 @@ export default {
 
   // Lesson diagrams. `f` provides the engine's drawing helpers. Each figure sets its own viewBox.
   drawFigures(f) {
-    const { $, svgEl, figNode, figArrow, figDefs, figLabel } = f;
+    const { $, svgEl, figNode, figArrow, figSvg, figLabel } = f;
 
     // account_id % 4 sends each account to one of four shards; every shard has the same table, different rows.
-    const f1 = $('figShards'); f1.textContent = ''; f1.setAttribute('viewBox', '0 0 640 362'); figDefs(f1);
+    const f1 = figSvg($('figShards'), 362);
     figNode(f1, 'web', 110, 181, 'Web servers', 'account_id % 4');
     [0, 1, 2, 3].forEach((s) => {
       const y = 46 + s * 90;
@@ -521,7 +521,7 @@ export default {
 
     // How busy each shard is, from the Mission 2 traffic on three XL shards: the hot accounts' share lands on
     // shard 1 (before), then on three shards of their own (after). The dashed line is the busy limit.
-    const f2 = $('figHot'); f2.textContent = ''; f2.setAttribute('viewBox', '0 0 640 428'); figDefs(f2);
+    const f2 = figSvg($('figHot'), 428);
     const busy = (share) => (share * QPS) / XL.cap;
     const even = busy((1 - HOT) / 3);
     const bar = (name, u) => ({ name, u });

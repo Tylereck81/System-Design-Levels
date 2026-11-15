@@ -264,8 +264,8 @@ const lesson = {
  * @param {SVGSVGElement} svg
  */
 function drawBuilt(f, svg) {
-  const { svgEl, figNode, figArrow, figDefs, figLabel } = f;
-  svg.textContent = ''; svg.setAttribute('viewBox', '0 0 640 460'); figDefs(svg);
+  const { svgEl, figNode, figArrow, figSvg, figLabel } = f;
+  figSvg(svg, 460);
   figNode(svg, 'users', 320, 46, 'Users', 'Browser + app');
   figNode(svg, 'lb', 320, 156, 'Load balancers', 'Active + standby');
   figArrow(svg, 320, 76, 320, 126, 'requests', null, 332, 106);
@@ -293,8 +293,8 @@ function drawBuilt(f, svg) {
  * @param {SVGSVGElement} svg
  */
 function drawDay(f, svg) {
-  const { svgEl, figLabel } = f;
-  svg.textContent = ''; svg.setAttribute('viewBox', '0 0 640 250');
+  const { svgEl, figLabel, figSvg } = f;
+  figSvg(svg, 250);
   const top = autoAtPeak + 1, X = (h) => 56 + h * 23, Y = (n) => 220 - (n / top) * 190;
   for (let n = 1; n <= top; n++) {
     svgEl('line', { x1: X(0), y1: Y(n), x2: X(24), y2: Y(n), class: 'ch-grid' }, svg);
@@ -522,9 +522,9 @@ export default {
 
   // Lesson diagrams. `f` provides the engine's drawing helpers. Each figure sets its own viewBox.
   drawFigures(f) {
-    const { $, svgEl, figNode, figArrow, figDefs, figLabel } = f;
+    const { $, svgEl, figNode, figArrow, figSvg, figLabel } = f;
     // Stateful: Ana's cart is in server 1's memory; round robin sends her next request to server 2.
-    const f1 = $('figStateful'); f1.textContent = ''; f1.setAttribute('viewBox', '0 0 640 280'); figDefs(f1);
+    const f1 = figSvg($('figStateful'), 280);
     figNode(f1, 'users', 320, 40, 'Ana', 'Logged in');
     figNode(f1, 'lb', 320, 140, 'Load balancer', 'Each server in turn');
     figNode(f1, 'web', 150, 240, 'Server 1', 'Ana: 2 items');
@@ -534,7 +534,7 @@ export default {
     figArrow(f1, 370, 170, 450, 210, 'view cart: empty', '2', 470, 190);
 
     // Stateless: any server answers Ana and Ben, every server uses one session store, and server 2 can leave.
-    const f2 = $('figStateless'); f2.textContent = ''; f2.setAttribute('viewBox', '0 0 640 370'); figDefs(f2);
+    const f2 = figSvg($('figStateless'), 370);
     figNode(f2, 'users', 180, 40, 'Ana', 'Logged in');
     figNode(f2, 'users', 460, 40, 'Ben', 'Logged in');
     figNode(f2, 'lb', 320, 140, 'Load balancer', 'Any server');
