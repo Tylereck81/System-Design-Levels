@@ -4,6 +4,7 @@ import { $, html, setHtmlIfChanged } from '../dom.js';
 import { TARGET_MS, TARGET_SERVED, nameOf, trafficHidden, MISSIONS, S, ui, run, byId } from '../state.js';
 import { model } from '../engine/model.js';
 import { crashing, spikeHud } from '../engine/experiments.js';
+import { paintDay } from './day-panel.js';
 
 export function renderHUD() {
   const m = run.mdl || model();
@@ -17,6 +18,7 @@ export function renderHUD() {
     { l: 'Cost', v: '$' + fmt(m.cost), u: '/mo', t: M.budget ? 'budget $' + fmt(M.budget) : 'no budget', s: M.budget ? (m.cost <= M.budget ? 'pass' : 'fail') : '' },
     { l: 'SPOFs', v: String(m.spof), u: '', t: m.spof > 0 ? 'no redundancy' : (m.g.ready ? 'redundant' : '—'), s: '' },
   ];
+  paintDay(m);
   setHtmlIfChanged($('hud'), cells.map(c => html`<div class="metric ${c.s}"><p class="label">${c.l}</p><div class="mv">${c.v}<small>${c.u}</small></div><div class="mt" title="${c.t}">${c.t}</div></div>`));
 }
 
