@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures.js';
-import { registerCommonTests } from '../shared-checks.js';
+import { registerCommonTests, registerPageLessonTests } from '../shared-checks.js';
 import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, sampleRoutes, openMission, selectNode, setProps, calm, pressEnterOn } from '../helpers.js';
 
 // Level 6: Stateless web tier and autoscaling.
@@ -30,8 +30,16 @@ const autoscale = async (page, size) => { await setProps(page, 'w1', { scaling: 
 test.describe('Level 6 · playthrough', () => {
   test('all three missions can be completed', async ({ page }) => {
     const errors = trackErrors(page);
-    await freshPage(page, '#level-6/build');
+    await freshPage(page, '#level-6/lesson');
     await expect(page.locator('#lvlChip')).toHaveText('Level 6 / 21');
+    // Each mission opens from its card in the lesson, and a finished one leads back there.
+    const start = async (n) => {
+      await page.click('#doneBanner [data-act="debrief"]');
+      await expect(page.locator(`#lp-m${n - 2}`)).toBeFocused();
+      await page.getByRole('button', { name: `Start Mission ${n}` }).click();
+      await expect(page.locator('#view-build')).toBeVisible();
+    };
+    await page.getByRole('button', { name: 'Start Mission 1' }).click();
 
     // Mission 1: sticky sessions on the active load balancer, through the inspector.
     await selectNode(page, 'l1');
@@ -42,7 +50,7 @@ test.describe('Level 6 · playthrough', () => {
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
 
     // Mission 2: sticky sessions lose carts when a server leaves; a session store doesn't.
-    await page.click('#mission .complete button');
+    await start(2);
     await page.click('#playBtn');
     await page.click('#exp-update-web');
     await fastForward(page, 2);
@@ -58,7 +66,7 @@ test.describe('Level 6 · playthrough', () => {
     expect(await state(page, () => window.__sdl.S.done[1])).toBe(true);
 
     // Mission 3: estimate, autoscale both web servers as M groups (through the inspector), then run a day.
-    await page.click('#mission .complete button');
+    await start(3);
     await page.fill('#estIn', '5');
     await page.click('#estBtn');
     for (const id of ['w1', 'w2']) {
@@ -145,6 +153,7 @@ test.describe('Level 6 · numbers', () => {
 test.describe('Level 6 · teaching feedback', () => {
   test('round robin over servers that keep sessions: the log says why pages fail', async ({ page }) => {
     await freshPage(page, '#level-6/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     await page.click('#playBtn');
     await fastForward(page, 1);
     await expect(page.locator('#log')).toContainText('50% of pages reaching the web server fail');
@@ -250,6 +259,7 @@ test.describe('Level 6 · teaching feedback', () => {
 
   test('the inspector explains state, autoscaling and the store', async ({ page }) => {
     await freshPage(page, '#level-6/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     await selectNode(page, 'w1');
     await expect(page.locator('#insp')).toContainText('it is stateful');
     await page.click('#playBtn');
@@ -305,6 +315,7 @@ test.describe('Level 6 · teaching feedback', () => {
 test.describe('Level 6 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-6/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     await pressEnterOn(page, '.pal-item[data-type="session"]');
     const id = await state(page, () => window.__sdl.S.nodes.find((n) => n.type === 'session').id);
     await pressEnterOn(page, `[data-node="${id}"]`);
@@ -331,4 +342,25 @@ test.describe('Level 6 · layout and accessibility', () => {
       },
     },
   });
+});
+
+test.describe('Level 6 · saved data', () => {
+  test('a save from before the one-page lesson opens every mission it could already open', async ({ page }) => {
+    await freshPage(page, '#level-6/build');
+    await page.evaluate(() => {
+      const old = { ...JSON.parse(JSON.stringify(window.__sdl.S)), v: 1, mission: 1, done: [true, false, false], verified: [true, false, false] };
+      delete old.opened;
+      localStorage.setItem('sdl-level6-v1', JSON.stringify(old));
+    });
+    await reloadGame(page);
+    const s = await state(page, () => { const S = window.__sdl.S; return { done: S.done, mission: S.mission, v: S.v, opened: S.opened }; });
+    expect(s.done).toEqual([true, false, false]);
+    expect(s.mission).toBe(1);
+    expect(s.v).toBe(2);
+    expect(s.opened).toEqual([true, true, false]); // Mission 1, and Mission 2 because Mission 1 is done
+  });
+});
+
+test.describe('Level 6 · one-page lesson', () => {
+  registerPageLessonTests({ level: 6 });
 });
