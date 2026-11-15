@@ -329,8 +329,8 @@ const lesson = {
  * @param {SVGSVGElement} svg
  */
 function drawBuilt(f, svg) {
-  const { figNode, figArrow, figDefs, figLabel, figDash } = f;
-  svg.textContent = ''; svg.setAttribute('viewBox', '0 0 640 580'); figDefs(svg);
+  const { figNode, figArrow, figSvg, figLabel, figDash } = f;
+  figSvg(svg, 580);
   figNode(svg, 'users', 320, 50, 'Users', 'Browser + app');
   figNode(svg, 'lb', 150, 160, 'Load balancer', 'Active');
   figNode(svg, 'lb', 490, 160, 'Load balancer', 'Standby');
@@ -362,8 +362,8 @@ function drawBuilt(f, svg) {
  * @param {SVGSVGElement} svg
  */
 function drawOrder(f, svg) {
-  const { svgEl, figArrow, figDefs, figLabel } = f;
-  svg.textContent = ''; svg.setAttribute('viewBox', '0 0 640 396'); figDefs(svg);
+  const { svgEl, figArrow, figSvg, figLabel } = f;
+  figSvg(svg, 396);
   /** A numbered event on a lane, written just above it. */
   const step = (x, y, n, text) => {
     svgEl('circle', { cx: x, cy: y - 4, r: 9, class: 'd-step' }, svg);
@@ -563,7 +563,7 @@ export default {
 
   // Lesson diagrams. `f` provides the engine's drawing helpers. Each figure sets its own viewBox.
   drawFigures(f) {
-    const { $, svgEl, figNode, figArrow, figDefs, figLabel } = f;
+    const { $, svgEl, figNode, figArrow, figSvg, figLabel } = f;
     /** A dashed frame with its label, for one panel of a before-and-after picture. */
     const panel = (svg, y, height, label) => {
       svgEl('rect', { x: 10, y, width: 620, height, rx: 12, class: 'tier-box' }, svg);
@@ -571,7 +571,7 @@ export default {
     };
 
     // Hit: the cache answers. Miss: the web server asks the cache, reads the database, then stores the answer.
-    const f1 = $('figAside'); f1.textContent = ''; f1.setAttribute('viewBox', '0 0 640 396'); figDefs(f1);
+    const f1 = figSvg($('figAside'), 396);
     panel(f1, 10, 150, 'Hit: the cache has it');
     figNode(f1, 'web', 104, 96, 'Web server', 'Wants product 42');
     figNode(f1, 'cache', 536, 96, 'Cache', 'Has product 42');
@@ -586,7 +586,7 @@ export default {
     figArrow(f1, 198, 280, 442, 250, 'store it', '3', 330, 286);
 
     // Warm: nine reads in ten end at the cache. Just restarted: the cache is empty and the database takes all ten.
-    const f2 = $('figCold'); f2.textContent = ''; f2.setAttribute('viewBox', '0 0 640 436'); figDefs(f2);
+    const f2 = figSvg($('figCold'), 436);
     for (const { y, label, cacheSub, dbSub, toCache, toDb } of [
       { y: 10, label: 'Warm cache', cacheSub: 'Answers 9 in 10', dbSub: 'Sized for misses', toCache: '9 reads in 10', toDb: '1 read in 10' },
       { y: 226, label: 'Cache just restarted', cacheSub: 'Empty after restart', dbSub: 'Overloaded', toCache: '10 misses', toDb: '10 reads in 10' },

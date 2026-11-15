@@ -236,8 +236,8 @@ const lesson = {
  * @param {SVGSVGElement} svg
  */
 function drawBuilt(f, svg) {
-  const { figNode, figArrow, figDefs, figLabel, figDash } = f;
-  svg.textContent = ''; svg.setAttribute('viewBox', '0 0 640 350'); figDefs(svg);
+  const { figNode, figArrow, figSvg, figLabel, figDash } = f;
+  figSvg(svg, 350);
   figNode(svg, 'dns', 160, 46, 'GeoDNS', 'Nearest data center');
   figNode(svg, 'cdn', 480, 46, 'CDN', 'Files near shoppers');
   figNode(svg, 'users', 160, 166, 'Europe', `${europe} of shoppers`);
@@ -264,8 +264,8 @@ function drawBuilt(f, svg) {
  * @param {string} bostonGets the data center GeoDNS names to the shopper in Boston
  */
 function drawLookups(f, svg, dnsSub, bostonGets) {
-  const { figNode, figArrow, figDefs } = f;
-  svg.textContent = ''; svg.setAttribute('viewBox', '0 0 640 350'); figDefs(svg);
+  const { figNode, figArrow, figSvg } = f;
+  figSvg(svg, 350);
   figNode(svg, 'dns', 320, 46, 'GeoDNS', dnsSub);
   figNode(svg, 'users', 110, 166, 'Berlin', 'Shopper in Europe');
   figNode(svg, 'users', 530, 166, 'Boston', 'Shopper in America');

@@ -291,8 +291,8 @@ const lesson = {
  * @param {SVGSVGElement} svg
  */
 function drawBuilt(f, svg) {
-  const { svgEl, figNode, figArrow, figDefs, figLabel, figDash } = f;
-  svg.textContent = ''; svg.setAttribute('viewBox', '0 0 640 452'); figDefs(svg);
+  const { svgEl, figNode, figArrow, figSvg, figLabel, figDash } = f;
+  figSvg(svg, 452);
   figNode(svg, 'users', 110, 50, 'Users', 'In America');
   figNode(svg, 'users', 530, 50, 'Users', 'In Europe');
   figNode(svg, 'cdn', 320, 170, 'CDN', 'Edges near users');
@@ -318,8 +318,8 @@ function drawBuilt(f, svg) {
  * @param {SVGSVGElement} svg
  */
 function drawPull(f, svg) {
-  const { figNode, figArrow, figDefs } = f;
-  svg.textContent = ''; svg.setAttribute('viewBox', '0 0 640 380'); figDefs(svg);
+  const { figNode, figArrow, figSvg } = f;
+  figSvg(svg, 380);
   figNode(svg, 'users', 110, 50, 'Shopper A', 'First to ask');
   figNode(svg, 'users', 530, 50, 'Shopper B', 'Asks later');
   figNode(svg, 'cdn', 320, 190, 'CDN edge', 'Keeps a copy');
@@ -339,8 +339,8 @@ function drawPull(f, svg) {
  * @param {SVGSVGElement} svg
  */
 function drawCopies(f, svg) {
-  const { svgEl, figNode, figArrow, figDefs, figLabel } = f;
-  svg.textContent = ''; svg.setAttribute('viewBox', '0 0 640 420'); figDefs(svg);
+  const { svgEl, figNode, figArrow, figSvg, figLabel } = f;
+  figSvg(svg, 420);
   /** One panel: the origin, the edge and the browser in a row, with a line under them. */
   const panel = (y, label, subs, note) => {
     svgEl('rect', { x: 10, y, width: 620, height: 190, rx: 12, class: 'tier-box' }, svg);
@@ -529,9 +529,9 @@ export default {
 
   // Lesson diagrams. `f` provides the engine's drawing helpers. Each figure sets its own viewBox.
   drawFigures(f) {
-    const { $, figNode, figArrow, figDefs } = f;
+    const { $, figNode, figArrow, figSvg } = f;
     // Distance: the shopper in America is a short round trip from an edge and a long one from Frankfurt.
-    const f1 = $('figDistance'); f1.textContent = ''; f1.setAttribute('viewBox', '0 0 640 270'); figDefs(f1);
+    const f1 = figSvg($('figDistance'), 270);
     figNode(f1, 'users', 110, 70, 'Shopper', 'In America');
     figNode(f1, 'web', 530, 70, 'Your servers', 'In Frankfurt');
     figNode(f1, 'cdn', 110, 230, 'CDN edge', 'Near the shopper');

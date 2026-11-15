@@ -355,8 +355,8 @@ const lesson = {
  * @param {SVGSVGElement} svg
  */
 function drawBuilt(f, svg) {
-  const { figNode, figArrow, figDefs, figLabel } = f;
-  svg.textContent = ''; svg.setAttribute('viewBox', '0 0 640 440'); figDefs(svg);
+  const { figNode, figArrow, figSvg, figLabel } = f;
+  figSvg(svg, 440);
   figNode(svg, 'users', 150, 52, 'Users', 'Browser + app');
   figNode(svg, 'dns', 500, 52, 'DNS', 'Finds the address');
   figArrow(svg, 246, 52, 404, 52, 'lookup', null, 325, 44, 'middle');
@@ -538,7 +538,7 @@ export default {
 
   // Lesson diagrams. `f` provides the engine's drawing helpers. Each figure sets its own viewBox.
   drawFigures(f) {
-    const { $, svgEl, figNode, figArrow, figDefs, figLabel } = f;
+    const { $, svgEl, figNode, figArrow, figSvg, figLabel } = f;
     /** A component drawn as down (crashed or failed its health check). */
     const downNode = (svg, type, x, y, name, sub) => figNode(svgEl('g', { class: 'fig-down' }, svg), type, x, y, name, sub);
     /** A dashed frame with its label, for one panel of a before-and-after picture. */
@@ -548,7 +548,7 @@ export default {
     };
 
     // DNS gives out the load balancer's public IP; the web servers sit behind it on private IPs.
-    const f1 = $('figLb'); f1.textContent = ''; f1.setAttribute('viewBox', '0 0 640 400'); figDefs(f1);
+    const f1 = figSvg($('figLb'), 400);
     figNode(f1, 'users', 150, 52, 'Users', 'Browser + app');
     figNode(f1, 'dns', 500, 52, 'DNS', 'Third-party');
     figNode(f1, 'lb', 150, 180, 'Load balancer', `Public ${LB_PUBLIC_IP}`);
@@ -563,7 +563,7 @@ export default {
     figArrow(f1, 230, 210, 430, 300, 'forward', null, 360, 266);
 
     // Before: three servers each take a third. After: one fails its health check and the other two take half each.
-    const f2 = $('figCrash'); f2.textContent = ''; f2.setAttribute('viewBox', '0 0 640 428'); figDefs(f2);
+    const f2 = figSvg($('figCrash'), 428);
     panel(f2, 10, 196, 'Before: all three healthy');
     figNode(f2, 'lb', 320, 66, 'Load balancer', 'Health checks');
     for (const [i, x] of [110, 320, 530].entries()) {
@@ -579,7 +579,7 @@ export default {
     figArrow(f2, 320, 308, 530, 348, '', null, 0, 0);
 
     // Before: heartbeats pass between the pair and traffic goes to the active one. After: the standby has the address.
-    const f3 = $('figPair'); f3.textContent = ''; f3.setAttribute('viewBox', '0 0 640 436'); figDefs(f3);
+    const f3 = figSvg($('figPair'), 436);
     panel(f3, 10, 200, 'Before: heartbeats arrive');
     figNode(f3, 'users', 320, 66, 'Users', `To ${LB_PUBLIC_IP}`);
     figNode(f3, 'lb', 150, 166, 'Load balancer', 'Active');
