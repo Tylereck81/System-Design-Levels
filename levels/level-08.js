@@ -1,26 +1,30 @@
 // @ts-check
-/** @import { Level, Goal } from '../js/types.js' */
+/** @import { Level, Goal, Lesson } from '../js/types.js' */
 // Level 8: Message queue, workers and monitoring.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
 // The level zooms into one data center and shows only the parts it needs.
-import { fmt } from '../js/format.js';
+import { fmt, ms } from '../js/format.js';
+import { COMPONENTS, T } from '../js/engine/catalog.js';
 import { servedGoal, latGoal, costGoal, servedAtLeast } from './shared/goals.js';
 import { dns, lb, NO_DB_NOTE, db } from './shared/components.js';
 import { dnsLookup, usersToLb, lbToWeb, webToDb, lbBad } from './shared/connections.js';
 import { lbText, levelComplete } from './shared/text.js';
 import { failText, passText } from './shared/quiz.js';
 import { dayTraffic } from './shared/workload.js';
-import { lessonSteps } from './shared/lesson.js';
+import { STEPS } from './mock-steps.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
+/** Monthly budget of every mission, in dollars. */
 const BUDGET = 2300;
+/** The upload goal: creators hear back in under this many ms. */
 const UPLOAD_MS = 1000;
+const uploadLimit = `${UPLOAD_MS / 1000} second`; // the same goal in words
 
-const seconds = (ms) => (ms < 1000 ? fmt(ms) + ' ms' : ms < 60000 ? (ms / 1000).toFixed(1) + ' s' : (ms / 60000).toFixed(1) + ' min');
+const seconds = (t) => (t < 1000 ? fmt(t) + ' ms' : t < 60000 ? (t / 1000).toFixed(1) + ' s' : (t / 60000).toFixed(1) + ' min');
 const quick = (m) => m.uploadMs != null && m.uploadMs < UPLOAD_MS;
 const keepsUp = (m) => m.jobsIn > 0 && m.jobsOut >= m.jobsIn * 0.999;
 /** @type {Goal} */
-const uploadGoal = { id: 'upload', type: 'metric', text: 'Creators hear back in under 1 second', test: quick, val: (m) => (m.uploadMs == null ? '—' : seconds(m.uploadMs)) };
+const uploadGoal = { id: 'upload', type: 'metric', text: `Creators hear back in under ${uploadLimit}`, test: quick, val: (m) => (m.uploadMs == null ? '—' : seconds(m.uploadMs)) };
 /** @type {Goal} */
 const keepUpGoal = { id: 'keep-up', type: 'metric', text: 'Workers keep up with uploads', test: keepsUp, val: (m) => (m.jobsIn > 0 ? `${m.jobsOut.toFixed(2)} of ${m.jobsIn.toFixed(2)}/s` : '—') };
 /** @type {Goal} */
@@ -29,11 +33,293 @@ const served99 = servedAtLeast(targets.servedPct);
 const rate = (v) => v.toFixed(2);
 const jobs = (v) => (Math.round(v) === 1 ? '1 job' : `${fmt(v)} jobs`);
 
+// ---------------- Lesson ----------------
+const [scope, sketch, deep, stress] = STEPS.map((step) => `<b>${step.name}</b>`);
+const queue = COMPONENTS.queue;
+const monitor = COMPONENTS.monitor;
+const sizes = COMPONENTS.worker.sizes;
+const jobSecs = T.job / 1000; // seconds of one vCPU to process one upload
+const HOUR_S = 3600; // seconds in an hour
+// Sizing example (ours): 2 jobs a second, 6 seconds of one vCPU each: 12 vCPUs, so 3 workers with 4 vCPUs.
+const ex = { jobs: 2, secs: 6 };
+const exVcpu = ex.jobs * ex.secs;
+const exWorkers = Math.ceil(exVcpu / sizes.M.cpu);
+// Check yourself: 0.5 jobs a second at 30 seconds each is 15 vCPUs.
+const chk = { jobs: 0.5, secs: 30 };
+const chkVcpu = chk.jobs * chk.secs;
+// Backlog example (ours): 3 jobs/s arrive, the workers finish 2 jobs/s: 1 job/s more waits each second,
+// 3,600 after an hour, and a new job waits 3,600 ÷ 2 = 1,800 s = 30 minutes.
+const lag = { arrive: 3, finish: 2 };
+const lagGrow = lag.arrive - lag.finish;
+const lagHour = lagGrow * HOUR_S;
+const lagWaitS = lagHour / lag.finish;
+const lagWaitMin = lagWaitS / 60;
+
+/** @type {Lesson} */
+const lesson = {
+  intro: {
+    kicker: 'Level 8 · Part 1: Grow one app',
+    title: 'Message queue, workers and monitoring',
+    story: `Your platform now lets creators upload audio episodes. Processing one takes ${jobSecs} seconds of work, and your web servers do it while the creator waits. Uploads take minutes and every other page slows down. In this level the slow work moves out of the way.`,
+    picture: 'figBuilt',
+    alt: 'The finished design: web servers publish a job to a message queue and answer the creator at once. A group of workers takes jobs from the queue. Monitoring watches the queue.',
+    outcomes: [
+      'say which work should not happen while the user waits',
+      'explain what a queue, a producer and a consumer do',
+      'size workers from the job rate',
+      'explain what a growing queue means',
+      'name the metrics worth watching',
+    ],
+  },
+  last: 'Level 7 made the design survive the loss of a whole data center. Every request is still answered while the user waits, however long the work takes.',
+  parts: [
+    {
+      title: 'Slow uploads',
+      mission: 0,
+      minutes: 9,
+      lead: 'Some work is too slow to do while someone waits for an answer.',
+      newParts: [
+        { type: 'queue', before: 1, what: 'A buffer that holds messages until something is ready to handle them.', does: 'Web servers put a message in for each job. It keeps the jobs safe, in order, until a worker takes them.', game: `$${queue.cost} a month. Takes ${fmt(queue.cap)} messages/s.` },
+        { type: 'worker', before: 1, what: 'Servers that do slow jobs in the background.', does: 'Take one job at a time from the queue, do the work, and come back for the next.', game: `Four sizes, from ${sizes.S.cpu} to ${sizes.XL.cpu} vCPUs. One upload takes ${jobSecs} seconds of one vCPU.` },
+      ],
+      sections: [
+        {
+          title: 'Why does one slow job hurt everyone?',
+          hook: `A page takes a web server ${ms(T.web)} of work. An upload takes ${jobSecs} seconds: a thousand times more.`,
+          body: [
+            { p: 'While a web server processes an upload, that part of it is busy and cannot answer pages. A few uploads at once fill the server, and everyone waits in line behind them, as in Level 1.' },
+            { p: 'The creator does not need the processing to be finished. They need to know the upload <b>arrived</b>. So split the request in two: answer now, do the work later. Doing work later, outside the request, is called <b>asynchronous</b> processing.' },
+          ],
+          takeaway: 'Answer the user now, and do slow work later, outside the request.',
+          quiz: [],
+        },
+        {
+          title: 'What does a message queue do?',
+          hook: 'It sits between the servers that create jobs and the servers that do them.',
+          body: [
+            {
+              figure: 'figQueue',
+              alt: 'A web server, the producer, publishes a job to the queue and answers the creator at once. Workers, the consumers, take jobs from the queue when they are free.',
+              caption: 'The producer publishes and moves on. A consumer takes the job when it is free',
+            },
+            { ul: [
+              'A <b>producer</b> puts a <b>message</b> on the queue: "process episode 81". Here the web servers are the producers.',
+              'The <b>queue</b> keeps messages safe until they are handled. A <b>durable</b> queue writes them to disk, so a restart of the queue loses nothing.',
+              'A <b>consumer</b> takes a message and does the work. Here the workers are the consumers.',
+            ] },
+            { p: 'The web server only publishes a message, which takes milliseconds, so the creator hears back at once.' },
+          ],
+          takeaway: 'Producers put jobs on the queue, and consumers take them when they are free.',
+          quiz: [0, 1],
+        },
+        {
+          title: 'How many workers keep up?',
+          hook: `Workers must finish jobs as fast as they arrive. Count the work in vCPUs. Say ${ex.jobs} jobs arrive each second and one takes ${ex.secs} seconds of one vCPU.`,
+          body: [
+            {
+              calc: {
+                formula: 'vCPUs kept busy = jobs a second × seconds of one vCPU for each job.',
+                rows: [
+                  { label: 'Work arriving', work: `${ex.jobs} jobs/s × ${ex.secs} s each`, result: `${exVcpu} vCPUs` },
+                  { label: `Workers with ${sizes.M.cpu} vCPUs`, work: `${exVcpu} vCPUs ÷ ${sizes.M.cpu} vCPUs`, result: `${exWorkers} workers` },
+                ],
+                result: `${exVcpu} vCPUs are busy all the time, so ${exWorkers} workers of that size only just keep up. Add some room.`,
+              },
+            },
+            { p: 'With fewer, jobs arrive faster than they leave and the queue grows without end.' },
+          ],
+          takeaway: 'Jobs a second times seconds per job gives the vCPUs you need.',
+          quiz: [9],
+        },
+      ],
+      checks: [
+        {
+          q: `Jobs arrive at ${chk.jobs} a second. Each takes ${chk.secs} seconds of one vCPU. How many vCPUs keep up?`,
+          options: [
+            { t: `${chk.secs} vCPUs`, why: 'That is the time for one job. Multiply by how many jobs arrive each second.' },
+            { t: `${chkVcpu} vCPUs`, right: true, why: `${chk.jobs} × ${chk.secs} = ${chkVcpu}. Half a job a second, ${chk.secs} seconds of work each.` },
+            { t: `${chk.secs / chk.jobs} vCPUs`, why: 'Multiply the rate by the work. Do not divide.' },
+          ],
+        },
+      ],
+      youWill: [
+        'estimate the vCPUs the workers need (Play stays locked until you do)',
+        'add a message queue and workers, and connect web servers → queue → workers',
+        `get creators an answer in under ${uploadLimit}, with Response under ${ms(targets.latencyMs)} for everyone else`,
+        `stay within $${fmt(BUDGET)} a month`,
+      ],
+      debrief: {
+        saw: 'The web servers only published a message, so creators heard back at once and pages were fast again.',
+        number: [`${jobSecs} vCPUs`, 'busy for every upload a second'],
+        next: 'A bad deploy is about to crash every worker for half an hour.',
+      },
+    },
+    {
+      title: 'A bad deploy',
+      mission: 1,
+      minutes: 8,
+      lead: 'The web servers and the workers no longer talk to each other. They only talk to the queue.',
+      newParts: [
+        { type: 'monitor', before: 1, what: 'A service that collects numbers and logs from your servers.', does: 'Shows how the system is doing and alerts the engineer on call when a number goes wrong.', game: `$${monitor.cost} a month. Connect it to the queue.` },
+      ],
+      sections: [
+        {
+          title: 'What happens to jobs when the workers are down?',
+          hook: 'Nothing. They wait.',
+          body: [
+            {
+              figure: 'figDown',
+              alt: 'With the workers down, web servers keep publishing jobs and the queue fills up while monitoring raises an alert. When the workers return they work through the waiting jobs, oldest first.',
+              caption: 'The queue holds the jobs until the workers return',
+            },
+            { p: 'The web servers keep publishing and creators keep getting answers. When the workers return, they work through the backlog. Because the two sides only share the queue, each can fail, be updated or be resized without the other noticing. This is <b>decoupling</b>.' },
+            { p: 'A worker confirms each job when it is done. If it crashes halfway, the queue hands the job to another worker. So a job can run twice, and must be safe to repeat.' },
+          ],
+          takeaway: 'A queue lets producers and consumers fail and scale separately.',
+          quiz: [2, 5],
+        },
+        {
+          title: 'How do you find out that something is wrong?',
+          hook: 'With the workers down, nothing fails on screen. Episodes just stop appearing. Someone has to be told.',
+          body: [
+            { table: { head: ['Kind of metric', 'Example'], rows: [
+              ['<b>Host</b>: one server', 'CPU, memory and disk use of worker 3'],
+              ['<b>Tier</b>: a whole group', 'Jobs waiting in the queue; average database load'],
+              ['<b>Business</b>', 'Episodes uploaded per hour'],
+            ] } },
+            { p: 'A <b>metric</b> is a number measured over time. A <b>log</b> is the record of what each server did, collected in one place for searching. An <b>alert</b> tells a person when a metric crosses a line.' },
+            { p: 'Four numbers are worth watching on any service: response time, traffic, errors, and how full it is. And test every change automatically before it ships (<b>continuous integration</b>), so fewer bad deploys reach the servers.' },
+          ],
+          takeaway: 'Measure every tier, and alert a person when a number goes wrong.',
+          quiz: [6, 7, 8],
+        },
+      ],
+      checks: [
+        {
+          q: 'The workers crash for an hour. A creator uploads an episode during that hour. What happens?',
+          options: [
+            { t: 'The upload fails', why: 'The web server only needs the queue, and the queue is up.' },
+            { t: 'The upload is accepted and processed after the workers return', right: true, why: 'The job waits in the queue. The creator gets an answer at once; the episode appears later.' },
+            { t: 'The job is lost', why: 'The queue keeps every message until a worker confirms it is done.' },
+          ],
+        },
+      ],
+      youWill: [
+        'add monitoring and connect it to the queue',
+        'crash the workers with the Break it button: uploads must still be accepted',
+        'watch the queue grow, the alert fire, and the backlog clear when the workers return',
+      ],
+      debrief: {
+        saw: 'The web servers never noticed the crash. The queue kept every job, and an alert told you it was growing.',
+        number: ['0 jobs', 'lost while the workers were down'],
+        next: 'Every Monday morning creators upload three times as many episodes as usual.',
+      },
+    },
+    {
+      title: 'Monday rush',
+      mission: 2,
+      minutes: 6,
+      lead: 'Workers sized for a normal day fall behind on a busy one.',
+      sections: [
+        {
+          title: 'What does the length of the queue tell you?',
+          hook: `Jobs arrive at ${lag.arrive} a second. The workers finish ${lag.finish} a second.`,
+          body: [
+            {
+              calc: {
+                formula: 'Queue growth = jobs arriving − jobs finished. Wait = jobs waiting ÷ jobs finished a second.',
+                rows: [
+                  { label: 'Growth', work: `${lag.arrive} jobs/s − ${lag.finish} jobs/s`, result: `${lagGrow} job/s` },
+                  { label: 'After an hour', work: `${lagGrow} job/s × ${fmt(HOUR_S)} s`, result: `${fmt(lagHour)} jobs waiting` },
+                  { label: 'Wait for a new job', work: `${fmt(lagHour)} jobs ÷ ${lag.finish} jobs/s`, result: `${fmt(lagWaitS)} s = ${lagWaitMin} minutes` },
+                ],
+                result: `After one hour, a new upload waits ${lagWaitMin} minutes, and it gets worse every second.`,
+              },
+            },
+            { ul: [
+              '<b>Growing queue:</b> too few workers. Add some.',
+              '<b>Queue empty most of the day:</b> too many workers. Remove some and save money.',
+            ] },
+          ],
+          takeaway: 'A growing queue means too few workers, and an empty one means too many.',
+          quiz: [3, 4],
+        },
+        {
+          title: 'How to let the workers follow the queue',
+          hook: 'Workers hold nothing between jobs: they are stateless. So they can be autoscaled, like the web servers in Level 6.',
+          body: [
+            { p: 'Here the autoscaler watches the queue, not the traffic. When the queue grows it adds workers, and when the queue is empty it removes them. You pay for Monday only on Monday.' },
+            { assume: `In the game a group grows to at most ${T.maxCopies} workers, so the size you pick still matters.` },
+          ],
+          takeaway: 'Autoscale the workers on the length of the queue.',
+          quiz: [],
+        },
+      ],
+      checks: [
+        {
+          q: 'At night the queue is empty and eight workers sit idle. During the day the queue never grows. What do you change?',
+          options: [
+            { t: 'Nothing: an empty queue is the goal', why: 'An empty queue all day means you are paying for workers with nothing to do.' },
+            { t: 'Let the workers scale down when the queue is empty', right: true, why: 'Fewer workers at night, more when the queue grows. The queue length tells you both.' },
+          ],
+        },
+      ],
+      youWill: [
+        'set the workers to autoscale, and pick a size that can carry the rush',
+        'press Monday rush to triple the uploads and check that the workers keep up',
+        `stay within $${fmt(BUDGET)} a month`,
+      ],
+    },
+  ],
+  wrap: {
+    picture: 'figBuiltEnd',
+    alt: 'The design you built: web servers publish a job to a message queue and answer the creator at once. A group of workers takes jobs from the queue. Monitoring watches the queue.',
+    say: [
+      '"Slow work goes on a queue: the web server answers at once and workers do the job later."',
+      '"The queue decouples producers from consumers, so each can fail and scale on its own."',
+      '"I alert on queue length and autoscale the workers on it."',
+    ],
+    numbers: [
+      [`${jobSecs} seconds`, 'of one vCPU to process an upload, in the game'],
+      [fmt(HOUR_S), 'seconds in an hour, for turning a rate into a backlog'],
+    ],
+    loop: `The interview steps again: ${scope} (the vCPUs the workers need), ${sketch} (queue between web servers and workers), ${deep} (worker size and autoscaling), ${stress} (you crashed the workers and tripled the uploads).`,
+    broken: 'The database is the one part that still cannot be scaled out for writes, and writes keep growing. Level 9 splits it.',
+  },
+};
+
+/**
+ * The finished design, drawn for the intro and again for the wrap-up: requests reach the web servers, which publish
+ * each upload's job to the queue; a group of workers that grows and shrinks takes the jobs; monitoring watches the queue.
+ * @param {Record<string, Function>} f the drawing helpers `drawFigures` is given
+ * @param {SVGSVGElement} svg
+ */
+function drawBuilt(f, svg) {
+  const { svgEl, figNode, figArrow, figDefs, figLabel, figDash } = f;
+  svg.textContent = ''; svg.setAttribute('viewBox', '0 0 640 446'); figDefs(svg);
+  figNode(svg, 'users', 160, 46, 'Users', 'Listen and upload');
+  figNode(svg, 'lb', 160, 156, 'Load balancer', 'Shares requests');
+  figNode(svg, 'web', 160, 266, 'Web servers', 'Answer at once');
+  figNode(svg, 'db', 160, 396, 'Database', 'Episodes, accounts');
+  figNode(svg, 'monitor', 480, 156, 'Monitoring', 'Alerts on the queue');
+  figNode(svg, 'queue', 480, 266, 'Message queue', 'Jobs wait here');
+  svgEl('rect', { x: 370, y: 330, width: 220, height: 106, rx: 12, class: 'tier-box' }, svg);
+  figLabel(svg, 384, 350, 'Grows and shrinks', 'start', 'tier-label');
+  figNode(svg, 'worker', 480, 396, 'Workers', 'Process uploads');
+  figArrow(svg, 160, 76, 160, 126, 'requests', null, 172, 106);
+  figArrow(svg, 160, 186, 160, 236, '', null, 0, 0);
+  figArrow(svg, 160, 296, 160, 366, 'queries', null, 172, 336);
+  figArrow(svg, 254, 266, 386, 266, 'publish a job', null, 320, 258, 'middle');
+  figArrow(svg, 540, 296, 540, 366, 'take a job', null, 552, 322);
+  figDash(svg, 'M480 186 V236');
+  figLabel(svg, 492, 216, 'watches', 'start');
+}
+
 /** @type {Level} */
 export default {
   id: 8,
   saveKey: 'sdl-level8-v1',
-  saveVersion: 1,
+  saveVersion: 2, // 2: which missions were opened from the lesson (`opened`)
   targets,
   // The day's traffic curve, for the cost of autoscaled workers.
   workload: { day: dayTraffic() },
@@ -229,104 +515,63 @@ export default {
     passText: passText(8, 'Scale the data tier with sharding'),
     failText,
     questions: [
-      { q: 'What does a message queue do between web servers and workers?', o: ['Answers database queries faster', 'Holds jobs until a worker takes them', 'Spreads incoming requests over the web servers', 'Caches finished files near users'], a: 1, e: 'Producers publish messages to the queue, and consumers take them when they are ready. The queue buffers the work in between.', r: 'Message queue' },
-      { q: 'In this design, which are the producers?', o: ['The workers that process files', 'The web servers', 'The database behind the web servers', 'Monitoring'], a: 1, e: 'The web servers create the messages and publish them to the queue. The workers consume them.', r: 'Message queue' },
-      { q: 'The workers are down for an hour. What happens to new uploads?', o: ['They fail until the workers are back', 'The web servers process them instead', 'They wait safely in the queue', 'The queue deletes the oldest ones'], a: 2, e: 'The queue is durable: messages wait until a consumer takes them. Producers keep publishing while consumers are down.', r: 'Decoupling' },
-      { q: 'The queue keeps growing during the day. What should you do?', o: ['Add more workers', 'Add more web servers', 'Give the queue less memory', 'Turn off the monitoring alerts'], a: 0, e: 'A growing queue means jobs arrive faster than the workers take them. More workers raise the rate they are taken at.', r: 'Scaling workers' },
-      { q: 'The queue is empty most of the day. What can you do?', o: ['Remove the queue', 'Add web servers', 'Move jobs back to the web servers for speed', 'Remove some workers to save money'], a: 3, e: 'An empty queue means the workers have spare capacity. Fewer workers still keep up, and cost less.', r: 'Scaling workers' },
-      { q: 'Why can producers and consumers be scaled independently?', o: ['They share one server', 'They run the same code on one machine', 'The queue decouples them', 'The load balancer sizes both'], a: 2, e: 'Neither side calls the other directly. Each only talks to the queue, so you can add web servers or workers without changing the other.', r: 'Decoupling' },
-      { q: 'Which is a host-level metric?', o: ['Daily active users', 'CPU use of one server', 'Hit rate of the whole cache tier', 'Revenue per day'], a: 1, e: 'Host-level metrics describe one machine: CPU, memory, disk I/O. A whole tier\'s numbers are aggregated metrics; users and revenue are business metrics.', r: 'Logging, metrics, automation' },
-      { q: 'Which is a business metric?', o: ['Disk I/O on the database server', 'Average latency of the cache tier', 'Episodes uploaded per hour', 'Memory used by one worker'], a: 2, e: 'Business metrics describe what the product achieves, such as sign-ups, uploads or revenue. The others describe machines or tiers.', r: 'Logging, metrics, automation' },
-      { q: 'What is continuous integration?', o: ['Every check-in is built and tested automatically', 'Running every server at one hundred percent all day', 'A queue between two services', 'Deploying to every data center by hand'], a: 0, e: 'With continuous integration, each code check-in is verified by an automated build and tests, so problems are found early.', r: 'Logging, metrics, automation' },
-      { q: 'Uploads arrive at 3 a second, and each takes 10 seconds of one vCPU. How many vCPUs keep up?', o: ['3', '10', '300', '30'], a: 3, e: '3 jobs a second × 10 vCPU-seconds each = 30 vCPUs busy all the time. Fewer, and the queue grows.', r: 'Numbers to carry into the interview' },
+      { q: 'What does a message queue do between web servers and workers?', o: ['Answers database queries faster', 'Holds jobs until a worker takes them', 'Spreads incoming requests over the web servers', 'Caches finished files near users'], a: 1, e: 'Producers publish messages to the queue, and consumers take them when they are ready. The queue buffers the work in between.', r: 'What does a message queue do?' },
+      { q: 'In this design, which are the producers?', o: ['The workers that process files', 'The web servers', 'The database behind the web servers', 'Monitoring'], a: 1, e: 'The web servers create the messages and publish them to the queue. The workers consume them.', r: 'What does a message queue do?' },
+      { q: 'The workers are down for an hour. What happens to new uploads?', o: ['They fail until the workers are back', 'The web servers process them instead', 'They wait safely in the queue', 'The queue deletes the oldest ones'], a: 2, e: 'The queue is durable: messages wait until a consumer takes them. Producers keep publishing while consumers are down.', r: 'What happens to jobs when the workers are down?' },
+      { q: 'The queue keeps growing during the day. What should you do?', o: ['Add more workers', 'Add more web servers', 'Give the queue less memory', 'Turn off the monitoring alerts'], a: 0, e: 'A growing queue means jobs arrive faster than the workers take them. More workers raise the rate they are taken at.', r: 'What does the length of the queue tell you?' },
+      { q: 'The queue is empty most of the day. What can you do?', o: ['Remove the queue', 'Add web servers', 'Move jobs back to the web servers for speed', 'Remove some workers to save money'], a: 3, e: 'An empty queue means the workers have spare capacity. Fewer workers still keep up, and cost less.', r: 'What does the length of the queue tell you?' },
+      { q: 'Why can producers and consumers be scaled independently?', o: ['They share one server', 'They run the same code on one machine', 'The queue decouples them', 'The load balancer sizes both'], a: 2, e: 'Neither side calls the other directly. Each only talks to the queue, so you can add web servers or workers without changing the other.', r: 'What happens to jobs when the workers are down?' },
+      { q: 'Which is a host-level metric?', o: ['Daily active users', 'CPU use of one server', 'Hit rate of the whole cache tier', 'Revenue per day'], a: 1, e: 'Host-level metrics describe one machine: CPU, memory, disk I/O. A whole tier\'s numbers are aggregated metrics; users and revenue are business metrics.', r: 'How do you find out that something is wrong?' },
+      { q: 'Which is a business metric?', o: ['Disk I/O on the database server', 'Average latency of the cache tier', 'Episodes uploaded per hour', 'Memory used by one worker'], a: 2, e: 'Business metrics describe what the product achieves, such as sign-ups, uploads or revenue. The others describe machines or tiers.', r: 'How do you find out that something is wrong?' },
+      { q: 'What is continuous integration?', o: ['Every check-in is built and tested automatically', 'Running every server at one hundred percent all day', 'A queue between two services', 'Deploying to every data center by hand'], a: 0, e: 'With continuous integration, each code check-in is verified by an automated build and tests, so problems are found early.', r: 'How do you find out that something is wrong?' },
+      { q: 'Uploads arrive at 3 a second, and each takes 10 seconds of one vCPU. How many vCPUs keep up?', o: ['3', '10', '300', '30'], a: 3, e: '3 jobs a second × 10 vCPU-seconds each = 30 vCPUs busy all the time. Fewer, and the queue grows.', r: 'How many workers keep up?' },
     ],
   },
 
-  // Lesson tab content (HTML). The diagram below draws into figQueue.
-  lessonHtml: `
-    <p class="label">Level 8 · Message queue, workers and monitoring</p>
-    <h1>Message queue, workers and monitoring</h1>
-    <p class="lede">Creators upload podcast episodes, and each one needs 20 seconds of processing. In this level you take that slow work off the web servers with a message queue, run it on workers, crash the workers to see the queue protect the jobs, and add monitoring so someone knows when the queue grows.</p>
-    <div class="goals-box">
-      <div><b>You will learn</b>Producers, consumers and queues; why decoupling helps; logs, metrics and automation.</div>
-      <div><b>You will decide</b>How big the workers are, how many run, and what monitoring watches.</div>
-      <div><b>You will estimate</b>How much processing power the workers need.</div>
-    </div>
+  lesson,
 
-    <section>
-      <h2>Message queue</h2>
-      <p class="src">Asynchronous messaging</p>
-      <p>From this level on, the canvas zooms into one data center and shows only the parts each level needs.</p>
-      <p>A <b>message queue</b> is a durable buffer, usually held in memory, that lets services talk asynchronously. <b>Producers</b> (also called publishers) create messages and publish them to the queue. <b>Consumers</b> (subscribers) connect to the queue and do the work each message describes.</p>
-      <figure class="fig"><svg id="figQueue" viewBox="0 0 660 230" role="img" aria-label="Web servers publish a message for each upload to a message queue. Workers take messages from the queue and process the episodes. Monitoring watches the queue."></svg><figcaption>Web servers publish jobs; workers take them when they can</figcaption></figure>
-      <p>Here, processing an episode means trimming the silence, evening out the volume and cutting a 30-second preview. The web servers publish a job for each upload and answer the creator at once. Workers pick up the jobs and process the episodes in the background.</p>
-    </section>
-
-    <section>
-      <h2>Decoupling</h2>
-      <p class="src">Producers and consumers</p>
-      <ul>
-        <li><b>Failures stay apart.</b> A producer can publish while no consumer is available, and a consumer can read messages while the producer is down. Jobs wait in the queue.</li>
-        <li><b>Each side scales on its own.</b> When the queue grows, add workers to cut the waiting time. When it is empty most of the time, remove some.</li>
-      </ul>
-    </section>
-
-    <section>
-      <h2>Logging, metrics, automation</h2>
-      <p class="src">Operating a large site</p>
-      <p>On a small site these tools are good practice. Once the site serves a large business, they are essential.</p>
-      <ul>
-        <li><b>Logging.</b> Watch error logs to find problems. Read them on each server, or send them to a central service where they are easy to search.</li>
-        <li><b>Metrics.</b> They show the system's health and how the business is doing.</li>
-        <li><b>Automation.</b> With continuous integration, every code check-in is built and tested automatically, so problems show up early. Automating build, test and deployment also saves engineers a lot of time.</li>
-      </ul>
-      <div class="tbl-wrap"><table class="t">
-        <thead><tr><th>Metric level</th><th>Examples</th></tr></thead>
-        <tbody>
-          <tr><td>Host</td><td>CPU, memory and disk I/O of one server</td></tr>
-          <tr><td>Aggregated</td><td>Performance of a whole tier: the database tier, the cache tier</td></tr>
-          <tr><td>Business</td><td>Episodes uploaded per hour, sign-ups, refunds</td></tr>
-        </tbody>
-      </table></div>
-    </section>
-
-    <section>
-      <h2>How this level is simulated</h2>
-      <p class="src">Game assumptions</p>
-      <p>1 request in 1,000 is an upload. Processing an upload takes 20 seconds of one vCPU. A web server without a queue does it itself; a web server of a size does as many jobs as a worker of that size, and pages wait behind them. With a queue, the web server publishes a message in 2 ms and answers.</p>
-      <p>Workers take as many jobs a second as their vCPUs allow (vCPUs ÷ 20). Jobs they can't take yet wait in the queue, and are never lost. Autoscaled workers run enough servers for the jobs arriving at most 60% busy, plus enough to clear the backlog within a minute, up to 10. Monitoring connected to the queue alerts as soon as it grows.</p>
-      <p class="assume">Game assumptions: at peak 1,000 requests a second, of which 1 is an upload. The queue is a managed service: 10,000 messages a second, $50 a month, not a single point of failure. Monitoring costs $30 a month. Worker prices follow the server sizes. The canvas shows one data center and one load balancer to keep it readable.</p>
-    </section>
-
-    <section>
-      <h2>Numbers to carry into the interview</h2>
-      <p class="src">Throughput estimates</p>
-      <p><b>Workers needed</b> = jobs per second × CPU-seconds per job, in vCPUs. For example, 1 upload a second × 20 vCPU-seconds = 20 vCPUs.</p>
-      <p><b>Queue growth</b> = jobs in per second − jobs out per second. <b>Time to drain</b> a backlog = backlog ÷ (jobs out − jobs in).</p>
-    </section>
-
-    <section>
-      ${lessonSteps([
-        'Which work is slow? Does the user need the result right away?',
-        'Web servers publish to a queue; workers consume.',
-        'Worker capacity, scaling with the queue, what to monitor.',
-        'Crash the workers. Triple the jobs.',
-      ])}
-      <p>When you add a queue in an interview, say what goes on it, who consumes it, how you scale the consumers, and which alert tells you they are falling behind.</p>
-    </section>
-`,
-
-  // Lesson diagram. `f` provides the engine's drawing helpers.
+  // Lesson diagrams. `f` provides the engine's drawing helpers. Each figure sets its own viewBox.
   drawFigures(f) {
-    const { $, figNode, figArrow, figDefs, figLabel } = f;
-    const f1 = $('figQueue'); f1.textContent = ''; figDefs(f1);
-    figNode(f1, 'web', 110, 50, 'Web servers', 'Producers');
-    figNode(f1, 'queue', 330, 50, 'Message queue', 'Jobs wait here');
-    figNode(f1, 'worker', 550, 50, 'Workers', 'Consumers');
-    figNode(f1, 'monitor', 330, 190, 'Monitoring', 'Alerts if it grows');
-    figArrow(f1, 206, 50, 234, 50, '', null, 0, 0);
-    figArrow(f1, 426, 50, 454, 50, '', null, 0, 0);
-    figArrow(f1, 330, 158, 330, 82, 'watches', null, 342, 126, 'start');
-    for (const [x, t] of [[220, 'publish'], [440, 'take']]) figLabel(f1, x, 104, t);
+    const { $, svgEl, figNode, figArrow, figDefs, figLabel, figDash } = f;
+    /** A dashed frame with its label, for one panel of a before-and-after picture. */
+    const panel = (svg, y, height, label) => {
+      svgEl('rect', { x: 10, y, width: 620, height, rx: 12, class: 'tier-box' }, svg);
+      figLabel(svg, 24, y + 20, label, 'start', 'tier-label');
+    };
+
+    // The producer publishes (1) and answers the creator at once (2); a free consumer takes the job (3).
+    const f1 = $('figQueue'); f1.textContent = ''; f1.setAttribute('viewBox', '0 0 640 346'); figDefs(f1);
+    figNode(f1, 'users', 130, 46, 'Creator', 'Uploads an episode');
+    figNode(f1, 'web', 130, 176, 'Web server', 'Producer');
+    figNode(f1, 'queue', 435, 176, 'Message queue', 'Jobs in order');
+    figNode(f1, 'worker', 330, 306, 'Worker 1', 'Consumer');
+    figNode(f1, 'worker', 540, 306, 'Worker 2', 'Consumer');
+    figArrow(f1, 110, 76, 110, 146, 'upload', null, 98, 116, 'end');
+    figArrow(f1, 224, 168, 341, 168, 'publish', '1', 262, 158);
+    figArrow(f1, 150, 146, 150, 76, 'done, we got it', '2', 182, 116);
+    figArrow(f1, 400, 206, 340, 276, 'take', '3', 302, 246);
+    figArrow(f1, 470, 206, 530, 276, '', null, 0, 0);
+
+    // Workers down: jobs pile up and monitoring alerts. Workers back: they work through the backlog, oldest first.
+    const f2 = $('figDown'); f2.textContent = ''; f2.setAttribute('viewBox', '0 0 640 428'); figDefs(f2);
+    const panels = [
+      { y: 10, label: 'Workers down: jobs wait', queueSub: 'Filling up', monitorSub: 'Alert: queue grows' },
+      { y: 222, label: 'Workers back: oldest job first', queueSub: 'Emptying', monitorSub: 'Queue shrinking' },
+    ];
+    for (const { y, label, queueSub, monitorSub } of panels) {
+      panel(f2, y, 196, label);
+      figNode(f2, 'web', 160, y + 56, 'Web servers', 'Keep publishing');
+      figNode(f2, 'queue', 480, y + 56, 'Message queue', queueSub);
+      figNode(f2, 'monitor', 160, y + 156, 'Monitoring', monitorSub);
+      figArrow(f2, 254, y + 56, 386, y + 56, 'publish', null, 320, y + 48, 'middle');
+      figDash(f2, `M254 ${y + 146} L386 ${y + 76}`);
+      figLabel(f2, 326, y + 142, 'watches');
+    }
+    figNode(svgEl('g', { class: 'fig-down' }, f2), 'worker', 480, 166, 'Workers', 'Crashed');
+    figNode(f2, 'worker', 480, 378, 'Workers', 'Oldest job first');
+    figArrow(f2, 480, 308, 480, 348, 'take', null, 492, 332);
+
+    drawBuilt(f, $('figBuilt'));
+    drawBuilt(f, $('figBuiltEnd'));
   },
 };

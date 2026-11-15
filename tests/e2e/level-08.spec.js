@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures.js';
-import { registerCommonTests } from '../shared-checks.js';
+import { registerCommonTests, registerPageLessonTests } from '../shared-checks.js';
 import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, sampleRoutes, openMission, selectNode, setProps, calm, pressEnterOn } from '../helpers.js';
 
 // Level 8: Message queue, workers and monitoring.
@@ -24,8 +24,10 @@ const measure = (page) => page.evaluate(() => {
 test.describe('Level 8 · playthrough', () => {
   test('all three missions can be completed', async ({ page }) => {
     const errors = trackErrors(page);
-    await freshPage(page, '#level-8/build');
+    await freshPage(page, '#level-8/lesson');
     await expect(page.locator('#lvlChip')).toHaveText('Level 8 / 21');
+    // Each mission opens from its card in the lesson, and a finished one leads back there.
+    await page.getByRole('button', { name: 'Start Mission 1' }).click();
 
     // Mission 1: estimate, then a queue and 8 M workers (set through the inspector).
     await page.fill('#estIn', '20');
@@ -41,7 +43,10 @@ test.describe('Level 8 · playthrough', () => {
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
 
     // Mission 2: monitoring on the queue, then crash the workers.
-    await page.click('#mission .complete button');
+    await page.click('#doneBanner [data-act="debrief"]');
+    await expect(page.locator('#lp-m0')).toBeFocused();
+    await page.getByRole('button', { name: 'Start Mission 2' }).click();
+    await expect(page.locator('#view-build')).toBeVisible();
     await addMonitor(page, q);
     await expect(page.locator('.edge-label', { hasText: 'watches' })).not.toHaveCount(0);
     await page.click('#playBtn');
@@ -53,7 +58,10 @@ test.describe('Level 8 · playthrough', () => {
     expect(await state(page, () => window.__sdl.S.done[1])).toBe(true);
 
     // Mission 3: autoscaled L workers, then the Monday rush.
-    await page.click('#mission .complete button');
+    await page.click('#doneBanner [data-act="debrief"]');
+    await expect(page.locator('#lp-m1')).toBeFocused();
+    await page.getByRole('button', { name: 'Start Mission 3' }).click();
+    await expect(page.locator('#view-build')).toBeVisible();
     await selectNode(page, k);
     await page.locator('#insp').getByRole('button', { name: /^Autoscale/ }).click();
     await page.locator('#insp [data-focus-key="size-L"]').click();
@@ -241,6 +249,7 @@ test.describe('Level 8 · teaching feedback', () => {
 
   test('the vCPU estimate accepts "20" and gives specific hints', async ({ page }) => {
     await freshPage(page, '#level-8/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     for (const [v, hint] of [['0.05', 'Turn it around'], ['1', 'every 20 seconds'], ['1200', 'a minute of uploads']]) {
       await page.fill('#estIn', v);
       await page.click('#estBtn');
@@ -255,6 +264,7 @@ test.describe('Level 8 · teaching feedback', () => {
 test.describe('Level 8 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-8/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     await page.fill('#estIn', '20');
     await pressEnterOn(page, '#estBtn');
     await pressEnterOn(page, '.pal-item[data-type="queue"]');
@@ -295,4 +305,25 @@ test.describe('Level 8 · layout and accessibility', () => {
       },
     },
   });
+});
+
+test.describe('Level 8 · saved data', () => {
+  test('a save from before the one-page lesson opens every mission it could already open', async ({ page }) => {
+    await freshPage(page, '#level-8/build');
+    await page.evaluate(() => {
+      const old = { ...JSON.parse(JSON.stringify(window.__sdl.S)), v: 1, mission: 1, done: [true, false, false], verified: [true, false, false] };
+      delete old.opened;
+      localStorage.setItem('sdl-level8-v1', JSON.stringify(old));
+    });
+    await reloadGame(page);
+    const s = await state(page, () => { const S = window.__sdl.S; return { done: S.done, mission: S.mission, v: S.v, opened: S.opened }; });
+    expect(s.done).toEqual([true, false, false]);
+    expect(s.mission).toBe(1);
+    expect(s.v).toBe(2);
+    expect(s.opened).toEqual([true, true, false]); // Mission 1, and Mission 2 because Mission 1 is done
+  });
+});
+
+test.describe('Level 8 · one-page lesson', () => {
+  registerPageLessonTests({ level: 8 });
 });
