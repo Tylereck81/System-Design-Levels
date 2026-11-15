@@ -225,6 +225,44 @@ test.describe('Level 6 · teaching feedback', () => {
     expect(await state(page, () => window.__sdl.S.exp[window.__sdl.S.mission]['run-day'])).toBe(false);
   });
 
+  test('the day panel shows the hour, the traffic and the servers running, and stays after the day until closed', async ({ page }) => {
+    await freshPage(page, '#level-6/build');
+    await openMission(page, 2, { estimate: true });
+    await addStore(page);
+    await autoscale(page, 'M');
+    await expect(page.locator('#dayPanel')).toBeHidden();
+    // Pause and set the day's clock directly; each repaint records the hour it shows.
+    const at = (h) => page.evaluate((x) => { const s = window.__sdl; s.run.playing = false; s.run.on['run-day'].t = x; s.afterChange(); }, h);
+    const panel = (id) => page.locator(`#day${id}`);
+    await page.click('#exp-run-day');
+    await at(4.5); // 04:00: 15% of the 4,000 req/s peak = 600 req/s, one M server in each group
+    await expect(page.locator('#dayPanel')).toBeVisible();
+    await expect(panel('Clock')).toHaveText('04:00');
+    await expect(panel('Of')).toHaveText('hour 5 of 24');
+    await expect(panel('Qps')).toHaveText('600 req/s');
+    await expect(panel('Web')).toHaveText('1 + 1');
+    await expect(panel('Lost')).toHaveText('nobody');
+    await at(20.5); // 20:00, the peak: 4,000 req/s, five M servers in each group
+    await expect(panel('Clock')).toHaveText('20:00');
+    await expect(panel('Qps')).toHaveText('4,000 req/s');
+    await expect(panel('Web')).toHaveText('5 + 5');
+    await at(23.5);
+    // The day ends: the panel stays, with the day's range: 600 to 4,000 req/s, 2 to 10 web servers in all.
+    await page.evaluate(() => { const s = window.__sdl; s.run.on['run-day'].t = 24; s.step(0.02); s.afterChange(); });
+    await expect(panel('Clock')).toHaveText('24:00');
+    await expect(panel('Of')).toHaveText('the day is over');
+    await expect(panel('Qps')).toHaveText('600 to 4,000 req/s');
+    await expect(panel('Web')).toHaveText('2 to 10 in all');
+    await panel('Close').click();
+    await expect(page.locator('#dayPanel')).toBeHidden();
+    // A day stopped early leaves no panel.
+    await page.click('#exp-run-day');
+    await at(3.5);
+    await expect(page.locator('#dayPanel')).toBeVisible();
+    await page.click('#exp-run-day');
+    await expect(page.locator('#dayPanel')).toBeHidden();
+  });
+
   test('a fixed server cannot follow the day: the bill stays at the peak', async ({ page }) => {
     await freshPage(page, '#level-6/build');
     await openMission(page, 2, { estimate: true });
