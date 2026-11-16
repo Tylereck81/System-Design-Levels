@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures.js';
-import { registerCommonTests } from '../shared-checks.js';
+import { registerCommonTests, registerPageLessonTests } from '../shared-checks.js';
 import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, sampleRoutes, openMission, selectNode, setProps, calm, pressEnterOn } from '../helpers.js';
 
 // Level 11: Consistent hashing.
@@ -21,8 +21,10 @@ const A = Math.log(0.8) / Math.log(0.2);
 test.describe('Level 11 · playthrough', () => {
   test('all three missions can be completed', async ({ page }) => {
     const errors = trackErrors(page);
-    await freshPage(page, '#level-11/build');
+    await freshPage(page, '#level-11/lesson');
     await expect(page.locator('#lvlChip')).toHaveText('Level 11 / 21');
+    // Each mission opens from its card in the lesson, and a finished one leads back there.
+    await page.getByRole('button', { name: 'Start Mission 1' }).click();
 
     // Mission 1: estimate, then a hash ring (through the inspector), then server C fails.
     await page.fill('#estIn', '80');
@@ -40,7 +42,10 @@ test.describe('Level 11 · playthrough', () => {
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
 
     // Mission 2: 500 virtual nodes, then a server joins.
-    await page.click('#mission .complete button');
+    await page.click('#doneBanner [data-act="debrief"]');
+    await expect(page.locator('#lp-m0')).toBeFocused();
+    await page.getByRole('button', { name: 'Start Mission 2' }).click();
+    await expect(page.locator('#view-build')).toBeVisible();
     await selectNode(page, 'k');
     await page.locator('#insp [data-focus-key="hashing-v500"]').click();
     await page.click('#playBtn');
@@ -52,7 +57,10 @@ test.describe('Level 11 · playthrough', () => {
     expect(await state(page, () => window.__sdl.S.done[1])).toBe(true);
 
     // Mission 3: ten M servers instead of five L, then C fails during the sale.
-    await page.click('#mission .complete button');
+    await page.click('#doneBanner [data-act="debrief"]');
+    await expect(page.locator('#lp-m1')).toBeFocused();
+    await page.getByRole('button', { name: 'Start Mission 3' }).click();
+    await expect(page.locator('#view-build')).toBeVisible();
     await selectNode(page, 'k');
     await page.locator('#insp [data-focus-key="count-10"]').click();
     await page.locator('#insp [data-focus-key="size-M"]').click();
@@ -223,6 +231,7 @@ test.describe('Level 11 · teaching feedback', () => {
 
   test('request dots: hits end at the cache cluster, misses go on to the database', async ({ page }) => {
     await freshPage(page, '#level-11/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     const routes = (await sampleRoutes(page, 600)).map((x) => x.route);
     const viaCache = routes.filter((r) => r.includes('k'));
     expect(viaCache.length).toBeGreaterThan(400);
@@ -246,6 +255,7 @@ test.describe('Level 11 · teaching feedback', () => {
 
   test('the estimate accepts 80% and gives specific hints', async ({ page }) => {
     await freshPage(page, '#level-11/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     for (const [v, hint] of [['20', 'C\'s own keys'], ['25', 'Not a quarter'], ['0.8', 'Type it as a percentage']]) {
       await page.fill('#estIn', v);
       await page.click('#estBtn');
@@ -256,19 +266,45 @@ test.describe('Level 11 · teaching feedback', () => {
     expect(await state(page, () => window.__sdl.S.est)).toBe(true);
   });
 
-  test('the lesson rings are drawn from the game\'s hash', async ({ page }) => {
+  test('the lesson pictures: only C\'s keys move on a ring, and the shares come from the game\'s hash', async ({ page }) => {
     await freshPage(page, '#level-11/lesson');
-    await expect(page.locator('#figRing rect.ic-data')).toHaveCount(4);
-    await expect(page.locator('#figRing')).toContainText('user:17 → A');
-    await expect(page.locator('#figRing')).toContainText('user:3311 → C');
-    await expect(page.locator('#figAdd')).toContainText('user:3311 → E (was C)');
-    await expect(page.locator('#figAdd path.d-arc')).toHaveCount(1);
+    // Six keys on a ring of A to D; C's two keys, and only those, run on to D when C fails.
+    await expect(page.locator('#figRing')).toContainText('6 keys, each to the next server');
+    await expect(page.locator('#figRing')).toContainText('Only C\'s 2 keys move, to D');
+    await expect(page.locator('#figRing .fig-down')).toHaveCount(1);
+    await expect(page.locator('#figRing path.d-arc')).toHaveCount(2);
+    // Three servers' shares on the game's ring, rounded to whole percents: one point each, then 10 each.
+    await expect(page.locator('#figArcs')).toContainText('A 10%B 14%C 77%');
+    await expect(page.locator('#figArcs')).toContainText('A 34%B 39%C 27%');
+    await expect(page.locator('#figArcs > path')).toHaveCount(3 + 30);
   });
+});
+
+test.describe('Level 11 · saved data', () => {
+  test('a save from before the one-page lesson opens every mission it could already open', async ({ page }) => {
+    await freshPage(page, '#level-11/build');
+    await page.evaluate(() => {
+      const old = { ...JSON.parse(JSON.stringify(window.__sdl.S)), v: 1, mission: 1, done: [true, false, false], verified: [true, false, false] };
+      delete old.opened;
+      localStorage.setItem('sdl-level11-v1', JSON.stringify(old));
+    });
+    await reloadGame(page);
+    const s = await state(page, () => { const S = window.__sdl.S; return { done: S.done, mission: S.mission, v: S.v, opened: S.opened }; });
+    expect(s.done).toEqual([true, false, false]);
+    expect(s.mission).toBe(1);
+    expect(s.v).toBe(2);
+    expect(s.opened).toEqual([true, true, false]); // Mission 1, and Mission 2 because Mission 1 is done
+  });
+});
+
+test.describe('Level 11 · one-page lesson', () => {
+  registerPageLessonTests({ level: 11 });
 });
 
 test.describe('Level 11 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-11/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     await page.focus('#estIn');
     await page.keyboard.type('80');
     await page.keyboard.press('Enter');
