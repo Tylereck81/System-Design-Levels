@@ -21,6 +21,8 @@ test('the story: the store starts with three copies of everything', () => {
   assert.equal(store.n, '3');
   assert.match(level.lesson.intro.story, /keeps three copies of everything/);
   assert.match(level.components.users.desc, /concert tickets/);
+  // The pictures' "N = 3 copies" read the missions' fewest replicas; that is also the store the level starts with.
+  assert.equal(goal(seats, 'replicas').text, `Every key kept on at least ${store.n} replicas`);
 });
 
 test('the new part card: $150 a month for each copy', () => {
