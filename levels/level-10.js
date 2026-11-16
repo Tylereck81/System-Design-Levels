@@ -520,8 +520,8 @@ export default {
       expect: (m) => served99(m) && withinQuota(m),
       notMet: (m) => (m.keyQuota == null
         ? 'There is no rate limiter: the bots get everything through.'
-        : `In some 60 seconds a key gets ${fmt(60 * m.keyQuota)} requests through, not 60. Use a sliding window, which counts any 60 seconds rather than clock minutes.`),
-      observed: () => 'Observed: bursts at the window edge, and no key got more than 60 requests in any 60 seconds.',
+        : `In some 60 seconds a key gets ${fmt(PER_MINUTE * m.keyQuota)} requests through, not ${PER_MINUTE}. Use a sliding window, which counts any 60 seconds rather than clock minutes.`),
+      observed: () => `Observed: bursts at the window edge, and no key got more than ${PER_MINUTE} requests in any 60 seconds.`,
     },
   ],
 
@@ -532,7 +532,7 @@ export default {
     noBackend: 'The rate limiter has nowhere to send allowed requests, so every request fails. Connect it to the load balancer.',
     realBlocked: (fb) => `The rate limiter rejects ${Math.round(fb * 100)}% of real users' requests: a user typing a search sends 12 in 2 seconds, more than the bucket and refill allow. Make the bucket bigger.`,
     queueWait: (waitMs) => `Real users wait ${(waitMs / 1000).toFixed(1)} s on average in the leaking bucket's queue: it sends requests on at a fixed rate, so a typed search waits its turn.`,
-    overQuota: (q, shared) => `Each key gets ${fmt(60 * q)} requests a minute through, not 60.${shared ? '' : ' Each rate limiter keeps its own counts; connect them all to a counter store.'}`,
+    overQuota: (q, shared) => `Each key gets ${fmt(PER_MINUTE * q)} requests a minute through, not ${PER_MINUTE}.${shared ? '' : ' Each rate limiter keeps its own counts; connect them all to a counter store.'}`,
     levelComplete: levelComplete(10),
   },
 
