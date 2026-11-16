@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures.js';
-import { registerCommonTests } from '../shared-checks.js';
+import { registerCommonTests, registerPageLessonTests } from '../shared-checks.js';
 import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, openMission, selectNode, setProps, pressEnterOn } from '../helpers.js';
 
 // Level 13: Unique ID generator.
@@ -21,8 +21,10 @@ const breakIt = async (page, id) => { await page.click(`#exp-${id}`); await fast
 test.describe('Level 13 · playthrough', () => {
   test('all three missions can be completed', async ({ page }) => {
     const errors = trackErrors(page);
-    await freshPage(page, '#level-13/build');
+    await freshPage(page, '#level-13/lesson');
     await expect(page.locator('#lvlChip')).toHaveText('Level 13 / 21');
+    // Each mission opens from its card in the lesson, and a finished one leads back there.
+    await page.getByRole('button', { name: 'Start Mission 1' }).click();
 
     // Mission 1: estimate 4 servers, then multi-primary on 4 (through the inspector), then lose one.
     await page.fill('#estIn', '4');
@@ -40,7 +42,10 @@ test.describe('Level 13 · playthrough', () => {
     await pause(page);
 
     // Mission 2: timestamp-based generators take a new server without repeats.
-    await page.click('#mission .complete button');
+    await page.click('#doneBanner [data-act="debrief"]');
+    await expect(page.locator('#lp-m0')).toBeFocused();
+    await page.getByRole('button', { name: 'Start Mission 2' }).click();
+    await expect(page.locator('#view-build')).toBeVisible();
     await selectNode(page, 'i');
     await click(page, 'method-snow');
     await click(page, 'servers-2');
@@ -52,7 +57,10 @@ test.describe('Level 13 · playthrough', () => {
     await pause(page);
 
     // Mission 3: in time order, and a generator waits when its clock goes back.
-    await page.click('#mission .complete button');
+    await page.click('#doneBanner [data-act="debrief"]');
+    await expect(page.locator('#lp-m1')).toBeFocused();
+    await page.getByRole('button', { name: 'Start Mission 3' }).click();
+    await expect(page.locator('#view-build')).toBeVisible();
     await selectNode(page, 'i');
     await click(page, 'clock-wait');
     await expect(page.locator('[data-node="i"] .node-sub')).toHaveText('Timestamp-based · 2 servers · waits');
@@ -237,6 +245,7 @@ test.describe('Level 13 · teaching feedback', () => {
 
   test('the estimate accepts 4 and gives specific hints', async ({ page }) => {
     await freshPage(page, '#level-13/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     for (const [v, hint] of [['3', 'with one down only 10,000'], ['2', 'even with all running you need 3'], ['6', 'fewer are enough']]) {
       await page.fill('#estIn', v);
       await page.click('#estBtn');
@@ -247,17 +256,36 @@ test.describe('Level 13 · teaching feedback', () => {
     expect(await state(page, () => window.__sdl.S.est)).toBe(true);
   });
 
-  test('the lesson diagrams are drawn', async ({ page }) => {
+});
+
+test.describe('Level 13 · one-page lesson', () => {
+  registerPageLessonTests({ level: 13 });
+
+  test('the pictures: a third step server repeats 3 and 6; 64 bits in five fields; a generator waits after its clock goes back', async ({ page }) => {
     await freshPage(page, '#level-13/lesson');
+    // Two servers counting by 2 hand out 1, 3, 5, 7 and 2, 4, 6, 8; a third with step 3 starts at 3: 3, 6, 9.
     await expect(page.locator('#figStep')).toContainText('2, 4, 6, 8…');
-    await expect(page.locator('#figBits')).toContainText('timestamp');
-    await expect(page.locator('#figBits')).toContainText('12 bits');
+    await expect(page.locator('#figStep')).toContainText('3, 6, 9…');
+    await expect(page.locator('#figStep')).toContainText('3 and 6 were already handed out');
+    // The finished design: two generators, each with its own machine number.
+    await expect(page.locator('#figBuilt')).toContainText('Machine 1');
+    await expect(page.locator('#figBuilt')).toContainText('Machine 2');
+    await openMission(page, 1);
+    // 1 + 41 + 5 + 5 + 12 bits: 2⁴¹ ms ≈ 69.7 years, 2⁵ × 2⁵ = 1,024 generators, 2¹² = 4,096 IDs a millisecond.
+    await expect(page.locator('#figBits > rect')).toHaveCount(5);
+    for (const t of ['41 bits', '69 years', '1,024 generators', '4,096 IDs']) await expect(page.locator('#figBits')).toContainText(t);
+    await openMission(page, 2);
+    // IDs at 250 and 251 ms; the game's time sync sets the clock back 20 ms, to 231; the next ID waits until 252.
+    await expect(page.locator('#figClock')).toContainText('sets the clock back to 231');
+    await expect(page.locator('#figClock')).toContainText('wait: no IDs until the clock passes 251');
+    await expect(page.locator('#figClock')).toContainText('next ID at 252');
   });
 });
 
 test.describe('Level 13 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-13/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     await page.focus('#estIn');
     await page.keyboard.type('4');
     await page.keyboard.press('Enter');
