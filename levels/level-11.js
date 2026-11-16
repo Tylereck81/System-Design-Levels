@@ -515,7 +515,7 @@ export default {
     },
     {
       title: 'The sale doubles the reads', ref: 'k/n keys move', qps: SALE_QPS, writes: 0.05, budget: SALE_BUDGET,
-      story: `The sale doubles the traffic: ${fmt(SALE_QPS)} requests a second, of which 3,800 read a profile. If server C fails now, its fifth of the keys misses all at once: 3,800 × 98% hits × 1/5 ≈ 745 more reads a second, on top of the 270 the database already gets, and the four servers left hold only 32 GB of the 40, so they miss more too: over 1,000 reads a second. It takes 800. The budget allows no more cache memory than 5 L servers have: 40 GB.`,
+      story: 'The sale doubles the traffic: 4,000 requests a second, of which 3,800 read a profile. If server C fails now, its fifth of the keys misses all at once: 3,800 × 98% hits × 1/5 ≈ 745 more reads a second, on top of the 270 the database already gets, and the four servers left hold only 32 GB of the 40, so they miss more too: over 1,000 reads a second. It takes 800. The budget allows no more cache memory than 5 L servers have: 40 GB.',
       goals: [
         servedGoal(targets), latGoal(targets), spreadGoal, costGoal(SALE_BUDGET),
         { id: 'lose-c', type: 'exp', text: 'Break it: server C fails during the sale; at least 99% served' },
