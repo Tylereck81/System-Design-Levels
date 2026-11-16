@@ -1,6 +1,6 @@
 // Play, experiments and reset buttons.
 import { $ } from '../dom.js';
-import { MISSIONS, EXPERIMENTS, fresh, S, ui, run, replaceState, expPassed, missionOpen } from '../state.js';
+import { MISSIONS, EXPERIMENTS, TYPES, fresh, S, ui, run, replaceState, expPassed, missionOpen } from '../state.js';
 import { graph, model } from '../engine/model.js';
 import { paintLive } from '../view/canvas.js';
 import { stopRun } from '../view/loop.js';
@@ -49,6 +49,15 @@ function servedWithout(exp, id) {
   try { return model({ peak: true }).servedPct; }
   finally { if (was) run.on[exp.id] = was; else delete run.on[exp.id]; } // a throw must not leave the crash switched on
 }
+/**
+ * The log line naming what a crash chose from several components (`startExp`'s result), e.g. "Down: the L web
+ * server, the biggest loss of the 2." Null when the crash had only one to take down.
+ */
+function crashChoiceText({ node, of, tie }) {
+  if (of < 2) return null;
+  const what = `${node.size ? node.size + ' ' : ''}${TYPES[node.type].name.toLowerCase()}`;
+  return tie ? `Down: one ${what}. Losing any one of the ${of} hurts the same.` : `Down: the ${what}, the biggest loss of the ${of}.`;
+}
 // One toggle button per experiment, in the Break it group.
 for (const exp of EXPERIMENTS) {
   const btn = document.createElement('button');
@@ -56,14 +65,20 @@ for (const exp of EXPERIMENTS) {
   $('expGroup').appendChild(btn);
   btn.onclick = () => {
     if (!isOn(exp.id) && (!designReady() || (exp.kind === 'crash' && !crashCandidates(exp, graph()).length))) { log(exp.needsDesign, 'warn'); return; }
+    let chose = null;
     if (isOn(exp.id)) stopExp(exp);
     else {
       // One experiment at a time, so each one's effect is clear and only that one counts.
       for (const other of activeExps()) { stopExp(other); log(other.off, 'ok'); }
-      startExp(exp, graph(), servedWithout);
+      const started = startExp(exp, graph(), servedWithout);
+      chose = started && started.node ? crashChoiceText(started) : null;
     }
     run.hold = 0;
-    if (isOn(exp.id)) { log(typeof exp.on === 'function' ? exp.on(MISSIONS[S.mission].qps * exp.factor) : exp.on, exp.onTone); if (!run.playing) togglePlay(); }
+    if (isOn(exp.id)) {
+      log(typeof exp.on === 'function' ? exp.on(MISSIONS[S.mission].qps * exp.factor) : exp.on, exp.onTone);
+      if (chose) log(chose, exp.onTone);
+      if (!run.playing) togglePlay();
+    }
     else log(exp.off, 'ok');
     run.mdl = model(); paintControls(); paintGoals(); renderInspector(); paintLive(); renderHUD();
   };

@@ -223,6 +223,22 @@ test.describe('Level 2 · teaching feedback', () => {
     await page.click('#exp-crash-web');
     const down = await page.evaluate(() => { const m = window.__sdl.model(); return window.__sdl.S.nodes.filter((n) => m.node[n.id] && m.node[n.id].down).map((n) => n.size); });
     expect(down).toEqual(['L']);
+    // 463 req/s peak: without the L, 2 × 200 = 400 req/s is short; without an S, 200 + 800 = 1,000 carries it all.
+    await expect(page.locator('#log')).toContainText('Down: the L web server, the biggest loss of the 3.');
+    // The load balancer crash has only one to take down, so it names nothing.
+    await page.click('#exp-crash-lb');
+    await expect(page.locator('#exp-crash-lb')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#log > div').first()).not.toContainText('Down:'); // the newest line is the crash's own message
+  });
+
+  test('crashing one of several equal web servers says losing any one hurts the same', async ({ page }) => {
+    await freshPage(page, '#level-2/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
+    await build(page, { webs: ['M', 'M', 'M'] });
+    await page.click('#playBtn');
+    await page.click('#exp-crash-web');
+    // Any one down leaves 2 × 400 = 800 req/s for the 463 req/s peak: every choice serves the same.
+    await expect(page.locator('#log')).toContainText('Down: one M web server. Losing any one of the 3 hurts the same.');
   });
 
   test('a web server not connected to the database runs at half capacity', async ({ page }) => {

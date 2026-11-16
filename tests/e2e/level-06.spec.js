@@ -168,6 +168,18 @@ test.describe('Level 6 · teaching feedback', () => {
     expect(r.served).toBeLessThan(99);
   });
 
+  test('the update takes out the web server whose loss hurts most, wherever it sits', async ({ page }) => {
+    await freshPage(page, '#level-6/build');
+    await openMission(page, 1, { estimate: true });
+    await sticky(page);
+    await setProps(page, 'w1', { size: 'L' }); // w1 is the left one; w2 stays XL on the right
+    await page.click('#playBtn');
+    await page.click('#exp-update-web');
+    // 2,160 req/s at 10:00: without w2 the L's 800 req/s is left, without w1 the XL's 1,600 req/s, so w2 hurts more.
+    expect(await state(page, () => window.__sdl.run.on['update-web'].node)).toBe('w2');
+    await expect(page.locator('#log')).toContainText('Down: the XL web server, the biggest loss of the 2.');
+  });
+
   test('the update loses half the carts with sticky sessions, none with a session store', async ({ page }) => {
     await freshPage(page, '#level-6/build');
     await openMission(page, 1, { estimate: true });
@@ -188,7 +200,8 @@ test.describe('Level 6 · teaching feedback', () => {
     await calm(page);
     r = await measure(page);
     expect(r.lost).toBe(0);
-    expect(r.w1).toBe(0);
+    // Two equal XL servers: losing either hurts the same, and the one taken out carries nothing.
+    expect(await state(page, () => { const s = window.__sdl; return s.model().node[s.run.on['update-web'].node].util; })).toBe(0);
     expect(r.served).toBeCloseTo(100, 6);
   });
 
