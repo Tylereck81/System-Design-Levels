@@ -368,7 +368,6 @@ const politeGoal = { id: 'polite', type: 'metric', text: `At most ${POLITE} requ
 /** @type {Goal} */
 const storeGoal = { id: 'storage', type: 'metric', text: `Store at most ${STORE_TB} TB a month`, test: (m) => !!m.crawl && m.crawl.storageTB <= STORE_TB, val: (m) => (m.crawl ? `${fmt(m.crawl.storageTB)} TB` : '—') };
 const crawlOk = (m) => useful(m) >= targets.servedPct;
-const PER = THREADS * 1000 / PAGE_MS; // pages a second a downloader's threads allow
 
 /** @type {Level} */
 export default {
@@ -503,7 +502,7 @@ export default {
         crawlGoal, costGoal(BUDGET),
         { id: 'dns', type: 'exp', text: 'Break it: DNS slows down; still 99% of pages' },
       ],
-      hint: `One lookup at a time caps a machine at ${fmt(1000 / DNS_MS)} pages a second, and at ${fmt(1000 / SLOW_DNS_MS)} when DNS slows. Keep a DNS cache: only new hosts need a lookup. Then ${fmt(PER)} pages a second per machine: 5 machines cover ${fmt(RATE)} with room for the peaks.`,
+      hint: `One lookup at a time caps a machine at ${fmt(1000 / DNS_MS)} pages a second, and at ${fmt(1000 / SLOW_DNS_MS)} when DNS slows. Keep a DNS cache: only new hosts need a lookup. Then ${fmt(dl.cap)} pages a second per machine: 5 machines cover ${fmt(RATE)} with room for the peaks.`,
       takeaway: 'The DNS cache took lookups off the critical path, so the downloaders were limited by their threads, not by DNS. A cache is refreshed in the background, so a slow DNS provider barely matters.',
     },
     {
