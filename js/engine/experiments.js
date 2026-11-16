@@ -44,21 +44,18 @@ export const crashCandidates = (exp, g) => (exp.targets ? exp.targets(g) : [exp.
 /**
  * Start an experiment. A crash records the component it takes down, so it stays on that one component. With several
  * candidates it takes down the one whose loss hurts most: `served(id)` gives the % served with that one down.
- * Returns false when a crash has nothing to take down. Otherwise a crash returns what it chose: the component, how many
- * it chose from, and `tie` (true when losing any of them hurts the same).
+ * Returns false when a crash has nothing to take down. Otherwise a crash returns what it chose: the component, `of`
+ * (how many it compared, 1 when it compared none) and `tie` (true when losing any of them hurts the same).
  */
 export function startExp(exp, g, served) {
   if (exp.kind === 'crash') {
     const list = crashCandidates(exp, g);
     if (!list.length) return false;
-    let pick = list[0], tie = false;
-    if (list.length > 1 && served) {
-      const lost = list.map(n => served(exp, n.id)), worst = Math.min(...lost);
-      pick = list[lost.findIndex(s => s < worst + 1e-9)];
-      tie = lost.every(s => s < worst + 1e-9);
-    }
+    if (list.length === 1 || !served) { run.on[exp.id] = { node: list[0].id }; return { node: list[0], of: 1, tie: false }; }
+    const lost = list.map(n => served(exp, n.id)), worst = Math.min(...lost);
+    const pick = list[lost.findIndex(s => s < worst + 1e-9)];
     run.on[exp.id] = { node: pick.id };
-    return { node: pick, of: list.length, tie };
+    return { node: pick, of: list.length, tie: lost.every(s => s < worst + 1e-9) };
   }
   run.on[exp.id] = exp.kind === 'day' ? { t: 0 } : {};
   return true;

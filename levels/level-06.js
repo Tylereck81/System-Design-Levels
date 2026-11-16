@@ -462,7 +462,8 @@ export default {
   ],
 
   // Break-it experiments. A crash takes down the component `target` picks when it starts, or of its `targets` the one
-  // whose loss hurts most; `factor` sets the traffic while it runs. A day plays 24 hours in `secs` seconds. `expect` is the outcome that must hold.
+  // whose loss hurts most; `factor` sets the traffic while it runs. A day plays 24 hours in `secs` seconds. `expect`
+  // is the outcome that must hold.
   experiments: [
     {
       id: 'update-web', kind: 'crash', factor: day[10], hud: 'at 10:00', // the day curve's traffic at 10:00
