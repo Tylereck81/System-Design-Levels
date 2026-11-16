@@ -362,13 +362,15 @@ export function registerPageLessonTests({ level }) {
   });
 
   test('one-page lesson: a New part card shows the component\'s icon and name, and its three lines', async ({ page }) => {
-    // One card in the first part, as a level that introduces a component has.
-    const card = { type: 'dns', what: 'The internet address book.', does: 'Turns a name into an address.', game: 'Five dollars a month.' };
+    // One card in the first part, as a level that introduces a component has. It names one of the level's own
+    // components (the first it lets you place), because a card for any other component is not a valid lesson.
+    const { palette, components } = await loadLevel();
+    const card = { type: palette[0], what: 'The part this card introduces.', does: 'What it does for the design.', game: 'Five dollars a month.' };
     await serveLessonWith(page, `lesson.parts[0].newParts = [${JSON.stringify(card)}];`);
     await freshPage(page, routeHash(level, 'lesson'));
     const shown = page.locator('.lpart').first().locator('.newpart');
     await expect(shown).toHaveCount(1);
-    await expect(shown.locator('.newpart-name')).toHaveText('DNS');
+    await expect(shown.locator('.newpart-name')).toHaveText(components[card.type].name);
     await expect(shown.locator('svg.newpart-icon > g > *')).not.toHaveCount(0);
     await expect(shown.locator('dt')).toHaveText(['What it is', 'What it does', 'In the game']);
     await expect(shown.locator('dd')).toHaveText([card.what, card.does, card.game]);

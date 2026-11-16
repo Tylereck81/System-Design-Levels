@@ -38,7 +38,8 @@ test.describe('Home page', () => {
     await expect(level(page, 12).locator('.home-state')).toHaveText('○Not started · 27 min'); // 10 + 9 + 8: its three parts
     await expect(level(page, 13).locator('.home-state')).toHaveText('○Not started · 23 min'); // 9 + 8 + 6: its three parts
     await expect(level(page, 14).locator('.home-state')).toHaveText('○Not started · 24 min'); // 10 + 6 + 8: its three parts
-    await expect(level(page, 15).locator('.home-state')).toHaveText('○Not started'); // no minutes until its lesson is on one page
+    await expect(level(page, 15).locator('.home-state')).toHaveText('○Not started · 24 min'); // 10 + 7 + 7: its three parts
+    await expect(level(page, 16).locator('.home-state')).toHaveText('○Not started'); // no minutes until its lesson is on one page
     await expect(page.locator('#homeContinue')).toHaveText('Start: Level 1 · One server to two tiers →');
     // The level's own page is hidden, and so are its tabs; the header shows only the product name.
     await expect(page.locator('#view-lesson')).toBeHidden();

@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures.js';
-import { registerCommonTests } from '../shared-checks.js';
+import { registerCommonTests, registerPageLessonTests } from '../shared-checks.js';
 import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, openMission, selectNode, setProps, pressEnterOn } from '../helpers.js';
 
 // Level 15: Web crawler.
@@ -18,8 +18,10 @@ const breakIt = async (page, id) => { await page.click(`#exp-${id}`); await fast
 test.describe('Level 15 · playthrough', () => {
   test('all three missions can be completed', async ({ page }) => {
     const errors = trackErrors(page);
-    await freshPage(page, '#level-15/build');
+    await freshPage(page, '#level-15/lesson');
     await expect(page.locator('#lvlChip')).toHaveText('Level 15 / 21');
+    // Each mission opens from its card in the lesson, and a finished one leads back there.
+    await page.getByRole('button', { name: 'Start Mission 1' }).click();
 
     // Mission 1: estimate 600 TB, then 5 machines with a DNS cache, then DNS slows down.
     await page.fill('#estIn', '600');
@@ -37,7 +39,10 @@ test.describe('Level 15 · playthrough', () => {
     await pause(page);
 
     // Mission 2: a queue per host; a site floods the frontier.
-    await page.click('#mission .complete button');
+    await page.click('#doneBanner [data-act="debrief"]');
+    await expect(page.locator('#lp-m0')).toBeFocused();
+    await page.getByRole('button', { name: 'Start Mission 2' }).click();
+    await expect(page.locator('#view-build')).toBeVisible();
     await selectNode(page, 'u');
     await click(page, 'queues-host');
     await page.click('#playBtn');
@@ -48,7 +53,10 @@ test.describe('Level 15 · playthrough', () => {
     await pause(page);
 
     // Mission 3: the duplicate check and the URL filter; the crawler finds a trap.
-    await page.click('#mission .complete button');
+    await page.click('#doneBanner [data-act="debrief"]');
+    await expect(page.locator('#lp-m1')).toBeFocused();
+    await page.getByRole('button', { name: 'Start Mission 3' }).click();
+    await expect(page.locator('#view-build')).toBeVisible();
     await selectNode(page, 'p');
     await click(page, 'dedup-on');
     await click(page, 'filter-on');
@@ -196,6 +204,7 @@ test.describe('Level 15 · teaching feedback', () => {
 
   test('the estimate accepts 600 and gives specific hints', async ({ page }) => {
     await freshPage(page, '#level-15/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     for (const [v, hint] of [['60', 'powers of ten'], ['36000', 'That is 5 years of it']]) {
       await page.fill('#estIn', v);
       await page.click('#estBtn');
@@ -206,16 +215,27 @@ test.describe('Level 15 · teaching feedback', () => {
     expect(await state(page, () => window.__sdl.S.est)).toBe(true);
   });
 
-  test('the lesson diagram is drawn', async ({ page }) => {
+});
+
+test.describe('Level 15 · one-page lesson', () => {
+  registerPageLessonTests({ level: 15 });
+
+  test('the pictures: the finished design; the crawl loop in six steps; one shared queue against a queue per site', async ({ page }) => {
     await freshPage(page, '#level-15/lesson');
-    await expect(page.locator('#figCrawl')).toContainText('URL frontier');
-    await expect(page.locator('#figCrawl')).toContainText('new URLs');
+    // The finished design: a queue per site, a DNS cache, and new links checked on their way back.
+    for (const t of ['Queue per site', 'With a DNS cache', 'URL filter, URL seen?']) await expect(page.locator('#figBuilt')).toContainText(t);
+    for (const t of ['next URL', 'Content seen?', 'Filter, URL seen?', 'new URLs']) await expect(page.locator('#figLoop')).toContainText(t);
+    await expect(page.locator('#figLoop .d-step-t')).toHaveText(['1', '2', '3', '4', '5', '6']);
+    await openMission(page, 1);
+    // Each site's queue is read by one thread, 1 request a second.
+    for (const t of ['four threads at once', 'Queue router', 'one thread, 1 a second']) await expect(page.locator('#figHosts')).toContainText(t);
   });
 });
 
 test.describe('Level 15 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-15/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     await page.focus('#estIn');
     await page.keyboard.type('600');
     await page.keyboard.press('Enter');
