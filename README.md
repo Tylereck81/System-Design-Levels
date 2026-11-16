@@ -111,6 +111,10 @@ npm test
 | `css/styles.css` | All styles: design tokens, light and dark themes, layout |
 | `tests/` | `unit/` and `integration/` run in Node, `e2e/` and `snapshot/` in the browser (Playwright); all run on GitHub on every push |
 
+## License
+
+[MIT](LICENSE)
+
 ---
 
 Made by [Tyler Eck](https://github.com/Tylereck81).

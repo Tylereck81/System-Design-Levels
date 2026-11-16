@@ -3,6 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "description": "A drag-and-drop game for learning system design interviews, where you build architectures and watch simulated traffic.",
+  "license": "MIT",
+  "author": "Tyler Eck (https://github.com/Tylereck81)",
+  "homepage": "https://tylereck81.github.io/System-Design-Levels/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Tylereck81/System-Design-Levels.git"
+  },
   "type": "module",
   "engines": {
     "node": ">=24"
