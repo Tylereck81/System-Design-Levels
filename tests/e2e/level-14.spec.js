@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures.js';
-import { registerCommonTests } from '../shared-checks.js';
+import { registerCommonTests, registerPageLessonTests } from '../shared-checks.js';
 import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, openMission, selectNode, setProps, pressEnterOn } from '../helpers.js';
 
 // Level 14: URL shortener.
@@ -28,8 +28,10 @@ const breakIt = async (page, id) => { await page.click(`#exp-${id}`); await fast
 test.describe('Level 14 · playthrough', () => {
   test('all three missions can be completed', async ({ page }) => {
     const errors = trackErrors(page);
-    await freshPage(page, '#level-14/build');
+    await freshPage(page, '#level-14/lesson');
     await expect(page.locator('#lvlChip')).toHaveText('Level 14 / 21');
+    // Each mission opens from its card in the lesson, and a finished one leads back there.
+    await page.getByRole('button', { name: 'Start Mission 1' }).click();
 
     // Mission 1: estimate 7 characters, add a cache, then a viral link.
     await page.fill('#estIn', '7');
@@ -43,7 +45,10 @@ test.describe('Level 14 · playthrough', () => {
     await pause(page);
 
     // Mission 2: 302 redirects count every click; a per-account limit stops the bulk script.
-    await page.click('#mission .complete button');
+    await page.click('#doneBanner [data-act="debrief"]');
+    await expect(page.locator('#lp-m0')).toBeFocused();
+    await page.getByRole('button', { name: 'Start Mission 2' }).click();
+    await expect(page.locator('#view-build')).toBeVisible();
     await selectNode(page, 'w');
     await click(page, 'redirect-302');
     await click(page, 'limit-account');
@@ -56,7 +61,10 @@ test.describe('Level 14 · playthrough', () => {
     await pause(page);
 
     // Mission 3: hashed codes checked against a bloom filter, and an XL database.
-    await page.click('#mission .complete button');
+    await page.click('#doneBanner [data-act="debrief"]');
+    await expect(page.locator('#lp-m1')).toBeFocused();
+    await page.getByRole('button', { name: 'Start Mission 3' }).click();
+    await expect(page.locator('#view-build')).toBeVisible();
     await selectNode(page, 'w');
     await click(page, 'code-bloom');
     await expect(page.locator('[data-node="w"] .node-sub')).toContainText('hash + bloom');
@@ -195,6 +203,7 @@ test.describe('Level 14 · teaching feedback', () => {
 
   test('the estimate accepts 7 and gives specific hints', async ({ page }) => {
     await freshPage(page, '#level-14/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     for (const [v, hint] of [['6', 'fewer than 219 billion'], ['5', 'under a billion'], ['8', 'shorter is the point']]) {
       await page.fill('#estIn', v);
       await page.click('#estBtn');
@@ -205,15 +214,31 @@ test.describe('Level 14 · teaching feedback', () => {
     expect(await state(page, () => window.__sdl.S.est)).toBe(true);
   });
 
-  test('the lesson diagram is drawn', async ({ page }) => {
+});
+
+test.describe('Level 14 · one-page lesson', () => {
+  registerPageLessonTests({ level: 14 });
+
+  test('the pictures: the finished design; 302 asks every time, 301 is remembered; base 62 is guessable, a hash is checked', async ({ page }) => {
     await freshPage(page, '#level-14/lesson');
-    await expect(page.locator('#figRedirect')).toContainText('302, Location');
+    // The finished design: hashed codes checked by a Bloom filter, a cache in front of the database.
+    await expect(page.locator('#figBuilt')).toContainText('302 · hash + bloom');
+    await expect(page.locator('#figBuilt')).toContainText('Code → long link');
+    await openMission(page, 1);
+    // 12345 = 3 × 62² + 13 × 62 + 7: "3d7".
+    await expect(page.locator('#figRedirect')).toContainText('GET /3d7');
+    await expect(page.locator('#figRedirect')).toContainText('302, Location: long page');
+    await expect(page.locator('#figRedirect')).toContainText('Not asked');
+    await openMission(page, 2);
+    // The next ID, 12346, is "3d8"; a hash keeps 7 characters.
+    for (const t of ['12,345 → 3d7', '12,346 → 3d8', 'keep 7 characters', 'maybe taken']) await expect(page.locator('#figCodes')).toContainText(t);
   });
 });
 
 test.describe('Level 14 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-14/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     await page.focus('#estIn');
     await page.keyboard.type('7');
     await page.keyboard.press('Enter');

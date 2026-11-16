@@ -29,7 +29,8 @@ export function mockOf(src, id) {
   const mission = { ...first, title: src.mock.title, ref: 'Mock interview', story: src.mock.brief, goals: [], hint: '', takeaway: '' };
   delete mission.gate;
   delete mission.budget;
-  return {
+  /** @type {Level} */
+  const mock = {
     ...src,
     id: 'mock',
     interview: { problem: id, title: src.mock.title, brief: src.mock.brief, checklist: src.mock.checklist },
@@ -56,6 +57,9 @@ export function mockOf(src, id) {
     </section>`,
     drawFigures() {},
   };
+  // The mock interview's page is its own brief above, never the level's one-page lesson.
+  delete mock.lesson;
+  return mock;
 }
 
 const id = chosenProblem();

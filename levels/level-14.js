@@ -1,22 +1,355 @@
 // @ts-check
-/** @import { Level, Goal } from '../js/types.js' */
+/** @import { Level, Goal, Lesson } from '../js/types.js' */
 // Level 14: URL shortener.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
-import { fmt } from '../js/format.js';
+import { fmt, count, ms } from '../js/format.js';
 import { servedGoal, latGoal, costGoal, servedAtLeast, fmtPct } from './shared/goals.js';
 import { dns, lb, NO_DB_NOTE, autoscaleSubOf, scalingChoices, db, cache } from './shared/components.js';
 import { dnsLookup, usersToLb, lbToWeb, webToDb, lbBad, replicaBad, cacheBad } from './shared/connections.js';
 import { lbText, levelComplete } from './shared/text.js';
 import { failText, passText } from './shared/quiz.js';
 import { dayTraffic } from './shared/workload.js';
-import { lessonSteps } from './shared/lesson.js';
+import { STEPS } from './mock-steps.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 const BUDGET = 1300;
-const WRITES = 1 / 11; // 10 clicks for every new link
+const CLICKS_PER_LINK = 10;
+const WRITES = 1 / (CLICKS_PER_LINK + 1); // 10 clicks for every new link: 1 request in 11 is a new link
 const REPEAT = 0.5; // clicks from a browser that has followed the link before
 const VIRAL = 1500; // extra clicks a second on one link
 const BULK = 3000; // new links a second from one account
+/** The characters a code is written in: 0-9 for 0 to 9, a-z for 10 to 35, A-Z for 36 to 61. */
+const DIGITS = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const BASE = DIGITS.length; // 62
+/** How many characters of a hash a code keeps. */
+const HASH_CHARS = 7;
+
+// ---------------- Lesson ----------------
+const [scope, sketch, deep, stress] = STEPS.map((step) => `<b>${step.name}</b>`);
+/** A large count to three significant figures, with the word: 916,132,832 → "916 million". */
+const about = (n) => count(Number(n.toPrecision(3)));
+/** The smallest number of base 62 characters that gives at least `links` codes. */
+const charsFor = (links) => Math.ceil(Math.log(links) / Math.log(BASE) - 1e-9);
+/**
+ * Writing `n` in base 62 by dividing by 62 again and again: one step per division, first division first. The
+ * remainders, read from last to first, are the code.
+ * @param {number} n
+ * @returns {{ n: number, q: number, r: number }[]}
+ */
+function base62Steps(n) {
+  const steps = [];
+  do { steps.push({ n, q: Math.floor(n / BASE), r: n % BASE }); n = Math.floor(n / BASE); } while (n > 0);
+  return steps;
+}
+const toBase62 = (n) => base62Steps(n).map((s) => DIGITS[s.r]).reverse().join('');
+
+// Scope example (ours): 25 million new links a day, kept 5 years: 25 million × 365 × 5 = 45,625,000,000 links. 62⁵ is
+// 916,132,832, too few; 62⁶ is 56,800,235,584, enough: 6 characters. The mission uses 60 million for 10 years.
+const sc = { perDay: 25e6, years: 5 };
+sc.total = sc.perDay * 365 * sc.years;
+sc.chars = charsFor(sc.total);
+sc.writes = Math.round(sc.perDay / 86400); // 289
+sc.reads = sc.writes * CLICKS_PER_LINK; // 2,890
+// Check yourself: 2 billion links also need 6 characters (the mission asks for 219 billion: 7).
+const checkLinks = 2e9;
+// Base 62 example: 12345 = 3 × 62² + 13 × 62 + 7 → "3d7"; the next ID, 12346, is "3d8". The quiz uses 20000.
+const b62 = { n: 12345 };
+b62.steps = base62Steps(b62.n);
+b62.code = toBase62(b62.n);
+b62.next = toBase62(b62.n + 1);
+/** One division of the base 62 example as a worked-example row. */
+const b62Row = (label, { n, q, r }, i) => ({ label, work: i ? `what is left, ${n} ÷ ${BASE}` : `ID ${fmt(n)} ÷ ${BASE}`, result: `${q}, remainder ${r} → ${DIGITS[r]}` });
+
+/** @type {Lesson} */
+const lesson = {
+  intro: {
+    kicker: 'Level 14 · Part 3: Design real systems',
+    title: 'URL shortener',
+    story: 'Marketing teams want short links: paste a long address, get back a few characters, and every click on them lands on the long page. From here on, each level is one interview question, designed from a blank canvas.',
+    picture: 'figBuilt',
+    alt: 'The finished design: users reach the link service through a load balancer. The link service looks codes up in a cache, reads the database on a miss, and checks new codes against a Bloom filter.',
+    outcomes: [
+      'scope a link service with one estimate',
+      'work out how many characters a code needs',
+      'choose between a 301 and a 302 redirect',
+      `turn a number into a base ${BASE} code`,
+      'make codes that cannot be guessed',
+    ],
+  },
+  last: 'Levels 1 to 13 built the parts: load balancers, caches, queues, shards, rate limiters, rings and ID generators. Now you combine them to answer a real interview question.',
+  parts: [
+    {
+      title: 'Short links',
+      mission: 0,
+      minutes: 10,
+      lead: 'Every design interview starts the same way: before drawing anything, find out what you are building and how big it is.',
+      sections: [
+        {
+          title: 'Scope it: how long must a short code be?',
+          hook: `A link service does two things: <b>shorten</b> (long link in, short code out) and <b>redirect</b> (code in, long link out). Links never change. Codes use 0-9, a-z and A-Z: ${BASE} characters.`,
+          body: [
+            {
+              calc: {
+                formula: `Links to hold = links a day × 365 × years. The code needs n characters, where ${BASE} to the power n is at least that.`,
+                rows: [
+                  { label: 'Links in all', work: `${count(sc.perDay)} a day × 365 days × ${sc.years} years`, result: `${about(sc.total)} links`, approx: true },
+                  { label: `${sc.chars - 1} characters`, work: `${BASE} to the power ${sc.chars - 1}`, result: `${about(BASE ** (sc.chars - 1))} codes: too few`, approx: true },
+                  { label: `${sc.chars} characters`, work: `${BASE} to the power ${sc.chars}`, result: `${about(BASE ** sc.chars)} codes: enough`, approx: true },
+                ],
+                result: `Six characters hold every link for ${sc.years} years. Each extra character multiplies the room by ${BASE}.`,
+              },
+            },
+            { p: `Write the load down too: ${count(sc.perDay)} new links a day is about ${fmt(sc.writes)} a second. With clicks to new links at ${CLICKS_PER_LINK} to 1, that is about ${fmt(sc.reads)} clicks a second. Clicks are the traffic to design for. Storage is links × bytes for each link.` },
+          ],
+          takeaway: `Count the links for the whole lifetime, then find the power of ${BASE} that holds them.`,
+          quiz: [2, 9],
+        },
+        {
+          title: 'How does a click find its long link?',
+          hook: 'Two endpoints are enough. <code>POST /api/v1/shorten</code> takes a long link and returns a code. <code>GET /{code}</code> answers with a redirect.',
+          body: [
+            { ol: [
+              'The click reaches a web server through the load balancer.',
+              'The web server looks the code up in the <b>cache</b>. A link never changes, so a cached copy is never stale.',
+              'On a miss it reads the database and fills the cache.',
+              'If the code is in neither, it does not exist: the answer is <b>404 Not Found</b>.',
+            ] },
+            { p: 'When a link goes viral, every click asks for the same code. That is one key, so after the first miss the cache answers all of them and the database never notices.' },
+          ],
+          takeaway: 'Clicks are reads of one small mapping, so a cache in front answers most of them.',
+          quiz: [7, 8],
+        },
+      ],
+      checks: [
+        {
+          q: `A service expects ${count(checkLinks)} links in its lifetime. Codes use ${BASE} characters. How many characters does a code need?`,
+          options: [
+            { t: '5', why: `${BASE} to the power 5 is about ${about(BASE ** 5)}, fewer than ${count(checkLinks)}.` },
+            { t: '6', right: true, why: `${BASE} to the power 6 is about ${about(BASE ** 6)}, comfortably more than ${count(checkLinks)}.` },
+            { t: '7', why: 'That works, but 6 is already enough. Shorter is the whole point.' },
+          ],
+        },
+      ],
+      youWill: [
+        'estimate how many characters a code needs (Play stays locked until you do)',
+        'build the redirect path with a cache in front of the database',
+        `let a link go viral and keep Served at least ${targets.servedPct}%`,
+        `stay within $${fmt(BUDGET)} a month`,
+      ],
+      debrief: {
+        saw: 'Most clicks ended in the cache, and the viral link was a single key the cache absorbed.',
+        number: [`${CLICKS_PER_LINK} to 1`, 'clicks to new links'],
+        next: 'Marketing teams want to count every click. Right now half of them never reach you.',
+      },
+    },
+    {
+      title: 'Count every click',
+      mission: 1,
+      minutes: 6,
+      lead: 'The redirect you choose decides whether a click comes back to you at all.',
+      sections: [
+        {
+          title: 'Should a redirect be 301 or 302?',
+          hook: 'Both send the browser on to the long link. They differ in what the browser remembers.',
+          body: [
+            {
+              figure: 'figRedirect',
+              alt: 'With a 302, the browser asks the link service for every click and is sent on to the long page. With a 301, the browser remembers the answer, so its second click goes straight to the long page without reaching the link service.',
+              caption: 'A 301 is remembered by the browser. A 302 is asked again',
+            },
+            { ul: [
+              '<b>301 Moved Permanently:</b> the browser remembers it and skips you next time. Less load, but you only see first clicks.',
+              '<b>302 Found:</b> the browser asks you on every click. More load, and you can count each click and where it came from.',
+            ] },
+          ],
+          takeaway: 'A 301 lowers load, and a 302 lets you count every click.',
+          quiz: [0, 1],
+        },
+        {
+          title: 'How to stop one script filling the database',
+          hook: 'Anyone with an account can call the shorten endpoint, as fast as they like.',
+          body: [
+            { p: 'One script creating links in bulk can write millions of rows and slow everyone down. Put a <b>rate limit</b> on new links for each account, as in Level 10. Over the limit, the script gets a 429 and the database never sees the request.' },
+          ],
+          takeaway: 'Limit new links per account so one client cannot flood the writes.',
+          quiz: [],
+        },
+      ],
+      checks: [
+        {
+          q: 'A link is shared in an email. The same reader clicks it three times. With a 301, how many clicks reach the service?',
+          options: [
+            { t: 'One', right: true, why: 'The browser remembers a 301 after the first click and goes straight to the long page.' },
+            { t: 'Three', why: 'That is a 302. A 301 is cached by the browser.' },
+          ],
+        },
+      ],
+      youWill: [
+        'switch redirects so every click is counted',
+        'press A script creates links and keep the service up with a per-account limit',
+        `stay within $${fmt(BUDGET)} a month`,
+      ],
+      debrief: {
+        saw: 'Every click came back and was counted, and the bulk script was turned away with 429s.',
+        number: ['302', 'the redirect that brings every click back'],
+        next: 'Partners now shorten private links, such as invoices. If codes follow a sequence, anyone can try the next one.',
+      },
+    },
+    {
+      title: 'Private links',
+      mission: 2,
+      minutes: 8,
+      lead: 'There are two ways to make a code, and they fail in opposite ways.',
+      sections: [
+        {
+          title: 'How to turn an ID into a short code',
+          hook: `Take a new unique ID from an ID generator and write it in <b>base ${BASE}</b>: digits 0-9, then a-z for 10 to 35, then A-Z for 36 to ${BASE - 1}.`,
+          body: [
+            {
+              calc: {
+                formula: `Divide by ${BASE} again and again. The remainders, read from last to first, are the code.`,
+                rows: b62.steps.map((step, i) => b62Row(i === b62.steps.length - 1 ? 'Last' : ['First', 'Second'][i], step, i)),
+                result: `ID ${fmt(b62.n)} becomes the code "${b62.code}".`,
+              },
+            },
+            { p: 'Unique IDs give unique codes, so there is never a collision and no check is needed.' },
+          ],
+          takeaway: `Base ${BASE} of a unique ID gives a unique code with no collision check.`,
+          quiz: [3],
+        },
+        {
+          title: 'How do you make codes nobody can guess?',
+          hook: `IDs count up, so codes count up too: after "${b62.code}" comes "${b62.next}". Anyone can walk through every private link.`,
+          body: [
+            {
+              figure: 'figCodes',
+              alt: `With base ${BASE}, consecutive IDs give consecutive codes that can be guessed. With a hash, the long link is hashed, the first ${HASH_CHARS} characters become the code, and a Bloom filter says whether the code might be taken; only then is the database checked, and a collision is fixed by adding a suffix and hashing again.`,
+              caption: `Base ${BASE} is guessable. A hash needs a collision check`,
+            },
+            { p: `A <b>hash</b> of the long link has no order. Keep its first ${HASH_CHARS} characters. Two links can share them, a <b>collision</b>, so check: if the code is taken, add a suffix and hash again.` },
+            { p: 'Checking the database for every new link doubles the queries. A <b>Bloom filter</b> is a small structure in memory that answers "certainly not taken" or "maybe". Only a maybe needs the database.' },
+          ],
+          takeaway: 'Hashed codes are unguessable, and a Bloom filter keeps their collision check cheap.',
+          quiz: [4, 5, 6],
+        },
+      ],
+      checks: [
+        {
+          q: 'A Bloom filter says a new code is "certainly not taken". What do you do?',
+          options: [
+            { t: 'Check the database anyway', why: 'A Bloom filter is never wrong about "certainly not". The check would be wasted.' },
+            { t: 'Use the code straight away', right: true, why: 'Only a "maybe" needs the database, and that is rare.' },
+          ],
+        },
+      ],
+      youWill: [
+        'switch to codes that cannot be guessed from each other',
+        'keep a new link at about one database query',
+        `let a link go viral and keep Response under ${ms(targets.latencyMs)}, for at most $${fmt(BUDGET)} a month`,
+      ],
+    },
+  ],
+  wrap: {
+    picture: 'figBuiltEnd',
+    alt: 'The design you built: users reach the link service through a load balancer. The link service looks codes up in a cache, reads the database on a miss, and checks new codes against a Bloom filter.',
+    say: [
+      '"Clicks outnumber new links ten to one, so a cache sits in front of the database."',
+      '"A 301 lowers load, and a 302 lets me count every click."',
+      '"Base 62 of an ID never collides but is guessable, and a hash with a Bloom filter is not."',
+    ],
+    numbers: [
+      [String(BASE), 'characters a code can use'],
+      [about(BASE ** sc.chars), `codes of ${sc.chars} characters`],
+      [`${CLICKS_PER_LINK} to 1`, 'clicks to new links'],
+    ],
+    loop: `The interview steps: ${scope} (how many links and how long a code), ${sketch} (shorten and redirect paths), ${deep} (redirect type and code method), ${stress} (a viral link and a bulk script).`,
+    broken: 'A link service answers requests. Level 15 is a system that makes requests of its own: a crawler that downloads the web.',
+  },
+};
+
+// ---------------- Lesson pictures ----------------
+/**
+ * A dashed frame with its label, for one panel of a two-panel picture.
+ * @param {Record<string, Function>} f the drawing helpers `drawFigures` is given
+ * @param {SVGSVGElement} svg
+ * @param {number} y
+ * @param {number} height
+ * @param {string} label
+ */
+function panel(f, svg, y, height, label) {
+  f.svgEl('rect', { x: 10, y, width: 620, height, rx: 12, class: 'tier-box' }, svg);
+  f.figLabel(svg, 24, y + 20, label, 'start', 'tier-label');
+}
+
+/**
+ * A 302 sends every click through the link service on to the long page; after a 301 the browser's second click goes
+ * straight to the long page and the link service is not asked.
+ * @param {Record<string, Function>} f the drawing helpers `drawFigures` is given
+ * @param {SVGSVGElement} svg
+ */
+function drawRedirect(f, svg) {
+  const { figNode, figArrow, figLabel, figSvg } = f;
+  figSvg(svg, 436);
+  panel(f, svg, 10, 200, '302 Found: every click asks the link service');
+  figNode(svg, 'users', 110, 76, 'Browser', `Clicks /${b62.code}`);
+  figNode(svg, 'web', 530, 76, 'Link service', `Looks up ${b62.code}`);
+  figNode(svg, 'web', 530, 170, 'example.com', 'The long page');
+  figArrow(svg, 204, 66, 436, 66, `GET /${b62.code}`, '1', 236, 58);
+  figArrow(svg, 436, 86, 204, 86, '302, Location: long page', '2', 236, 104);
+  figArrow(svg, 110, 106, 436, 166, 'GET the long page', '3', 140, 168);
+  panel(f, svg, 226, 200, '301 Moved Permanently: the second click');
+  figNode(svg, 'users', 110, 292, 'Browser', `Remembers /${b62.code}`);
+  figNode(svg, 'web', 530, 292, 'Link service', 'Not asked');
+  figNode(svg, 'web', 530, 386, 'example.com', 'The long page');
+  figLabel(svg, 320, 296, 'no request');
+  figArrow(svg, 110, 322, 436, 382, 'straight to the long page', null, 140, 384);
+}
+
+/**
+ * Two ways to make a code: base 62 of the next ID gives the next code, which can be guessed; a hash has no order, but
+ * its first characters may be taken, so a Bloom filter answers first and only a "maybe" reaches the database.
+ * @param {Record<string, Function>} f the drawing helpers `drawFigures` is given
+ * @param {SVGSVGElement} svg
+ */
+function drawCodes(f, svg) {
+  const { figNode, figArrow, figLabel, figSvg } = f;
+  figSvg(svg, 396);
+  panel(f, svg, 10, 130, `Base ${BASE}: the next ID gives the next code`);
+  figNode(svg, 'idgen', 110, 82, 'ID generator', 'Counts up');
+  figArrow(svg, 204, 82, 330, 82, `base ${BASE}`, null, 267, 74, 'middle');
+  figLabel(svg, 350, 70, `${fmt(b62.n)} → ${b62.code}`, 'start', 'ch-pt-t');
+  figLabel(svg, 350, 92, `${fmt(b62.n + 1)} → ${b62.next}`, 'start', 'ch-pt-t');
+  figLabel(svg, 350, 118, 'the next code is easy to guess', 'start', 'ch-cap-t');
+  panel(f, svg, 156, 230, 'Hash: no order, but a code may be taken');
+  figNode(svg, 'web', 110, 222, 'Link service', 'Hashes the link');
+  figArrow(svg, 110, 252, 110, 300, `keep ${HASH_CHARS} characters`, null, 124, 282);
+  figNode(svg, 'cache', 110, 330, 'Bloom filter', 'In memory');
+  figLabel(svg, 220, 376, 'certainly not taken: use it', 'start');
+  figArrow(svg, 204, 330, 436, 330, 'maybe taken', null, 320, 322, 'middle');
+  figNode(svg, 'db', 530, 330, 'Database', 'If taken: rehash');
+}
+
+/**
+ * The finished design, drawn for the intro and again for the wrap-up: users reach the link service through a load
+ * balancer; it limits new links per account, makes hashed codes checked by a Bloom filter, and looks codes up in a
+ * cache before the database.
+ * @param {Record<string, Function>} f the drawing helpers `drawFigures` is given
+ * @param {SVGSVGElement} svg
+ */
+function drawBuilt(f, svg) {
+  const { figNode, figArrow, figLabel, figSvg } = f;
+  figSvg(svg, 440);
+  figNode(svg, 'users', 320, 46, 'Users', 'Shorten and click');
+  figNode(svg, 'lb', 320, 156, 'Load balancer', 'Shares requests');
+  figArrow(svg, 320, 76, 320, 126, '', null, 0, 0);
+  figNode(svg, 'web', 320, 266, 'Link service', '302 · hash + bloom');
+  figArrow(svg, 320, 186, 320, 236, 'new links: rate limit', null, 334, 206);
+  figLabel(svg, 334, 222, 'per account', 'start');
+  figNode(svg, 'cache', 500, 396, 'Cache', 'Code → long link');
+  figArrow(svg, 360, 296, 460, 366, 'lookups', null, 420, 326);
+  figNode(svg, 'db', 140, 396, 'Database', 'Every link');
+  figArrow(svg, 280, 296, 180, 366, 'on a miss', null, 220, 326, 'end');
+}
 
 const counted = (m) => !!m.link && m.link.counted > 0.9999;
 /** @type {Goal} */
@@ -32,7 +365,7 @@ const linkCache = cache();
 export default {
   id: 14,
   saveKey: 'sdl-level14-v1',
-  saveVersion: 1,
+  saveVersion: 2, // 2: which missions were opened from the lesson (`opened`)
   targets,
   // The day's traffic curve (for the autoscaled web servers). repeatClicks: clicks from a browser that has followed
   // the link before. catalogGB: the links clicked in a month, readGapSecs: seconds between clicks on a link (for the cache).
@@ -55,7 +388,7 @@ export default {
   components: {
     users: {
       name: 'Users', sub: 'Shorten links, click them',
-      desc: 'People who shorten long links and people who click short ones. For every new link there are 10 clicks. A click asks for the long link behind a code, such as lnk.example/aZ3k9Qe, and gets a redirect.',
+      desc: `People who shorten long links and people who click short ones. For every new link there are ${CLICKS_PER_LINK} clicks. A click asks for the long link behind a code, such as lnk.example/aZ3k9Qe, and gets a redirect.`,
     },
     dns: dns(),
     lb: lb(),
@@ -77,7 +410,7 @@ export default {
           key: 'code', label: 'Short code',
           options: [
             { id: 'base62', name: 'Base 62 of a unique ID', sub: 'next ID, no lookup', note: 'Each new link gets the next unique ID, written in base 62 (0–9, a–z, A–Z). No collisions, one insert. But codes follow each other, so anyone can guess the next one.', log: 'Short codes are now base 62 of a unique ID.' },
-            { id: 'hash', name: 'Hash, check the database', sub: 'first 7 characters', note: 'Hash the long link and keep 7 characters. Another link may already have them, so look the code up first and rehash on a collision: two queries for every new link.', log: 'Short codes are now hashed, with a database check.' },
+            { id: 'hash', name: 'Hash, check the database', sub: `first ${HASH_CHARS} characters`, note: `Hash the long link and keep ${HASH_CHARS} characters. Another link may already have them, so look the code up first and rehash on a collision: two queries for every new link.`, log: 'Short codes are now hashed, with a database check.' },
             { id: 'bloom', name: 'Hash, check a bloom filter', sub: 'memory answers most checks', note: 'A bloom filter in memory says "surely not used" for almost every new code; only its rare false positives (1% here) go to the database.', log: 'Short codes are now hashed, checked against a bloom filter.' },
           ],
         },
@@ -212,116 +545,27 @@ export default {
     passText: passText(14, 'Web crawler'),
     failText,
     questions: [
-      { q: 'Which redirect lets you count every click?', o: ['301 Moved Permanently', '302 Found', '200 OK with the page', '404 Not Found'], a: 1, e: 'With 302 the browser asks your servers on every click, so you can count each one. With 301 it keeps the redirect and skips you next time: less load, fewer counted clicks.', r: '301 vs 302' },
-      { q: 'Why does a 301 redirect lower the load?', o: ['It compresses the reply', 'It skips the load balancer', 'It is cached in the database', 'The browser remembers it'], a: 3, e: 'A permanent redirect is kept by the browser, so the next click on the same link goes straight to the long link without asking your servers.', r: '301 vs 302' },
-      { q: '62⁶ ≈ 56.8 billion. How many characters for 219 billion links?', o: ['6', '8', '7', '11'], a: 2, e: '62⁶ is too few; 62⁷ ≈ 3.5 trillion is enough. So 7 characters.', r: 'Hash value length' },
-      { q: 'What is 20000 in base 62 (0–9, a–z, A–Z)?', o: ['20k', 'c5A', 'A5c', '5cA'], a: 3, e: '20000 = 5 × 62² + 12 × 62 + 36. Digit 5 is "5", 12 is "c" (a = 10), 36 is "A" (the first capital). So 5cA.', r: 'Base 62 conversion' },
-      { q: 'Even CRC32 gives 8 hex characters. How does hashing get a 7-character code?', o: ['Use the whole hash', 'Keep the first 7, recheck', 'Encrypt the long link', 'Switch to a shorter hash function'], a: 1, e: 'Keep the first 7 characters. Two links can then share a code, so look it up and, on a collision, append a fixed string and hash again until it is free.', r: 'Hash + collision resolution' },
-      { q: 'What does a bloom filter answer?', o: ['Where a key is stored', 'The newest version of a key', 'How many times a key has been read in total', '"Surely not in the set" or "maybe"'], a: 3, e: 'A bloom filter is a small bit array in memory. "Not in the set" is always right; "maybe" can be a false positive, and only then do you check the database.', r: 'Hash + collision resolution' },
-      { q: 'What is the downside of base 62 codes from a unique ID?', o: ['Codes can collide', 'Codes are too long', 'The next code is easy to guess', 'Each new link needs two database lookups first'], a: 2, e: 'IDs go up one by one, so codes do too: anyone can try the next code and find other people\'s links. They never collide and need no lookup, though.', r: 'Comparison of the two approaches' },
-      { q: 'A click\'s code is not in the cache or the database. What do you answer?', o: ['A 404: no such link', 'A random long link', 'A 301 to the home page', 'A 500 error'], a: 0, e: 'The code was never created (often a typo), so there is nothing to redirect to: answer 404 Not Found.', r: 'URL redirecting deep dive' },
-      { q: 'A link goes viral. Which part takes the extra clicks?', o: ['The database, which holds every link', 'The cache, since it\'s one key', 'The unique ID generator', 'The rate limiter'], a: 1, e: 'Every viral click asks for the same code. After the first miss the cache holds it, so all the others are hits and the database never sees them.', r: 'URL redirecting deep dive' },
-      { q: '219 billion links × 100 bytes each. About how much storage?', o: ['219 GB', '2.19 TB', '21.9 TB', '219 TB'], a: 2, e: '219 × 10⁹ × 100 bytes = 2.19 × 10¹³ bytes ≈ 21.9 TB. The 219 billion already covers the 10 years.', r: 'Back of the envelope' },
+      { q: 'Which redirect lets you count every click?', o: ['301 Moved Permanently', '302 Found', '200 OK with the page', '404 Not Found'], a: 1, e: 'With 302 the browser asks your servers on every click, so you can count each one. With 301 it keeps the redirect and skips you next time: less load, fewer counted clicks.', r: 'Should a redirect be 301 or 302?' },
+      { q: 'Why does a 301 redirect lower the load?', o: ['It compresses the reply', 'It skips the load balancer', 'It is cached in the database', 'The browser remembers it'], a: 3, e: 'A permanent redirect is kept by the browser, so the next click on the same link goes straight to the long link without asking your servers.', r: 'Should a redirect be 301 or 302?' },
+      { q: '62⁶ ≈ 56.8 billion. How many characters for 219 billion links?', o: ['6', '8', '7', '11'], a: 2, e: '62⁶ is too few; 62⁷ ≈ 3.5 trillion is enough. So 7 characters.', r: 'Scope it: how long must a short code be?' },
+      { q: 'What is 20000 in base 62 (0–9, a–z, A–Z)?', o: ['20k', 'c5A', 'A5c', '5cA'], a: 3, e: '20000 = 5 × 62² + 12 × 62 + 36. Digit 5 is "5", 12 is "c" (a = 10), 36 is "A" (the first capital). So 5cA.', r: 'How to turn an ID into a short code' },
+      { q: 'Even CRC32 gives 8 hex characters. How does hashing get a 7-character code?', o: ['Use the whole hash', 'Keep the first 7, recheck', 'Encrypt the long link', 'Switch to a shorter hash function'], a: 1, e: 'Keep the first 7 characters. Two links can then share a code, so look it up and, on a collision, append a fixed string and hash again until it is free.', r: 'How do you make codes nobody can guess?' },
+      { q: 'What does a bloom filter answer?', o: ['Where a key is stored', 'The newest version of a key', 'How many times a key has been read in total', '"Surely not in the set" or "maybe"'], a: 3, e: 'A bloom filter is a small bit array in memory. "Not in the set" is always right; "maybe" can be a false positive, and only then do you check the database.', r: 'How do you make codes nobody can guess?' },
+      { q: 'What is the downside of base 62 codes from a unique ID?', o: ['Codes can collide', 'Codes are too long', 'The next code is easy to guess', 'Each new link needs two database lookups first'], a: 2, e: 'IDs go up one by one, so codes do too: anyone can try the next code and find other people\'s links. They never collide and need no lookup, though.', r: 'How do you make codes nobody can guess?' },
+      { q: 'A click\'s code is not in the cache or the database. What do you answer?', o: ['A 404: no such link', 'A random long link', 'A 301 to the home page', 'A 500 error'], a: 0, e: 'The code was never created (often a typo), so there is nothing to redirect to: answer 404 Not Found.', r: 'How does a click find its long link?' },
+      { q: 'A link goes viral. Which part takes the extra clicks?', o: ['The database, which holds every link', 'The cache, since it\'s one key', 'The unique ID generator', 'The rate limiter'], a: 1, e: 'Every viral click asks for the same code. After the first miss the cache holds it, so all the others are hits and the database never sees them.', r: 'How does a click find its long link?' },
+      { q: '219 billion links × 100 bytes each. About how much storage?', o: ['219 GB', '2.19 TB', '21.9 TB', '219 TB'], a: 2, e: '219 × 10⁹ × 100 bytes = 2.19 × 10¹³ bytes ≈ 21.9 TB. The 219 billion already covers the 10 years.', r: 'Scope it: how long must a short code be?' },
     ],
   },
 
-  // Lesson tab content (HTML). The diagram below draws into figRedirect.
-  lessonHtml: `
-    <p class="label">Level 14 · URL shortener</p>
-    <h1>URL shortener</h1>
-    <p class="lede">A URL shortener turns <code>www.example.com/guides/how-dns-works?ref=newsletter</code> into <code>lnk.example/aZ3k9Qe</code> and sends every click on the short link to the long one. It is two operations, creating a link and following one, at very different rates. In this level you choose how codes are made, how clicks are redirected, and what protects the database.</p>
-    <div class="goals-box">
-      <div><b>You will learn</b>The two APIs, 301 vs 302, code length, hashing vs base 62, the cache, and rate limits.</div>
-      <div><b>You will decide</b>The redirect, how codes are made, the cache, and a limit on new links.</div>
-      <div><b>You will estimate</b>How many characters a code needs.</div>
-    </div>
+  lesson,
 
-    <section>
-      <h2>Scope and numbers</h2>
-      <p class="src">Back of the envelope</p>
-      <p>Ask: how many new links a day, how short, which characters, can links be changed or deleted? Here: 60 million a day; as short as possible; 0–9, a–z, A–Z; never changed.</p>
-      <ul>
-        <li><b>Writes:</b> 60 million ÷ 86,400 ≈ 694 new links a second.</li>
-        <li><b>Reads:</b> 10 clicks for each new link ≈ 6,900 a second.</li>
-        <li><b>Records:</b> 60 million × 365 × 10 years ≈ 219 billion. At 100 bytes each, 21.9 TB.</li>
-      </ul>
-    </section>
-
-    <section>
-      <h2>Two APIs</h2>
-      <p class="src">API endpoints</p>
-      <ul>
-        <li><code>POST /api/v1/shorten</code> with <code>{ longUrl }</code> returns the short link.</li>
-        <li><code>GET /{code}</code> returns a redirect to the long link: status 301 or 302 with a <code>Location</code> header.</li>
-      </ul>
-      <figure class="fig"><svg id="figRedirect" viewBox="0 0 660 200" role="img" aria-label="The browser asks lnk.example for code aZ3k9Qe; the link service answers 302 with the long link in the Location header; the browser then opens the long link."></svg><figcaption>A click: the service answers with a redirect, and the browser follows it</figcaption></figure>
-    </section>
-
-    <section>
-      <h2>301 or 302</h2>
-      <p class="src">URL redirecting</p>
-      <ul>
-        <li><b>301 Moved Permanently:</b> the browser keeps the redirect and skips your servers next time. Less load.</li>
-        <li><b>302 Found:</b> temporary, so every click asks your servers again. More load, but you can count clicks and where they come from.</li>
-      </ul>
-    </section>
-
-    <section>
-      <h2>How long is a code?</h2>
-      <p class="src">Hash value length</p>
-      <p>With 62 characters, n characters give 62ⁿ codes. 62⁶ ≈ 56.8 billion is too few for 219 billion links; 62⁷ ≈ 3.5 trillion is enough. So 7 characters.</p>
-    </section>
-
-    <section>
-      <h2>Two ways to make a code</h2>
-      <p class="src">Hash + collision resolution · Base 62 conversion</p>
-      <p><b>Hash and cut.</b> Hash the long link and keep 7 characters. Even CRC32 is too long as it is: for <code>https://www.example.com/guides/how-dns-works</code> it gives <code>41560b3e</code>, 8 hex characters (MD5 and SHA-1 give 32 and 40). Cutting can collide with another link's code, so look the code up and, if it is taken, append a fixed string and hash again. A lookup for every new link is costly; a <b>bloom filter</b> in memory answers "surely not used" for almost all of them.</p>
-      <p><b>Base 62 of a unique ID.</b> Take the next unique ID (Level 13) and write it in base 62: 0–9 for 0–9, a–z for 10–35, A–Z for 36–61. 20000 = 5 × 62² + 12 × 62 + 36 → <code>5cA</code>. No collisions and no lookup, and the code grows with the ID. But codes follow one another, so the next one is easy to guess. For 7 characters the ID must stay below 62⁷, so it is a counter, not a 64-bit timestamp ID (up to 11 characters).</p>
-      <p>Before either, check whether the long link already has a code, and return that one.</p>
-    </section>
-
-    <section>
-      <h2>Redirects at scale</h2>
-      <p class="src">URL redirecting deep dive</p>
-      <p>Clicks outnumber new links 10 to 1, and a few links get most of them, so put code → long link in a <b>cache</b>. A click checks the cache, then the database; a code in neither was never made, so answer 404. A viral link is one hot key: the cache answers every click after the first.</p>
-      <p>A script could create millions of links: a <b>rate limiter</b> (Level 10) caps new links per account or IP. The web tier is stateless, so it scales out; the database scales with replicas and shards (Levels 3 and 9).</p>
-    </section>
-
-    <section>
-      <h2>How this level is simulated</h2>
-      <p class="src">Game assumptions</p>
-      <p>Each mission has 10 clicks for every new link, except Mission 3. With 301, half of all clicks come from a browser that has followed that link before, so they never reach your servers and aren't counted. A viral link adds ${fmt(VIRAL)} clicks a second from new visitors. Hashed codes with a database check cost two queries per new link; with a bloom filter, 1.01; base 62, one.</p>
-      <p class="assume">Game assumptions: a cache holds the links clicked in a month (20 GB); the limit allows 10 new links a minute per account and its check costs nothing; the script creates ${fmt(BULK)} links a second.</p>
-    </section>
-
-    <section>
-      <h2>Numbers to carry into the interview</h2>
-      <p class="src">Capacity estimates</p>
-      <p><b>Code length:</b> smallest n with 62ⁿ above the links. 62⁶ ≈ 56.8 billion, 62⁷ ≈ 3.5 trillion.</p>
-      <p><b>Storage</b> = links × bytes each. 219 billion × 100 bytes ≈ 21.9 TB.</p>
-    </section>
-
-    <section>
-      ${lessonSteps([
-        'Links a day, read to write ratio, characters, how long links live.',
-        'Two APIs, 301 or 302, a table of code and long link.',
-        'Code length, hash and collisions vs base 62, the cache for redirects.',
-        'A viral link, a bulk script, analytics, scaling the database.',
-      ])}
-    </section>
-`,
-
-  // Lesson diagram. `f` provides the engine's drawing helpers.
+  // Lesson diagrams. `f` provides the engine's drawing helpers. Each figure sets its own viewBox.
   drawFigures(f) {
-    const { $, figNode, figArrow, figDefs, figLabel } = f;
-    const f1 = $('figRedirect'); f1.textContent = ''; figDefs(f1);
-    figNode(f1, 'users', 110, 100, 'Browser', 'Clicks aZ3k9Qe');
-    figNode(f1, 'web', 540, 40, 'Link service', 'Looks up the code');
-    figNode(f1, 'web', 540, 160, 'example.com', 'The long link');
-    figArrow(f1, 206, 92, 444, 46, '', null, 0, 0);
-    figArrow(f1, 206, 108, 444, 154, '', null, 0, 0);
-    figLabel(f1, 300, 58, '1. GET /aZ3k9Qe');
-    figLabel(f1, 540, 100, '2. 302, Location: long link');
-    figLabel(f1, 300, 160, '3. GET the long link');
+    const { $ } = f;
+    drawRedirect(f, $('figRedirect'));
+    drawCodes(f, $('figCodes'));
+    drawBuilt(f, $('figBuilt'));
+    drawBuilt(f, $('figBuiltEnd'));
   },
 };
