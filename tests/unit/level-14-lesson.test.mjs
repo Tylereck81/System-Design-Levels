@@ -47,10 +47,11 @@ test('Check yourself: 2 billion links need 6 characters (the mission\'s 219 bill
 test('base 62: 12345 = 3 × 62² + 13 × 62 + 7 → "3d7", and 12346 → "3d8"; the quiz uses 20000', () => {
   assert.equal(3 * 62 ** 2 + 13 * 62 + 7, 12345);
   const calc = block('How to turn an ID into a short code', 'calc');
-  assert.deepEqual(calc.rows.map((r) => [r.work, r.result]), [
-    ['ID 12,345 ÷ 62', '199, remainder 7 → 7'],
-    ['what is left, 199 ÷ 62', '3, remainder 13 → d'],
-    ['what is left, 3 ÷ 62', '0, remainder 3 → 3'],
+  // 12345 ÷ 62 = 199 r 7; 199 ÷ 62 = 3 r 13 (d); 3 ÷ 62 = 0 r 3: three divisions, one row each.
+  assert.deepEqual(calc.rows.map((r) => [r.label, r.work, r.result]), [
+    ['First', 'ID 12,345 ÷ 62', '199, remainder 7 → 7'],
+    ['Second', 'what is left, 199 ÷ 62', '3, remainder 13 → d'],
+    ['Last', 'what is left, 3 ÷ 62', '0, remainder 3 → 3'],
   ]);
   assert.equal(calc.result, 'ID 12,345 becomes the code "3d7".');
   assert.match(section('How do you make codes nobody can guess?').hook, /after "3d7" comes "3d8"/);

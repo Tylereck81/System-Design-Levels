@@ -208,7 +208,7 @@ const lesson = {
             {
               calc: {
                 formula: `Divide by ${BASE} again and again. The remainders, read from last to first, are the code.`,
-                rows: [b62Row('First', b62.steps[0], 0), b62Row('Second', b62.steps[1], 1), b62Row('Last', b62.steps[2], 2)],
+                rows: b62.steps.map((step, i) => b62Row(i === b62.steps.length - 1 ? 'Last' : ['First', 'Second'][i], step, i)),
                 result: `ID ${fmt(b62.n)} becomes the code "${b62.code}".`,
               },
             },
