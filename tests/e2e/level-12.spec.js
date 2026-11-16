@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures.js';
-import { registerCommonTests } from '../shared-checks.js';
+import { registerCommonTests, registerPageLessonTests } from '../shared-checks.js';
 import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, openMission, selectNode, setProps, pressEnterOn } from '../helpers.js';
 
 // Level 12: Distributed key-value store.
@@ -19,8 +19,10 @@ const pause = (page) => page.evaluate(() => { if (window.__sdl.run.playing) wind
 test.describe('Level 12 · playthrough', () => {
   test('all three missions can be completed', async ({ page }) => {
     const errors = trackErrors(page);
-    await freshPage(page, '#level-12/build');
+    await freshPage(page, '#level-12/lesson');
     await expect(page.locator('#lvlChip')).toHaveText('Level 12 / 21');
+    // Each mission opens from its card in the lesson, and a finished one leads back there.
+    await page.getByRole('button', { name: 'Start Mission 1' }).click();
 
     // Mission 1: estimate R = 2, then W = R = 2 with a strict quorum (through the inspector), then the partition.
     await page.fill('#estIn', '2');
@@ -40,7 +42,10 @@ test.describe('Level 12 · playthrough', () => {
     await pause(page);
 
     // Mission 2: a sloppy quorum keeps carts working through the partition.
-    await page.click('#mission .complete button');
+    await page.click('#doneBanner [data-act="debrief"]');
+    await expect(page.locator('#lp-m0')).toBeFocused();
+    await page.getByRole('button', { name: 'Start Mission 2' }).click();
+    await expect(page.locator('#view-build')).toBeVisible();
     await selectNode(page, 'k');
     await click(page, 'mode-sloppy');
     await page.click('#playBtn');
@@ -53,7 +58,10 @@ test.describe('Level 12 · playthrough', () => {
     await pause(page);
 
     // Mission 3: fast reads: R = 1, so W = N, with a strict quorum.
-    await page.click('#mission .complete button');
+    await page.click('#doneBanner [data-act="debrief"]');
+    await expect(page.locator('#lp-m1')).toBeFocused();
+    await page.getByRole('button', { name: 'Start Mission 3' }).click();
+    await expect(page.locator('#view-build')).toBeVisible();
     await selectNode(page, 'k');
     await click(page, 'mode-strict');
     await click(page, 'w-3');
@@ -221,6 +229,7 @@ test.describe('Level 12 · teaching feedback', () => {
 
   test('the estimate accepts 2 and gives specific hints', async ({ page }) => {
     await freshPage(page, '#level-12/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     for (const [v, hint] of [['1', 'hasn\'t reached yet'], ['3', 'waits for the slowest']]) {
       await page.fill('#estIn', v);
       await page.click('#estBtn');
@@ -231,16 +240,31 @@ test.describe('Level 12 · teaching feedback', () => {
     expect(await state(page, () => window.__sdl.S.est)).toBe(true);
   });
 
-  test('the lesson diagrams are drawn', async ({ page }) => {
+});
+
+test.describe('Level 12 · one-page lesson', () => {
+  registerPageLessonTests({ level: 12 });
+
+  test('the pictures: five replicas with W = 3 and R = 3 sharing replica 3; a stand-in only when availability comes first', async ({ page }) => {
     await freshPage(page, '#level-12/lesson');
-    await expect(page.locator('#figQuorum')).toContainText('Replica c');
-    await expect(page.locator('#figPartition')).toContainText('partition');
+    // The worked example's N = 5, W = 3, R = 3, not Mission 1's N = 3, W = 2.
+    await expect(page.locator('#figQuorum .node-box')).toHaveCount(5);
+    await expect(page.locator('#figQuorum')).toContainText('W = 3 confirmed');
+    await expect(page.locator('#figQuorum')).toContainText('R = 3 asked');
+    await expect(page.locator('#figQuorum')).toContainText('Replica 3New, read keeps it');
+    await openMission(page, 1);
+    await expect(page.locator('#figSplit')).toContainText('Gets an error');
+    await expect(page.locator('#figSplit')).toContainText('Answer may be old');
+    await expect(page.locator('#figSplit')).toContainText('Stand-in node');
+    // The finished design: the key's copies go to the next 3 of the ring's 8 nodes.
+    await expect(page.locator('#figBuilt > rect.ic-data')).toHaveCount(3);
   });
 });
 
 test.describe('Level 12 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-12/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     await page.focus('#estIn');
     await page.keyboard.type('2');
     await page.keyboard.press('Enter');
