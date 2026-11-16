@@ -130,6 +130,20 @@ test.describe('Level 1 · robustness', () => {
     expect(await state(page, () => window.__sdl.S.done[2])).toBe(false);
   });
 
+  test('during the spike the log says even the largest server is not enough', async ({ page }) => {
+    await freshPage(page, '#build');
+    await openMission(page, 2);
+    await buildBasic(page);
+    await page.fill('#estIn', '463');
+    await page.click('#estBtn');
+    await page.click('#playBtn');
+    await page.click('#exp-spike');
+    // The log is written by the frame loop's paint, which fastForward skips: play in real time so it paints. No reload
+    // follows, so the coverage of the line that logs the note is kept.
+    await playFor(page, 0.5);
+    expect(await logText(page)).toContain('even the largest size (XL, 1,600 req/s) is not enough');
+  });
+
   test('crashing with no web server does not freeze the simulation', async ({ page }) => {
     const errors = trackErrors(page);
     await freshPage(page, '#build');
