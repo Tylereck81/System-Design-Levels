@@ -307,7 +307,7 @@ function drawStep(f, svg) {
   }
   const newStep = stepFig.servers + 1, added = counts(newStep, newStep, 3), repeats = added.filter((id) => used.has(id));
   svgEl('rect', { x: 10, y: 170, width: 620, height: 120, rx: 12, class: 'tier-box' }, svg);
-  figLabel(svg, 24, 190, `Add a third server: the step becomes ${newStep}`, 'start', 'tier-label');
+  figLabel(svg, 24, 190, `Add one more server: the step becomes ${newStep}`, 'start', 'tier-label');
   figNode(svg, 'db', 120, 240, `Server ${newStep}`, `Starts at ${newStep}, step ${newStep}`);
   figLabel(svg, 240, 236, `${added.join(', ')}…`, 'start');
   figLabel(svg, 240, 256, `${repeats.join(' and ')} were already handed out`, 'start', 'ch-cap-t');
