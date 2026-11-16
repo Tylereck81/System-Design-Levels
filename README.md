@@ -96,14 +96,18 @@ npm test
 | Path | What it is |
 |---|---|
 | `index.html` | The app shell: header with the Home button and level name, tabs, build area |
-| `js/boot.js` | Entry point: loads the level named in the URL, then starts the game |
+| `js/boot.js` | Entry point: shows the home page, or loads the level named in the URL and starts the game |
+| `js/home.js` | The home page: what the game is and the level list with your progress |
 | `js/main.js` | Start-up, tab routing and re-rendering after a change |
 | `js/state.js` | Game state and saved progress |
-| `js/engine/` | The simulation: component catalog, load and latency model, failures, and the logic of each system |
+| `js/engine/` | The simulation: component catalog, load and latency model, failures; `kinds/` holds the logic of each kind of system |
 | `js/view/` | The canvas: drawing, dragging and connecting, request dots, the animation loop |
-| `js/ui/` | Dashboard, inspector, mission panel, controls, log, lesson diagrams, quiz |
+| `js/ui/` | Dashboard, inspector, mission panel, controls, log, lesson, quiz, mock interview panel |
+| `js/*.js` (others) | Small shared helpers: URL routes, browser storage, formatting, checks on saved data and lessons |
 | `levels/index.js` | The list of playable levels |
 | `levels/level-NN.js` | Everything specific to one level: lesson, components, rules, missions, quiz and text |
+| `levels/shared/` | Parts every level reuses: components, goals, connection rules, quiz and lesson helpers |
+| `levels/mock.js` | The mock interview: a real-system level as a timed problem on a blank canvas |
 | `css/styles.css` | All styles: design tokens, light and dark themes, layout |
 | `tests/` | `unit/` and `integration/` run in Node, `e2e/` and `snapshot/` in the browser (Playwright); all run on GitHub on every push |
 
