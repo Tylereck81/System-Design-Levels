@@ -1,23 +1,374 @@
 // @ts-check
-/** @import { Level, Goal } from '../js/types.js' */
+/** @import { Level, Goal, Lesson } from '../js/types.js' */
 // Level 11: Consistent hashing.
 // Everything specific to this level lives here: components, rules, missions, quiz and text.
-import { fmt } from '../js/format.js';
+import { fmt, percent, ms, count } from '../js/format.js';
+import { COMPONENTS } from '../js/engine/catalog.js';
 import { servedGoal, latGoal, costGoal, servedAtLeast, fmtPct } from './shared/goals.js';
-import { serverNames, ringPoints, keyHome } from '../js/engine/hashring.js';
+import { serverNames, ringPoints, keyShares } from '../js/engine/hashring.js';
 import { dns, lb, NO_DB_NOTE, autoscaleSubOf, scalingChoices, db } from './shared/components.js';
 import { dnsLookup, usersToLb, lbToWeb, webToDb, lbBad } from './shared/connections.js';
 import { lbText, levelComplete } from './shared/text.js';
 import { failText, passText } from './shared/quiz.js';
 import { dayTraffic } from './shared/workload.js';
-import { lessonSteps } from './shared/lesson.js';
+import { STEPS } from './mock-steps.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 const PCT = { scale: 100 }; // percentages are given as 0–1 shares
+/** Monthly budgets: Missions 1 and 2, and Mission 3, in dollars. */
 const BUDGET = 1400;
 const SALE_BUDGET = 1700;
+/** Requests a second: Missions 1 and 2, and the sale in Mission 3. */
+const QPS = 2000;
+const SALE_QPS = 4000;
+/** The most keys a Break-it change may move, and the most the busiest cache server may be above the average. */
 const MOVE_MAX = 0.25;
 const SPREAD_MAX = 0.1;
+
+// ---------------- Lesson ----------------
+const [scope, sketch, deep, stress] = STEPS.map((step) => `<b>${step.name}</b>`);
+const ring = COMPONENTS.ring;
+// Rehashing example (ours): 8 servers become 7 (Mission 1 asks about 5 to 4, the quiz about 6 to 5). A key keeps its
+// server only if hash % 8 and hash % 7 agree: values 0 to 6 of every 8 × 7 = 56, so 7 stay and 49 ÷ 56 = 87.5% move.
+const re = { from: 8, to: 7 };
+re.cycle = re.from * re.to;
+re.stay = re.to;
+re.move = (re.cycle - re.stay) / re.cycle;
+// Ring example (ours): 2 million profiles on the same 8 servers. A ring moves 2 million ÷ 8 = 250,000 (12.5%);
+// hash % 8 → % 7 moves 2 million × 87.5% = 1.75 million, seven times as many.
+const rg = { keys: 2e6, n: re.from };
+rg.moved = rg.keys / rg.n;
+// Storm example (our load): 6,000 reads/s at 90% hits. One of 4 servers fails: 6,000 × 0.9 ÷ 4 = 1,350 more reads/s
+// on the database; one of 8: 675. Eight M servers cost what four L servers do.
+const miss = { reads: 6000, hit: 0.9, few: 4, many: 8 };
+const storm = (n) => miss.reads * miss.hit / n;
+// Check yourself: 5,000 reads/s, 80% hits, 10 servers: 5,000 × 0.8 ÷ 10 = 400.
+const stCheck = { reads: 5000, hit: 0.8, n: 10 };
+stCheck.extra = stCheck.reads * stCheck.hit / stCheck.n;
+// Check yourself: 6 servers with 200 virtual nodes each; one fails and its arcs go to the other five.
+const vnCheck = { servers: 6, vnodes: 200 };
+
+/** @type {Lesson} */
+const lesson = {
+  intro: {
+    kicker: 'Level 11 · Part 2: Building blocks',
+    title: 'Consistent hashing',
+    story: 'Creator profiles are cached on five servers. One of them is about to fail. With the rule your web servers use to pick a cache server, losing one makes almost every profile miss at once. In this level you change the rule.',
+    picture: 'figBuilt',
+    alt: 'The finished design: web servers find each profile on a cluster of cache servers arranged as a ring, where every server owns many small sections. On a miss they read the database.',
+    outcomes: [
+      'show why the remainder rule moves almost every key',
+      'place servers and keys on a hash ring',
+      'say how many keys move when a server joins or leaves',
+      'explain what virtual nodes are for',
+      'estimate the load a failed cache server sends to the database',
+    ],
+  },
+  last: 'Level 4 ran two cache servers and split the keys between them. Level 9 showed that adding a shard with key % N moves most of the data. Both problems come from the same rule.',
+  parts: [
+    {
+      title: 'Server C fails',
+      mission: 0,
+      minutes: 10,
+      lead: 'A cluster of cache servers needs a rule that says which server holds which key.',
+      newParts: [
+        { type: 'ring', before: 1, what: 'A group of cache servers that share one set of keys.', does: 'A rule decides which server holds each key. You choose the rule, the number of servers and their memory.', game: `Up to ${Math.max(...Object.keys(ring.choices.count.options).map(Number))} servers. Each handles ${fmt(ring.sizes.L.cap)} lookups/s.` },
+      ],
+      sections: [
+        {
+          title: 'Why does losing one cache server make almost every key miss?',
+          hook: 'The usual rule is <code>hash(key) % N</code>: turn the key into a number, divide by the number of servers, take the remainder. When N changes, so does the remainder for most keys.',
+          body: [
+            {
+              calc: {
+                formula: `${re.from} servers, then one fails and the rule becomes % ${re.to}. A key keeps its server only if both remainders agree.`,
+                rows: [
+                  { label: 'Stay', work: `hash values 0 to ${re.to - 1} of every ${re.cycle} values`, result: `${re.stay} values` },
+                  { label: 'Move', work: `${re.cycle} values − ${re.stay} values`, result: `${re.cycle - re.stay} values = ${percent(re.move)}` },
+                ],
+                result: `One server in ${re.from} failed, and ${percent(re.move)} of all keys are now looked up on a server that does not have them.`,
+              },
+            },
+            { p: 'Every moved key is a cache miss, all at the same moment, and every miss goes to the database. The servers that survived still hold their data. The rule just no longer points to it.' },
+          ],
+          takeaway: 'With hash % N, changing N sends almost every key to a different server.',
+          quiz: [0],
+        },
+        {
+          title: 'How does a hash ring place keys?',
+          hook: 'Stop dividing by the number of servers. Put the servers and the keys on the same circle.',
+          body: [
+            {
+              figure: 'figRing',
+              alt: 'Four servers, A to D, sit at points around a circle, and keys sit at other points. Each key belongs to the first server clockwise from it. When server C is removed, only the keys that belonged to C move on to D. Every other key keeps its server.',
+              caption: 'A key belongs to the next server clockwise',
+            },
+            { ol: [
+              'Hash each server\'s name to a point on the circle, the <b>hash ring</b>.',
+              'Hash each key to a point on the same ring.',
+              'A key belongs to the <b>first server clockwise</b> from its point.',
+            ] },
+            { p: 'Remove a server and only its keys move, to the next server along. Add a server and it takes only the keys between it and the server before it. This is <b>consistent hashing</b>.' },
+          ],
+          takeaway: 'On a ring, a server joining or leaving moves only the keys next to it.',
+          quiz: [1, 3],
+        },
+        {
+          title: 'How many keys move on a ring?',
+          hook: `A cluster holds ${count(rg.keys)} profiles on ${rg.n} servers, evenly spread. One server fails.`,
+          body: [
+            {
+              calc: {
+                formula: 'Keys that move on a ring = keys ÷ servers.',
+                rows: [
+                  { label: 'On a ring', work: `${count(rg.keys)} profiles ÷ ${rg.n} servers`, result: `${fmt(rg.moved)} profiles = ${percent(1 / rg.n)}` },
+                  { label: `With hash % ${rg.n}`, work: `${count(rg.keys)} profiles × ${percent(re.move)}`, result: `${count(rg.keys * re.move)} profiles` },
+                ],
+                result: 'The ring moves one share. The remainder rule moves seven.',
+              },
+            },
+            { p: 'Written as a rule: with k keys on n servers, about <b>k ÷ n</b> keys move when one server joins or leaves.' },
+          ],
+          takeaway: 'On a ring about k ÷ n keys move, which is one server\'s share.',
+          quiz: [2],
+        },
+      ],
+      checks: [
+        {
+          q: 'On a hash ring, server F is added between servers B and C. Which keys move?',
+          options: [
+            { t: 'Almost every key', why: 'That is the remainder rule. On a ring, a new server only takes over part of one arc.' },
+            { t: 'The keys between B and F, which used to go on to C', right: true, why: 'F is now the first server clockwise for those keys. Nothing else changes.' },
+            { t: 'All of C\'s keys', why: 'Only the ones that come before F on the ring. Keys between F and C stay on C.' },
+          ],
+        },
+      ],
+      youWill: [
+        'estimate the share of keys that move when C fails under the remainder rule (Play stays locked until you do)',
+        'switch the cluster to a hash ring',
+        `let server C fail: at most ${percent(MOVE_MAX)} of keys may move`,
+        `keep Response under ${ms(targets.latencyMs)} for at most $${fmt(BUDGET)} a month`,
+      ],
+      debrief: {
+        saw: 'Only C\'s keys moved, and the database carried their misses.',
+        number: ['k ÷ n', 'keys that move on a ring when one server changes'],
+        next: 'C\'s section of the ring happened to be small. Another server owns more than half the ring.',
+      },
+    },
+    {
+      title: 'One more server for the sale',
+      mission: 1,
+      minutes: 7,
+      lead: 'A ring moves few keys. It does not promise that the servers get equal shares.',
+      sections: [
+        {
+          title: 'Why are the shares on a ring uneven?',
+          hook: 'Each server sits at one point, and the points are where the hash puts them. Nothing spaces them evenly.',
+          body: [
+            { p: 'A server owns the arc from the server before it up to itself. With a handful of random points, some arcs are several times longer than others. A server with a long arc holds more keys than its memory fits, while another sits half empty.' },
+            { p: 'Failures make it worse. When a server leaves, its whole arc passes to the next server, which now owns two arcs.' },
+          ],
+          takeaway: 'One point per server gives arcs, and so shares, of very different sizes.',
+          quiz: [],
+        },
+        {
+          title: 'How do virtual nodes even out the shares?',
+          hook: 'Give every server many points on the ring, not one. Each point is a <b>virtual node</b>.',
+          body: [
+            {
+              figure: 'figArcs',
+              alt: 'With one point per server, three servers own three arcs of very different lengths, and one covers more than half the ring. With many points per server, the ring is cut into many small arcs in alternating colours, and each server\'s arcs add up to about a third.',
+              caption: 'Many small arcs add up to a fair share',
+            },
+            { p: 'A server now owns many small arcs spread around the ring. Long and short arcs average out, so the totals come out close to equal. Four times as many points roughly halves the spread.' },
+            { p: 'When a server fails, its small arcs pass to many different servers, so no single neighbour takes the whole load. The price is memory: every web server keeps a table of all the points.' },
+          ],
+          takeaway: 'Many points per server even out the shares, at the cost of a bigger table.',
+          quiz: [4, 5, 6],
+        },
+      ],
+      checks: [
+        {
+          q: `A ring has ${vnCheck.servers} servers with ${vnCheck.vnodes} virtual nodes each. One server fails. Where does its load go?`,
+          options: [
+            { t: 'To the next server clockwise', why: `That is the case with one point per server. This server had ${vnCheck.vnodes} points, each with a different neighbour.` },
+            { t: 'To all five other servers, in small pieces', right: true, why: `Each of its ${vnCheck.vnodes} small arcs passes to whichever server comes next on the ring.` },
+          ],
+        },
+      ],
+      youWill: [
+        'see how unevenly one point per server shares the keys',
+        `raise the virtual nodes until the busiest server is at most ${percent(SPREAD_MAX)} above the average`,
+        `add a server: at most ${percent(MOVE_MAX)} of keys may move`,
+        `stay within $${fmt(BUDGET)} a month`,
+      ],
+      debrief: {
+        saw: 'With hundreds of points per server the shares evened out, and the new server took a little from every other one.',
+        number: [percent(SPREAD_MAX), 'the most the busiest server was above the average'],
+        next: `The sale doubles the traffic to ${fmt(SALE_QPS)} requests a second. One server's share of misses is now more than the database can take.`,
+      },
+    },
+    {
+      title: 'The sale doubles the reads',
+      mission: 2,
+      minutes: 7,
+      lead: 'The ring keeps a failure small. How small depends on how many servers you have.',
+      sections: [
+        {
+          title: 'How big is the storm when a server fails?',
+          hook: `A cluster answers ${fmt(miss.reads)} reads a second with a ${percent(miss.hit)} hit rate. One server fails, and its share of the hits become misses.`,
+          body: [
+            {
+              calc: {
+                formula: 'Extra reads on the database = reads × hit rate ÷ servers.',
+                rows: [
+                  { label: `With ${miss.few} servers`, work: `${fmt(miss.reads)} reads/s × ${miss.hit} ÷ ${miss.few}`, result: `${fmt(storm(miss.few))} reads/s` },
+                  { label: `With ${miss.many} servers`, work: `${fmt(miss.reads)} reads/s × ${miss.hit} ÷ ${miss.many}`, result: `${fmt(storm(miss.many))} reads/s` },
+                ],
+                result: `Twice the servers, half the storm: ${fmt(storm(miss.many))} extra reads a second where there were ${fmt(storm(miss.few))}.`,
+              },
+            },
+            { p: 'So the same memory bought as more, smaller servers is safer. Eight servers of half the size cost about the same as four, and each failure is half as bad.' },
+          ],
+          takeaway: 'A failure moves one share of the keys, so more servers mean a smaller storm.',
+          quiz: [9, 8],
+        },
+        {
+          title: 'What does a ring not fix?',
+          hook: 'A ring spreads <b>keys</b> evenly. It cannot spread the reads of one key.',
+          body: [
+            { p: 'One key lives on one server, wherever you put it. If a single profile is read thousands of times a second, all of those reads go to the server that holds it. This is the hot key from Level 9 again, and it needs its own fix: more copies of that one item, or a server set aside for it.' },
+          ],
+          takeaway: 'Consistent hashing balances keys, not the popularity of one key.',
+          quiz: [7],
+        },
+      ],
+      checks: [
+        {
+          q: `A cluster answers ${fmt(stCheck.reads)} reads a second with ${percent(stCheck.hit)} hits, on ${stCheck.n} servers. One fails. How many more reads reach the database?`,
+          options: [
+            { t: `${fmt(stCheck.reads / stCheck.n)} reads/s`, why: 'Only the hits on the failed server become new misses. Multiply by the hit rate.' },
+            { t: `${fmt(stCheck.extra)} reads/s`, right: true, why: `${fmt(stCheck.reads)} × ${stCheck.hit} ÷ ${stCheck.n} = ${fmt(stCheck.extra)}.` },
+            { t: `${fmt(stCheck.reads * stCheck.hit)} reads/s`, why: 'That would be every server failing at once.' },
+          ],
+        },
+      ],
+      youWill: [
+        'keep the same total memory and price, with more and smaller servers',
+        `keep the busiest server at most ${percent(SPREAD_MAX)} above the average`,
+        'let server C fail during the sale and stay above the Served target',
+        `stay within $${fmt(SALE_BUDGET)} a month`,
+      ],
+    },
+  ],
+  wrap: {
+    picture: 'figBuiltEnd',
+    alt: 'The design you built: web servers find each profile on a cluster of cache servers arranged as a ring, where every server owns many small sections. On a miss they read the database.',
+    say: [
+      '"With hash mod N, changing the number of servers remaps almost every key."',
+      '"Consistent hashing puts servers and keys on a ring, so a change moves only about k over n keys."',
+      '"Virtual nodes give each server many small arcs, so shares are even and a failure is spread out."',
+    ],
+    numbers: [
+      ['k ÷ n', 'keys that move on a ring'],
+      [percent(re.move), `of keys move when ${re.from} servers become ${re.to} with hash % N`],
+    ],
+    loop: `The interview steps again: ${scope} (the keys that move), ${sketch} (cache cluster on a ring), ${deep} (virtual nodes, and how many servers), ${stress} (you lost a server, added one, then lost one during a sale).`,
+    broken: 'A cache may lose its data. A database may not. The next level builds a store on the same ring that keeps several copies of every item and stays up when servers fail.',
+  },
+};
+
+// ---------------- Lesson pictures ----------------
+// Three servers' colours in the ring pictures, always shown with their letters as well.
+const SERVER_FILL = { A: 'ic-web', B: 'ic-data', C: 'ic-data-top' };
+/** A point on a circle at `share` of the way round, clockwise from the top. */
+const onCircle = (cx, cy, r, share) => {
+  const a = 2 * Math.PI * share - Math.PI / 2;
+  return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+};
+/** 1 when the clockwise arc from share `a` to share `b` is more than half the circle (SVG's large-arc flag). */
+const large = (a, b) => ((b - a + 1) % 1 > 0.5 ? 1 : 0);
+/** An arc path from share `a` to share `b`, clockwise, on a circle of radius `r`. */
+const arcPath = (cx, cy, r, a, b) => {
+  const [x1, y1] = onCircle(cx, cy, r, a), [x2, y2] = onCircle(cx, cy, r, b);
+  return `M ${x1} ${y1} A ${r} ${r} 0 ${large(a, b)} 1 ${x2} ${y2}`;
+};
+/** A band between radius `r1` (inside) and `r2` (outside), clockwise from share `a` to share `b`. */
+const bandPath = (cx, cy, r1, r2, a, b) => {
+  const [x1, y1] = onCircle(cx, cy, r2, b), [x2, y2] = onCircle(cx, cy, r2, a);
+  return `${arcPath(cx, cy, r1, a, b)} L ${x1} ${y1} A ${r2} ${r2} 0 ${large(a, b)} 0 ${x2} ${y2} Z`;
+};
+
+/**
+ * A ring cut into each server's arcs, from the game's own hash: `vnodes` points per server, each arc in its
+ * server's colour, as a band `band` wide inside radius `r`.
+ * @param {Record<string, Function>} f the drawing helpers `drawFigures` is given
+ * @param {SVGSVGElement} svg
+ */
+function drawArcs(f, svg, cx, cy, r, band, vnodes) {
+  const pts = ringPoints(Object.keys(SERVER_FILL), vnodes).map(([p, s]) => [p / 2 ** 32, s]);
+  pts.forEach(([to, s], i) => {
+    const from = pts[(i + pts.length - 1) % pts.length][0];
+    f.svgEl('path', { d: bandPath(cx, cy, r - band, r, from, to), class: SERVER_FILL[s] }, svg);
+  });
+}
+
+/**
+ * Four servers on a ring, each key going clockwise to the next one; drawn again with C down, where only C's keys
+ * move on, to D. Positions are spaced for reading, not hashed.
+ * @param {Record<string, Function>} f the drawing helpers `drawFigures` is given
+ * @param {SVGSVGElement} svg
+ */
+function drawRing(f, svg) {
+  const { svgEl, figLabel, figDash, figSvg } = f;
+  figSvg(svg, 320);
+  const servers = { A: 0.05, B: 0.3, C: 0.55, D: 0.8 }, keys = [0.15, 0.22, 0.4, 0.47, 0.68, 0.92];
+  const next = (k, names) => names.map((s) => [s, (servers[s] - k + 1) % 1]).sort((a, b) => a[1] - b[1])[0][0];
+  const panels = [{ x: 20, label: 'Servers A to D', down: null }, { x: 330, label: 'Server C fails', down: 'C' }];
+  for (const { x, label, down } of panels) {
+    const cx = x + 145, cy = 165, R = 95, names = Object.keys(servers).filter((s) => s !== down);
+    svgEl('rect', { x, y: 10, width: 290, height: 300, rx: 12, class: 'tier-box' }, svg);
+    figLabel(svg, x + 14, 30, label, 'start', 'tier-label');
+    svgEl('circle', { cx, cy, r: R, class: 'd-line' }, svg);
+    let moved = 0;
+    for (const k of keys) {
+      const to = next(k, names), was = next(k, Object.keys(servers));
+      if (to !== was) { moved++; svgEl('path', { d: arcPath(cx, cy, R - 18, k, servers[to] - 0.02), class: 'd-arc' }, svg); }
+      figDash(svg, arcPath(cx, cy, R - 18, k + 0.015, servers[to] - 0.02));
+      const [kx, ky] = onCircle(cx, cy, R, k);
+      svgEl('circle', { cx: kx, cy: ky, r: 5, class: 'ch-pt' }, svg);
+    }
+    for (const [s, at] of Object.entries(servers)) {
+      const [sx, sy] = onCircle(cx, cy, R, at);
+      const g = svgEl('g', s === down ? { class: 'fig-down' } : {}, svg);
+      svgEl('rect', { x: sx - 12, y: sy - 12, width: 24, height: 24, rx: 5, class: 'node-box' }, g);
+      figLabel(g, sx, sy + 4, s);
+    }
+    figLabel(svg, cx, 294, down ? `Only ${down}'s ${moved} keys move, to D` : `${keys.length} keys, each to the next server`);
+  }
+}
+
+/**
+ * The finished design, drawn for the intro and again for the wrap-up: web servers look up each profile on a cache
+ * cluster whose servers own many small arcs of a ring, and read the database on a miss.
+ * @param {Record<string, Function>} f the drawing helpers `drawFigures` is given
+ * @param {SVGSVGElement} svg
+ */
+function drawBuilt(f, svg) {
+  const { figNode, figArrow, figSvg, figLabel } = f;
+  figSvg(svg, 540);
+  figNode(svg, 'users', 320, 46, 'Users', 'Open profiles');
+  figNode(svg, 'lb', 320, 156, 'Load balancer', 'Shares requests');
+  figArrow(svg, 320, 76, 320, 126, '', null, 0, 0);
+  figNode(svg, 'web', 320, 266, 'Web servers', 'Autoscaled');
+  figArrow(svg, 320, 186, 320, 236, '', null, 0, 0);
+  figNode(svg, 'ring', 150, 386, 'Cache cluster', 'Servers on a ring');
+  figNode(svg, 'db', 490, 386, 'Database', 'Every profile');
+  figArrow(svg, 270, 296, 190, 356, 'lookups', null, 222, 326, 'end');
+  figArrow(svg, 370, 296, 450, 356, 'on a miss', null, 418, 326);
+  drawArcs(f, svg, 150, 476, 44, 16, ring.choices.hashing.options.v10.vnodes);
+  figLabel(svg, 214, 480, 'many small arcs per server', 'start');
+}
 
 const even = (m) => m.ringSpread != null && m.ringSpread <= SPREAD_MAX + 1e-9;
 /** @type {Goal} */
@@ -34,7 +385,7 @@ const dbOver = (m) => { const st = Object.values(m.node).find((s) => s.unit === 
 export default {
   id: 11,
   saveKey: 'sdl-level11-v1',
-  saveVersion: 1,
+  saveVersion: 2, // 2: which missions were opened from the lesson (`opened`)
   targets,
   // The day's traffic curve (for the autoscaled web servers), and the profiles the cache cluster holds.
   workload: { day: dayTraffic(), catalogGB: 40, readGapSecs: 60, cacheTtlSecs: 3600 },
@@ -125,7 +476,7 @@ export default {
 
   missions: [
     {
-      title: 'Server C fails', ref: 'The rehashing problem', qps: 2000, writes: 0.05, budget: BUDGET,
+      title: 'Server C fails', ref: 'The rehashing problem', qps: QPS, writes: 0.05, budget: BUDGET,
       gate: {
         hidesTraffic: false,
         lo: 79, hi: 81,
@@ -153,7 +504,7 @@ export default {
       takeaway: 'Only C\'s keys moved, and the database carried their misses. With hash % N most keys move when N changes: (N − 1) / N of them. On a ring, only the keys of the server that left. But C\'s arc was small: with one point per server, E owns 61% of the ring, so had E failed, 61% of the keys would have moved, all to one server. Mission 2 fixes that.',
     },
     {
-      title: 'One more server for the sale', ref: 'Virtual nodes', qps: 2000, writes: 0.05, budget: BUDGET,
+      title: 'One more server for the sale', ref: 'Virtual nodes', qps: QPS, writes: 0.05, budget: BUDGET,
       story: 'A sale is coming, and you add a cache server. On a ring with one point per server, the servers own arcs of very different sizes: one holds far more profiles than its memory fits, while another sits half empty. Keep every server within 10% of the average, before and after the new one joins.',
       goals: [
         servedGoal(targets), latGoal(targets), spreadGoal, costGoal(BUDGET),
@@ -163,8 +514,8 @@ export default {
       takeaway: 'Each server now owns hundreds of small arcs, so the shares even out, and a new server takes a little from every other one. More virtual nodes cost only a bigger ring table in each web server\'s memory.',
     },
     {
-      title: 'The sale doubles the reads', ref: 'k/n keys move', qps: 4000, writes: 0.05, budget: SALE_BUDGET,
-      story: 'The sale doubles the traffic: 4,000 requests a second, of which 3,800 read a profile. If server C fails now, its fifth of the keys misses all at once: 3,800 × 98% hits × 1/5 ≈ 745 more reads a second, on top of the 270 the database already gets, and the four servers left hold only 32 GB of the 40, so they miss more too: over 1,000 reads a second. It takes 800. The budget allows no more cache memory than 5 L servers have: 40 GB.',
+      title: 'The sale doubles the reads', ref: 'k/n keys move', qps: SALE_QPS, writes: 0.05, budget: SALE_BUDGET,
+      story: `The sale doubles the traffic: ${fmt(SALE_QPS)} requests a second, of which 3,800 read a profile. If server C fails now, its fifth of the keys misses all at once: 3,800 × 98% hits × 1/5 ≈ 745 more reads a second, on top of the 270 the database already gets, and the four servers left hold only 32 GB of the 40, so they miss more too: over 1,000 reads a second. It takes 800. The budget allows no more cache memory than 5 L servers have: 40 GB.`,
       goals: [
         servedGoal(targets), latGoal(targets), spreadGoal, costGoal(SALE_BUDGET),
         { id: 'lose-c', type: 'exp', text: 'Break it: server C fails during the sale; at least 99% served' },
@@ -215,130 +566,42 @@ export default {
     passText: passText(11, 'Distributed key-value store'),
     failText,
     questions: [
-      { q: 'Six cache servers use hash(key) % 6. One fails and the cluster switches to % 5. Roughly what share of keys get a new server?', o: ['About 1/6', 'About 5/6', 'About 1/5', 'All of them'], a: 1, e: 'A key keeps its server only when % 6 and % 5 still pick the same one: 5 of every 30 hash values in a row, 1 in 6. So 5/6 of the keys move, not just the failed server\'s sixth. Their new servers don\'t hold them yet, so they all miss at once: a cache-miss storm.', r: 'The rehashing problem' },
-      { q: 'On a hash ring, which server stores a key?', o: ['The next server clockwise', 'The server with the closest number', 'The server named by hash % N', 'A random server, chosen on every read'], a: 0, e: 'Servers and keys are hashed onto the same ring. From the key\'s position, go clockwise until you reach a server: that one stores it.', r: 'The hash ring' },
-      { q: 'A ring holds k keys on n servers. About how many keys move when one server is added?', o: ['k', 'k / 2', 'k / n', 'n'], a: 2, e: 'The new server takes over one range of the ring, about 1/n of the keys. Every other key keeps its server.', r: 'The hash ring' },
-      { q: 'Server S is added to a ring. Which keys move to it?', o: ['Keys between S and the next server clockwise', 'Every key with an even hash', 'Keys spread evenly over all servers', 'From S back to the previous server'], a: 3, e: 'S now comes first clockwise for the keys between the previous server and S. Going anticlockwise from S to the previous server gives that range; those keys used to belong to the server after S.', r: 'The hash ring' },
-      { q: 'Why do virtual nodes help?', o: ['A server\'s share sums many small arcs', 'They copy every key to two servers', 'They make each lookup faster than hash % N', 'They stop servers from failing'], a: 0, e: 'With one point each, arcs vary a lot in size. With many points per server, each server\'s share is the sum of many small arcs, which averages out.', r: 'Virtual nodes' },
-      { q: 'With 100 virtual nodes per server, the shares vary by about 10%. About how much with 400?', o: ['About 2.5%', 'About 5%', 'About 10%', 'About 1%'], a: 1, e: 'The spread falls with the square root of the number of virtual nodes: 1 ÷ √100 = 10%, 1 ÷ √400 = 5%. Four times the nodes halves it.', r: 'Virtual nodes' },
-      { q: 'What does a cluster pay for more virtual nodes?', o: ['More memory for every cached key', 'A higher miss rate on every read', 'Slower network between servers', 'A bigger ring table'], a: 3, e: 'Every client keeps the ring\'s points. More virtual nodes means more entries to store and search, and more ranges to track when servers change. The data itself is the same.', r: 'Virtual nodes' },
-      { q: 'Three creator accounts, each with 50 million followers, are read all the time. What does consistent hashing do for them?', o: ['It puts each one on its own server', 'It splits each account over all servers', 'Little: one key, one server', 'It moves them to the database'], a: 2, e: 'Consistent hashing spreads many keys evenly, so hot keys are less likely to pile up on one server. But a single hot key still lives on one server. To spread its reads, keep copies on several servers or in each web server\'s memory.', r: 'Hot keys' },
-      { q: 'You keep the cost and memory of 4 large cache servers but use 8 of half the size. Why can that be better?', o: ['A failure moves 1/8 of keys', 'Each lookup gets answered faster', 'They hold more keys in memory', 'They need no virtual nodes'], a: 0, e: 'On a ring, a failed server\'s keys move: k/n of them. With 8 servers that is an eighth, so the miss storm on the database is half as big.', r: 'Numbers to carry into the interview' },
-      { q: 'A cluster answers 9,000 reads/s with 95% hits. One of 6 servers fails. About how many more reads/s reach the database right after?', o: ['About 9,000', 'About 1,425', 'About 450', 'About 7,125'], a: 1, e: 'Its sixth of the keys now misses: 9,000 × 95% × 1/6 ≈ 1,425 more reads a second, until those keys are cached again.', r: 'Numbers to carry into the interview' },
+      { q: 'Six cache servers use hash(key) % 6. One fails and the cluster switches to % 5. Roughly what share of keys get a new server?', o: ['About 1/6', 'About 5/6', 'About 1/5', 'All of them'], a: 1, e: 'A key keeps its server only when % 6 and % 5 still pick the same one: 5 of every 30 hash values in a row, 1 in 6. So 5/6 of the keys move, not just the failed server\'s sixth. Their new servers don\'t hold them yet, so they all miss at once: a cache-miss storm.', r: 'Why does losing one cache server make almost every key miss?' },
+      { q: 'On a hash ring, which server stores a key?', o: ['The next server clockwise', 'The server with the closest number', 'The server named by hash % N', 'A random server, chosen on every read'], a: 0, e: 'Servers and keys are hashed onto the same ring. From the key\'s position, go clockwise until you reach a server: that one stores it.', r: 'How does a hash ring place keys?' },
+      { q: 'A ring holds k keys on n servers. About how many keys move when one server is added?', o: ['k', 'k / 2', 'k / n', 'n'], a: 2, e: 'The new server takes over one range of the ring, about 1/n of the keys. Every other key keeps its server.', r: 'How many keys move on a ring?' },
+      { q: 'Server S is added to a ring. Which keys move to it?', o: ['Keys between S and the next server clockwise', 'Every key with an even hash', 'Keys spread evenly over all servers', 'From S back to the previous server'], a: 3, e: 'S now comes first clockwise for the keys between the previous server and S. Going anticlockwise from S to the previous server gives that range; those keys used to belong to the server after S.', r: 'How does a hash ring place keys?' },
+      { q: 'Why do virtual nodes help?', o: ['A server\'s share sums many small arcs', 'They copy every key to two servers', 'They make each lookup faster than hash % N', 'They stop servers from failing'], a: 0, e: 'With one point each, arcs vary a lot in size. With many points per server, each server\'s share is the sum of many small arcs, which averages out.', r: 'How do virtual nodes even out the shares?' },
+      { q: 'With 100 virtual nodes per server, the shares vary by about 10%. About how much with 400?', o: ['About 2.5%', 'About 5%', 'About 10%', 'About 1%'], a: 1, e: 'The spread falls with the square root of the number of virtual nodes: 1 ÷ √100 = 10%, 1 ÷ √400 = 5%. Four times the nodes halves it.', r: 'How do virtual nodes even out the shares?' },
+      { q: 'What does a cluster pay for more virtual nodes?', o: ['More memory for every cached key', 'A higher miss rate on every read', 'Slower network between servers', 'A bigger ring table'], a: 3, e: 'Every client keeps the ring\'s points. More virtual nodes means more entries to store and search, and more ranges to track when servers change. The data itself is the same.', r: 'How do virtual nodes even out the shares?' },
+      { q: 'Three creator accounts, each with 50 million followers, are read all the time. What does consistent hashing do for them?', o: ['It puts each one on its own server', 'It splits each account over all servers', 'Little: one key, one server', 'It moves them to the database'], a: 2, e: 'Consistent hashing spreads many keys evenly, so hot keys are less likely to pile up on one server. But a single hot key still lives on one server. To spread its reads, keep copies on several servers or in each web server\'s memory.', r: 'What does a ring not fix?' },
+      { q: 'You keep the cost and memory of 4 large cache servers but use 8 of half the size. Why can that be better?', o: ['A failure moves 1/8 of keys', 'Each lookup gets answered faster', 'They hold more keys in memory', 'They need no virtual nodes'], a: 0, e: 'On a ring, a failed server\'s keys move: k/n of them. With 8 servers that is an eighth, so the miss storm on the database is half as big.', r: 'How big is the storm when a server fails?' },
+      { q: 'A cluster answers 9,000 reads/s with 95% hits. One of 6 servers fails. About how many more reads/s reach the database right after?', o: ['About 9,000', 'About 1,425', 'About 450', 'About 7,125'], a: 1, e: 'Its sixth of the keys now misses: 9,000 × 95% × 1/6 ≈ 1,425 more reads a second, until those keys are cached again.', r: 'How big is the storm when a server fails?' },
     ],
   },
 
-  // Lesson tab content (HTML). The diagrams below draw into figRing and figAdd.
-  lessonHtml: `
-    <p class="label">Level 11 · Consistent hashing</p>
-    <h1>Consistent hashing</h1>
-    <p class="lede">Your social app keeps its profiles on a cluster of cache servers. In this level a server fails, a server joins, and the traffic doubles. You pick how keys are placed, so that each change moves as few of them as possible and every server carries a fair share.</p>
-    <div class="goals-box">
-      <div><b>You will learn</b>Why hash % N breaks when servers change, the hash ring, and virtual nodes.</div>
-      <div><b>You will decide</b>The hashing, the number of servers, and their size.</div>
-      <div><b>You will estimate</b>How many keys move, and how many reads hit the database.</div>
-    </div>
+  lesson,
 
-    <section>
-      <h2>The rehashing problem</h2>
-      <p class="src">hash % N</p>
-      <p>To spread keys over N cache servers, a common first idea is <code>server = hash(key) % N</code>. With five servers, A to E, that is <code>% 5</code>. It is even, and it works as long as N never changes.</p>
-      <p>Now server C fails, and the web servers switch to <code>% 4</code> over A, B, D and E. The hash of each key is the same, but the remainder is not:</p>
-      <div class="tbl-wrap"><table class="t">
-        <thead><tr><th>Key</th><th>hash % 5</th><th>hash % 4</th><th>Server</th></tr></thead>
-        <tbody>
-          <tr><td><code>user:17</code></td><td class="n">4 → E</td><td class="n">3 → E</td><td>stays</td></tr>
-          <tr><td><code>user:204</code></td><td class="n">0 → A</td><td class="n">2 → D</td><td>moves</td></tr>
-          <tr><td><code>user:3311</code></td><td class="n">3 → D</td><td class="n">1 → B</td><td>moves</td></tr>
-          <tr><td><code>user:58</code></td><td class="n">3 → D</td><td class="n">0 → A</td><td>moves</td></tr>
-          <tr><td><code>user:902</code></td><td class="n">0 → A</td><td class="n">1 → B</td><td>moves</td></tr>
-          <tr><td><code>user:76</code></td><td class="n">2 → C</td><td class="n">1 → B</td><td>moves</td></tr>
-        </tbody>
-      </table></div>
-      <p>Most keys move, not just C's. Over all keys, 80% get a new server. The new server doesn't hold them yet, so their reads miss and go to the database at once: a <b>cache-miss storm</b>.</p>
-    </section>
-
-    <section>
-      <h2>The hash ring</h2>
-      <p class="src">Consistent hashing</p>
-      <p>Consistent hashing changes as few keys as possible when servers change: on average only <b>k / n</b> of them, for k keys and n servers. Take the output range of a hash function, here 0 to 2<sup>32</sup> − 1, and join its two ends into a ring. Hash each server's name onto the ring, and each key too. A key is stored on the <b>first server clockwise</b> from it.</p>
-      <figure class="fig"><svg id="figRing" viewBox="0 0 660 300" role="img" aria-label="A hash ring with servers A, B, C and D. Keys user:17, user:4410, user:204, user:3311 and user:58 each go clockwise to the next server: A, B, D, C and C."></svg><figcaption>Each key goes clockwise to the next server. Real positions from the game's hash</figcaption></figure>
-      <p><b>Remove a server</b> and only its keys move, to the next server clockwise. <b>Add a server</b> and it takes the keys between it and the previous server: start at the new server and go anticlockwise until you reach another one. That is the affected range; every other key stays.</p>
-      <figure class="fig"><svg id="figAdd" viewBox="0 0 660 300" role="img" aria-label="Server E joins the ring between D and C. The keys between D and E, such as user:3311 and user:58, move from C to E. All other keys stay."></svg><figcaption>E joins: only the keys from D to E move, all from C</figcaption></figure>
-    </section>
-
-    <section>
-      <h2>Virtual nodes</h2>
-      <p class="src">Two problems, one fix</p>
-      <p>With one point per server, two things go wrong. The arcs between servers can be very different in size: on the ring above, C owns 71% of it and D only 6%. And when a server leaves, its whole arc goes to one neighbour, which can double that neighbour's share.</p>
-      <p>The fix is <b>virtual nodes</b>: place each server on the ring many times, as <code>A#0</code>, <code>A#1</code>, and so on. A server's share is then the sum of many small arcs, which averages out. The spread falls with the square root of the count: with 100 virtual nodes per server, shares vary by about 10% (one standard deviation); with 200, about 7%. When a server leaves, each of its arcs goes to a different neighbour, so its keys spread over all the others.</p>
-      <p>The cost is a bigger ring table: every client stores and searches all the points, and there are more ranges to track when servers change. Pick the count that makes the spread small enough.</p>
-    </section>
-
-    <section>
-      <h2>Hot keys</h2>
-      <p class="src">What it doesn't fix</p>
-      <p>Consistent hashing spreads many keys evenly, so busy keys are less likely to pile up on one server. But each key still lives on one server. Three creator accounts with 50 million followers each are read all day; whichever server holds one of them gets all its reads. Spread those differently: keep copies of hot keys on several servers, or in each web server's own memory.</p>
-      <p>Consistent hashing is used wherever data or requests are partitioned over servers that come and go: partitioned databases, distributed caches, content delivery networks and load balancers.</p>
-    </section>
-
-    <section>
-      <h2>How this level is simulated</h2>
-      <p class="src">Game assumptions</p>
-      <p>Every page reads one profile from a 40 GB catalog; popular profiles follow the 80/20 rule, as in Level 4. Each cache server keeps as much of its own share of the keys as its memory holds, the most read first, so a server with a bigger share answers fewer of its reads. Profiles stay cached for an hour. Right after a server joins or leaves, every key whose server changed misses once; the Break-it tests measure those first seconds.</p>
-      <p class="assume">Game assumptions: servers and keys are placed with a 32-bit hash (MurmurHash3) of their names, such as <code>cache-A</code> and <code>cache-A#7</code>. Shares and moved keys are measured on the ring, not estimated. A cache server handles 10,000 lookups a second; a server that fails is server C. The web servers are autoscaled groups.</p>
-    </section>
-
-    <section>
-      <h2>Numbers to carry into the interview</h2>
-      <p class="src">Capacity estimates</p>
-      <p><b>Keys that move</b> when n servers become n − 1: with hash % n, most of them ((n − 1) / n); on a ring, 1 / n.</p>
-      <p><b>The miss storm</b> = reads × hit rate × share of keys moved. 3,800 × 98% × 1/5 ≈ 745 extra reads a second.</p>
-      <p><b>The spread</b> with v virtual nodes per server: about 1 ÷ √v. 100 → 10%.</p>
-    </section>
-
-    <section>
-      ${lessonSteps([
-        'How many keys, how many servers, and how often do servers change?',
-        'Clients hash keys onto a ring of cache servers.',
-        'Clockwise lookup, virtual nodes, the affected range.',
-        'A server fails or joins: how many keys move, and can the database take the misses?',
-      ])}
-      <p>Consistent hashing is rarely the whole question. It comes up inside a bigger design, such as a distributed cache or key-value store, the moment you say "partition the data".</p>
-    </section>
-`,
-
-  // Lesson diagrams: two rings drawn from the game's own hash. `f` provides the engine's drawing helpers.
+  // Lesson diagrams. `f` provides the engine's drawing helpers. Each figure sets its own viewBox.
   drawFigures(f) {
-    const { $, svgEl, figLabel } = f;
-    const keys = ['user:17', 'user:4410', 'user:204', 'user:3311', 'user:58'];
-    const ring = (svg, names, added) => {
-      svg.textContent = '';
-      const cx = 170, cy = 150, R = 105, method = { vnodes: 1 }, before = added ? names.filter((s) => s !== added) : null;
-      const at = (p, r) => { const a = 2 * Math.PI * p - Math.PI / 2; return [cx + r * Math.cos(a), cy + r * Math.sin(a)]; };
-      svgEl('circle', { cx, cy, r: R, class: 'd-line' }, svg);
-      if (added) {
-        // The affected range: anticlockwise from the new server to the one before it.
-        const pts = ringPoints(names, 1).map(([p, s]) => [p / 2 ** 32, s]), i = pts.findIndex(([, s]) => s === added);
-        const to = pts[i][0], from = pts[(i + pts.length - 1) % pts.length][0];
-        const [x1, y1] = at(from, R), [x2, y2] = at(to, R), large = ((to - from + 1) % 1) > 0.5 ? 1 : 0;
-        svgEl('path', { d: `M ${x1} ${y1} A ${R} ${R} 0 ${large} 1 ${x2} ${y2}`, class: 'd-arc' }, svg);
-      }
-      for (const [p, s] of ringPoints(names, 1)) {
-        const [x, y] = at(p / 2 ** 32, R), [lx, ly] = at(p / 2 ** 32, R + 20);
-        svgEl('rect', { x: x - 7, y: y - 7, width: 14, height: 14, rx: 2, class: s === added ? 'd-step' : 'ic-data' }, svg);
-        figLabel(svg, lx, ly + 4, s);
-      }
-      keys.forEach((k, i) => {
-        const home = keyHome(k, names, method), [x, y] = at(home.pos, R), [lx, ly] = at(home.pos, R - 17);
-        svgEl('circle', { cx: x, cy: y, r: 4, class: 'ch-pt' }, svg);
-        figLabel(svg, lx, ly + 4, i + 1);
-        const was = before ? keyHome(k, before, method).server : home.server;
-        const t = svgEl('text', { x: 360, y: 82 + i * 34, class: 'd-label' }, svg);
-        t.textContent = `${i + 1}  ${k} → ${home.server}${was !== home.server ? ` (was ${was})` : ''}`;
+    const { $, svgEl, figSvg, figLabel } = f;
+    drawRing(f, $('figRing'));
+
+    // One point per server, then many: the same three servers' arcs and shares, from the game's hash.
+    const f2 = figSvg($('figArcs'), 300);
+    const { ring: one, v10 } = ring.choices.hashing.options;
+    for (const { x, vnodes, label } of [{ x: 20, vnodes: one.vnodes, label: 'One point per server' }, { x: 330, vnodes: v10.vnodes, label: `${v10.vnodes} points per server` }]) {
+      const cx = x + 145, shares = keyShares(Object.keys(SERVER_FILL), { vnodes });
+      svgEl('rect', { x, y: 10, width: 290, height: 280, rx: 12, class: 'tier-box' }, f2);
+      figLabel(f2, x + 14, 30, label, 'start', 'tier-label');
+      drawArcs(f, f2, cx, 140, 90, 26, vnodes);
+      Object.entries(SERVER_FILL).forEach(([s, cls], i) => {
+        const lx = x + 30 + i * 90;
+        svgEl('rect', { x: lx, y: 252, width: 14, height: 14, rx: 3, class: cls }, f2);
+        figLabel(f2, lx + 20, 264, `${s} ${percent(Math.round(shares[s] * 100) / 100)}`, 'start');
       });
-    };
-    ring($('figRing'), serverNames(4));
-    ring($('figAdd'), serverNames(5), 'E');
+    }
+
+    drawBuilt(f, $('figBuilt'));
+    drawBuilt(f, $('figBuiltEnd'));
   },
 };
