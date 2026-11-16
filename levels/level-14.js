@@ -462,7 +462,7 @@ export default {
 
   missions: [
     {
-      title: 'Short links', ref: 'URL redirecting', qps: 2200, writes: WRITES, budget: BUDGET,
+      title: 'Short links', ref: 'Short codes', qps: 2200, writes: WRITES, budget: BUDGET,
       gate: {
         hidesTraffic: false,
         lo: 7, hi: 7,
@@ -499,7 +499,7 @@ export default {
       takeaway: '302 trades load for data: every click reaches you and can be counted. A per-account limit turns the bulk script away with 429s before it reaches the database.',
     },
     {
-      title: 'Private links', ref: 'Hash + collision resolution', qps: 2800, writes: 800 / 2800, budget: BUDGET,
+      title: 'Private links', ref: 'Unguessable codes', qps: 2800, writes: 800 / 2800, budget: BUDGET,
       story: 'Partners now shorten every link in their emails, many of them private (a shared document, an invoice): 800 new links and 2,000 clicks a second. Codes in sequence let anyone try the next one, so codes must not be guessable. Keep it up when one of them goes viral.',
       goals: [
         privateGoal, countGoal, servedGoal(targets), latGoal(targets), costGoal(BUDGET),
