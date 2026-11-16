@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures.js';
-import { registerCommonTests } from '../shared-checks.js';
+import { registerCommonTests, registerPageLessonTests } from '../shared-checks.js';
 import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, sampleRoutes, openMission, selectNode, setProps, calm, pressEnterOn } from '../helpers.js';
 
 // Level 10: Rate limiter.
@@ -25,8 +25,10 @@ const measure = (page) => page.evaluate(() => {
 test.describe('Level 10 · playthrough', () => {
   test('all three missions can be completed', async ({ page }) => {
     const errors = trackErrors(page);
-    await freshPage(page, '#level-10/build');
+    await freshPage(page, '#level-10/lesson');
     await expect(page.locator('#lvlChip')).toHaveText('Level 10 / 21');
+    // Each mission opens from its card in the lesson, and a finished one leads back there.
+    await page.getByRole('button', { name: 'Start Mission 1' }).click();
 
     // Mission 1: a rate limiter with a bucket of 12 (set through the inspector).
     const r1 = await addLimiter(page);
@@ -39,7 +41,10 @@ test.describe('Level 10 · playthrough', () => {
     expect(await state(page, () => window.__sdl.S.done[0])).toBe(true);
 
     // Mission 2: a sliding window counter, then the edge burst.
-    await page.click('#mission .complete button');
+    await page.click('#doneBanner [data-act="debrief"]');
+    await expect(page.locator('#lp-m0')).toBeFocused();
+    await page.getByRole('button', { name: 'Start Mission 2' }).click();
+    await expect(page.locator('#view-build')).toBeVisible();
     await selectNode(page, r1);
     await page.locator('#insp').getByRole('button', { name: /^Sliding window counter/ }).click();
     await page.click('#playBtn');
@@ -51,7 +56,10 @@ test.describe('Level 10 · playthrough', () => {
     expect(await state(page, () => window.__sdl.S.done[1])).toBe(true);
 
     // Mission 3: estimate, a second limiter and shared counters.
-    await page.click('#mission .complete button');
+    await page.click('#doneBanner [data-act="debrief"]');
+    await expect(page.locator('#lp-m1')).toBeFocused();
+    await page.getByRole('button', { name: 'Start Mission 3' }).click();
+    await expect(page.locator('#view-build')).toBeVisible();
     await page.fill('#estIn', '2');
     await page.click('#estBtn');
     const r2 = await page.evaluate(() => { const s = window.__sdl; s.addNode('limiter'); const n = s.S.nodes.at(-1); n.algo = 'scount'; s.tryConnect('u', n.id); s.tryConnect(n.id, 'l'); s.afterDesignChange(); return n.id; });
@@ -125,6 +133,7 @@ test.describe('Level 10 · numbers', () => {
 test.describe('Level 10 · teaching feedback', () => {
   test('a small bucket blocks real users, and the log says why', async ({ page }) => {
     await freshPage(page, '#level-10/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     await addLimiter(page);
     await page.click('#playBtn');
     await fastForward(page, 1);
@@ -194,6 +203,7 @@ test.describe('Level 10 · teaching feedback', () => {
 
   test('the inspector shows bots let through and real users blocked', async ({ page }) => {
     await freshPage(page, '#level-10/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     const id = await addLimiter(page);
     await page.click('#playBtn');
     await fastForward(page, 1);
@@ -232,9 +242,31 @@ test.describe('Level 10 · teaching feedback', () => {
   });
 });
 
+test.describe('Level 10 · saved data', () => {
+  test('a save from before the one-page lesson opens every mission it could already open', async ({ page }) => {
+    await freshPage(page, '#level-10/build');
+    await page.evaluate(() => {
+      const old = { ...JSON.parse(JSON.stringify(window.__sdl.S)), v: 1, mission: 1, done: [true, false, false], verified: [true, false, false] };
+      delete old.opened;
+      localStorage.setItem('sdl-level10-v1', JSON.stringify(old));
+    });
+    await reloadGame(page);
+    const s = await state(page, () => { const S = window.__sdl.S; return { done: S.done, mission: S.mission, v: S.v, opened: S.opened }; });
+    expect(s.done).toEqual([true, false, false]);
+    expect(s.mission).toBe(1);
+    expect(s.v).toBe(2);
+    expect(s.opened).toEqual([true, true, false]); // Mission 1, and Mission 2 because Mission 1 is done
+  });
+});
+
+test.describe('Level 10 · one-page lesson', () => {
+  registerPageLessonTests({ level: 10 });
+});
+
 test.describe('Level 10 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-10/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     await pressEnterOn(page, '.pal-item[data-type="limiter"]');
     const id = await state(page, () => window.__sdl.S.nodes.at(-1).id);
     await pressEnterOn(page, `[data-node="${id}"]`);
@@ -262,6 +294,7 @@ test.describe('Level 10 · layout and accessibility', () => {
     },
     onTab: {
       build: async (page) => {
+        await openMission(page, 0);
         const id = await addLimiter(page);
         await addCounters(page, [id]);
         await page.click('#playBtn'); await playFor(page, 0.5);
