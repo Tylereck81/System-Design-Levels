@@ -11,6 +11,7 @@ import { failText, passText } from './shared/quiz.js';
 import { fmt, count, percent, ms, rate } from '../js/format.js';
 import { SIZES, T } from '../js/engine/catalog.js';
 import { STEPS } from './mock-steps.js';
+import { lane } from './shared/figures.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 /** Every database must stay under this share busy, in all three missions. */
@@ -539,10 +540,7 @@ export default {
     // A timeline: the primary confirms order 501, then crashes before the copy leaves, so the replica never gets it.
     const f2 = figSvg($('figLag'), 270);
     figLabel(f2, 620, 24, 'time →', 'end', 'tier-label');
-    for (const { name, y, end } of [{ name: 'Shopper', y: 60, end: 620 }, { name: 'Primary', y: 150, end: 346 }, { name: 'Replica', y: 240, end: 620 }]) {
-      figLabel(f2, 24, y + 4, name, 'start', 'tier-label');
-      svgEl('line', { x1: 100, y1: y, x2: end, y2: y, class: 'tier-box' }, f2);
-    }
+    for (const { name, y, end } of [{ name: 'Shopper', y: 60, end: 620 }, { name: 'Primary', y: 150, end: 346 }, { name: 'Replica', y: 240, end: 620 }]) lane(f, f2, y, name, 100, end);
     figArrow(f2, 150, 62, 205, 146, 'order 501', null, 160, 108, 'end');
     figArrow(f2, 220, 146, 275, 62, 'saved', null, 262, 110);
     figLabel(f2, 275, 180, 'copy not sent yet');

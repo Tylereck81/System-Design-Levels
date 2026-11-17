@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures.js';
-import { registerCommonTests } from '../shared-checks.js';
+import { registerCommonTests, registerPageLessonTests } from '../shared-checks.js';
 import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, openMission, selectNode, setProps, pressEnterOn } from '../helpers.js';
 
 // Level 18: Chat system.
@@ -18,8 +18,10 @@ const breakIt = async (page, id) => { await page.click(`#exp-${id}`); await fast
 test.describe('Level 18 · playthrough', () => {
   test('all three missions can be completed', async ({ page }) => {
     const errors = trackErrors(page);
-    await freshPage(page, '#level-18/build');
+    await freshPage(page, '#level-18/lesson');
     await expect(page.locator('#lvlChip')).toHaveText('Level 18 / 21');
+    // Each mission opens from its card in the lesson, and a finished one leads back there.
+    await page.getByRole('button', { name: 'Start Mission 1' }).click();
 
     // Mission 1: estimate 20 GB, then WebSocket, service discovery and 4 servers; a server dies.
     await page.fill('#estIn', '20');
@@ -38,7 +40,10 @@ test.describe('Level 18 · playthrough', () => {
     await pause(page);
 
     // Mission 2: push to offline recipients; night falls.
-    await page.click('#mission .complete button');
+    await page.click('#doneBanner [data-act="debrief"]');
+    await expect(page.locator('#lp-m0')).toBeFocused();
+    await page.getByRole('button', { name: 'Start Mission 2' }).click();
+    await expect(page.locator('#view-build')).toBeVisible();
     await selectNode(page, 'm');
     await click(page, 'offline-push');
     await expect(page.locator('[data-node="m"] .node-sub')).toHaveText('pushes to offline users');
@@ -50,7 +55,10 @@ test.describe('Level 18 · playthrough', () => {
     await pause(page);
 
     // Mission 3: heartbeats; trains go through tunnels.
-    await page.click('#mission .complete button');
+    await page.click('#doneBanner [data-act="debrief"]');
+    await expect(page.locator('#lp-m1')).toBeFocused();
+    await page.getByRole('button', { name: 'Start Mission 3' }).click();
+    await expect(page.locator('#view-build')).toBeVisible();
     await selectNode(page, 'c');
     await click(page, 'presence-heartbeat');
     await page.click('#playBtn');
@@ -182,6 +190,7 @@ test.describe('Level 18 · teaching feedback', () => {
 
   test('the estimate accepts 20 and gives specific hints', async ({ page }) => {
     await freshPage(page, '#level-18/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     for (const [v, hint] of [['2', 'Check the units'], ['20000', 'That is MB']]) {
       await page.fill('#estIn', v);
       await page.click('#estBtn');
@@ -191,16 +200,30 @@ test.describe('Level 18 · teaching feedback', () => {
     await page.click('#estBtn');
     expect(await state(page, () => window.__sdl.S.est)).toBe(true);
   });
+});
 
-  test('the lesson diagram is drawn', async ({ page }) => {
+test.describe('Level 18 · one-page lesson', () => {
+  registerPageLessonTests({ level: 18 });
+
+  test('the pictures: the finished design; three ways to receive; one message\'s path; heartbeats through a tunnel', async ({ page }) => {
     await freshPage(page, '#level-18/lesson');
-    await expect(page.locator('#figChat')).toContainText('Message store');
+    // The finished design: phones get a chat server from service discovery; offline phones get a push.
+    for (const t of ['Service discovery', 'Chat servers', 'Message store', 'Presence', 'Notifications', 'Asleep phone', 'WebSocket']) await expect(page.locator('#figBuilt')).toContainText(t);
+    // Polling, long polling and WebSocket, each with the message arriving at the same moment.
+    for (const t of ['Polling', 'Long polling', 'WebSocket', 'nothing new', 'gets it', 'asks again', 'pushed at once']) await expect(page.locator('#figPoll')).toContainText(t);
+    await expect(page.locator('#figPoll .tier-box[rx]')).toHaveCount(3);
+    // Stored first, then over Ben's connection if he is online, or a push if he is asleep.
+    for (const t of ['Chat server 1', 'Stored first', 'Chat server 2', 'if online', 'if offline', 'push']) await expect(page.locator('#figFlow')).toContainText(t);
+    // Heartbeats every 5 s; three are lost in the tunnel, and the status stays online.
+    await expect(page.locator('#figBeat')).toContainText('every 5 s');
+    await expect(page.locator('#figBeat .ch-pt')).toHaveCount(7);
   });
 });
 
 test.describe('Level 18 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-18/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     await page.focus('#estIn');
     await page.keyboard.type('20');
     await page.keyboard.press('Enter');

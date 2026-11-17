@@ -12,6 +12,7 @@ import { catalogWorkload } from './shared/workload.js';
 import { fmt, percent, ms } from '../js/format.js';
 import { COMPONENTS, SIZES } from '../js/engine/catalog.js';
 import { STEPS } from './mock-steps.js';
+import { panel, lane } from './shared/figures.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 const DB_BUSY = 0.7;
@@ -371,22 +372,19 @@ function drawOrder(f, svg) {
     figLabel(svg, x + 16, y, text, 'start');
   };
   /** A dashed panel with a database lane and a cache lane; returns the two lanes' heights. */
-  const panel = (y, label) => {
-    svgEl('rect', { x: 10, y, width: 620, height: 180, rx: 12, class: 'tier-box' }, svg);
-    figLabel(svg, 24, y + 20, label, 'start', 'tier-label');
+  const timeline = (y, label) => {
+    panel(f, svg, y, 180, label);
     const lanes = { db: y + 74, cache: y + 154 };
-    for (const [name, ly] of [['Database', lanes.db], ['Cache', lanes.cache]]) {
-      figLabel(svg, 24, ly + 4, name, 'start', 'tier-label');
-      svgEl('line', { x1: 120, y1: ly, x2: 610, y2: ly, class: 'tier-box' }, svg);
-    }
+    lane(f, svg, lanes.db, 'Database', 120, 610);
+    lane(f, svg, lanes.cache, 'Cache', 120, 610);
     return lanes;
   };
-  const right = panel(10, 'Right order');
+  const right = timeline(10, 'Right order');
   figLabel(svg, 610, 30, 'time →', 'end', 'tier-label');
   step(150, right.db - 14, '1', 'write the new price');
   step(300, right.cache - 14, '2', 'delete the key');
   figArrow(svg, 460, right.db + 4, 460, right.cache - 4, 'caches new price', '3', 486, right.db + 44);
-  const wrong = panel(206, 'Wrong order');
+  const wrong = timeline(206, 'Wrong order');
   step(150, wrong.cache - 14, '1', 'delete the key');
   figArrow(svg, 300, wrong.db + 4, 300, wrong.cache - 4, 'caches old price', '2', 326, wrong.db + 44);
   step(450, wrong.db - 14, '3', 'write the new price');
@@ -563,21 +561,15 @@ export default {
 
   // Lesson diagrams. `f` provides the engine's drawing helpers. Each figure sets its own viewBox.
   drawFigures(f) {
-    const { $, svgEl, figNode, figArrow, figSvg, figLabel } = f;
-    /** A dashed frame with its label, for one panel of a before-and-after picture. */
-    const panel = (svg, y, height, label) => {
-      svgEl('rect', { x: 10, y, width: 620, height, rx: 12, class: 'tier-box' }, svg);
-      figLabel(svg, 24, y + 20, label, 'start', 'tier-label');
-    };
-
+    const { $, figNode, figArrow, figSvg } = f;
     // Hit: the cache answers. Miss: the web server asks the cache, reads the database, then stores the answer.
     const f1 = figSvg($('figAside'), 396);
-    panel(f1, 10, 150, 'Hit: the cache has it');
+    panel(f, f1, 10, 150, 'Hit: the cache has it');
     figNode(f1, 'web', 104, 96, 'Web server', 'Wants product 42');
     figNode(f1, 'cache', 536, 96, 'Cache', 'Has product 42');
     figArrow(f1, 198, 86, 442, 86, 'get product 42', null, 320, 78, 'middle');
     figArrow(f1, 442, 106, 198, 106, 'product 42', null, 320, 126, 'middle');
-    panel(f1, 176, 210, 'Miss: the cache does not have it');
+    panel(f, f1, 176, 210, 'Miss: the cache does not have it');
     figNode(f1, 'web', 104, 286, 'Web server', 'Wants product 42');
     figNode(f1, 'cache', 536, 236, 'Cache', 'No product 42');
     figNode(f1, 'db', 536, 346, 'Read replica', 'On disk');
@@ -591,7 +583,7 @@ export default {
       { y: 10, label: 'Warm cache', cacheSub: 'Answers 9 in 10', dbSub: 'Sized for misses', toCache: '9 reads in 10', toDb: '1 read in 10' },
       { y: 226, label: 'Cache just restarted', cacheSub: 'Empty after restart', dbSub: 'Overloaded', toCache: '10 misses', toDb: '10 reads in 10' },
     ]) {
-      panel(f2, y, 200, label);
+      panel(f, f2, y, 200, label);
       figNode(f2, 'web', 320, y + 66, 'Web server', 'Reads');
       figNode(f2, 'cache', 150, y + 160, 'Cache', cacheSub);
       figNode(f2, 'db', 490, y + 160, 'Read replica', dbSub);
