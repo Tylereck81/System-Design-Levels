@@ -12,6 +12,7 @@ import { filesWorkload } from './shared/workload.js';
 import { fmt, percent, ms } from '../js/format.js';
 import { COMPONENTS, T } from '../js/engine/catalog.js';
 import { STEPS } from './mock-steps.js';
+import { panel } from './shared/figures.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 /** Peak traffic in req/s, the share that writes, the share that are files and the share of shoppers far away: the same in all three missions. */
@@ -339,20 +340,19 @@ function drawPull(f, svg) {
  * @param {SVGSVGElement} svg
  */
 function drawCopies(f, svg) {
-  const { svgEl, figNode, figArrow, figSvg, figLabel } = f;
+  const { figNode, figArrow, figSvg, figLabel } = f;
   figSvg(svg, 420);
   /** One panel: the origin, the edge and the browser in a row, with a line under them. */
-  const panel = (y, label, subs, note) => {
-    svgEl('rect', { x: 10, y, width: 620, height: 190, rx: 12, class: 'tier-box' }, svg);
-    figLabel(svg, 24, y + 20, label, 'start', 'tier-label');
+  const scene = (y, label, subs, note) => {
+    panel(f, svg, y, 190, label);
     figNode(svg, 'web', 114, y + 100, 'Origin', subs[0]);
     figNode(svg, 'cdn', 320, y + 100, 'CDN edge', subs[1]);
     figNode(svg, 'users', 526, y + 100, 'Browser', subs[2]);
     figLabel(svg, 320, y + 168, note);
   };
-  panel(10, 'Same name: logo.svg', ['Has the new logo', 'Copy dropped', 'Still the old logo'], 'Invalidating reaches the edge, not the browser');
+  scene(10, 'Same name: logo.svg', ['Has the new logo', 'Copy dropped', 'Still the old logo'], 'Invalidating reaches the edge, not the browser');
   figArrow(svg, 320, 40, 320, 78, 'invalidate', null, 332, 62);
-  panel(220, 'New name: logo.v2.svg', ['Has logo.v2.svg', 'No copy: fetches it', 'No copy: fetches it'], 'No one has the new name, so everyone fetches it');
+  scene(220, 'New name: logo.v2.svg', ['Has logo.v2.svg', 'No copy: fetches it', 'No copy: fetches it'], 'No one has the new name, so everyone fetches it');
 }
 
 /** @type {Level} */
