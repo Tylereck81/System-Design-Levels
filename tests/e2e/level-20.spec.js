@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures.js';
-import { registerCommonTests } from '../shared-checks.js';
+import { registerCommonTests, registerPageLessonTests } from '../shared-checks.js';
 import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, openMission, selectNode, setProps, pressEnterOn } from '../helpers.js';
 
 // Level 20: Video platform.
@@ -18,8 +18,10 @@ const breakIt = async (page, id) => { await page.click(`#exp-${id}`); await fast
 test.describe('Level 20 · playthrough', () => {
   test('all three missions can be completed', async ({ page }) => {
     const errors = trackErrors(page);
-    await freshPage(page, '#level-20/build');
+    await freshPage(page, '#level-20/lesson');
     await expect(page.locator('#lvlChip')).toHaveText('Level 20 / 21');
+    // Each mission opens from its card in the lesson, and a finished one leads back there.
+    await page.getByRole('button', { name: 'Start Mission 1' }).click();
 
     // Mission 1: estimate 100 TB, pre-signed URLs and resumable chunks; patchy networks.
     await page.fill('#estIn', '100');
@@ -36,7 +38,10 @@ test.describe('Level 20 · playthrough', () => {
     await pause(page);
 
     // Mission 2: 11 transcoding servers with retries; one dies.
-    await page.click('#mission .complete button');
+    await page.click('#doneBanner [data-act="debrief"]');
+    await expect(page.locator('#lp-m0')).toBeFocused();
+    await page.getByRole('button', { name: 'Start Mission 2' }).click();
+    await expect(page.locator('#view-build')).toBeVisible();
     await selectNode(page, 't');
     await click(page, 'workers-11');
     await click(page, 'retry-on');
@@ -49,7 +54,10 @@ test.describe('Level 20 · playthrough', () => {
     await pause(page);
 
     // Mission 3: only popular videos on the CDN; views grow.
-    await page.click('#mission .complete button');
+    await page.click('#doneBanner [data-act="debrief"]');
+    await expect(page.locator('#lp-m1')).toBeFocused();
+    await page.getByRole('button', { name: 'Start Mission 3' }).click();
+    await expect(page.locator('#view-build')).toBeVisible();
     await selectNode(page, 'v');
     await click(page, 'deliver-popular');
     expect((await measure(page)).cost).toBe(800 + 11 * 500 + 2952000);
@@ -179,6 +187,7 @@ test.describe('Level 20 · teaching feedback', () => {
 
   test('the estimate accepts 100 and gives specific hints', async ({ page }) => {
     await freshPage(page, '#level-20/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     for (const [v, hint] of [['1000', 'Only 10% upload'], ['10', 'Check the units']]) {
       await page.fill('#estIn', v);
       await page.click('#estBtn');
@@ -188,16 +197,32 @@ test.describe('Level 20 · teaching feedback', () => {
     await page.click('#estBtn');
     expect(await state(page, () => window.__sdl.S.est)).toBe(true);
   });
+});
 
-  test('the lesson diagram is drawn', async ({ page }) => {
+test.describe('Level 20 · one-page lesson', () => {
+  registerPageLessonTests({ level: 20 });
+
+  test('the pictures: the finished design; the upload; the transcoding graph; the long tail', async ({ page }) => {
     await freshPage(page, '#level-20/lesson');
-    await expect(page.locator('#figUpload')).toContainText('Original storage');
+    // The finished design: upload URL and chunks, transcoding, then the CDN for popular videos and own storage for the rest.
+    for (const t of ['Creators', 'API servers', 'upload URL?', 'Blob storage', 'Transcoding', 'Encoded files', 'Own storage', 'CDN', 'Viewers']) await expect(page.locator('#figBuilt')).toContainText(t);
+    // The upload: three numbered steps, five chunks, and the third one cut off and sent again.
+    await expect(page.locator('#figUpload .d-step')).toHaveCount(3);
+    await expect(page.locator('#figUpload .fig-down')).toContainText('3');
+    for (const t of ['signed URL', 'carry none of the video', 'cut off: sent again', 'straight to storage']) await expect(page.locator('#figUpload')).toContainText(t);
+    // The graph: 12 tasks; every encoding waits for Inspect, and everything joins in Ready to stream.
+    await expect(page.locator('#figDag .node-box')).toHaveCount(12);
+    for (const t of ['Original', 'Inspect', '1080p', 'Encode audio', 'Ready', 'to stream', 'side by side']) await expect(page.locator('#figDag')).toContainText(t);
+    // The long tail: 40 bars, split into the popular head and the tail.
+    await expect(page.locator('#figTail .ch-area')).toHaveCount(40);
+    for (const t of ['Popular: CDN', 'The long tail: your own storage servers']) await expect(page.locator('#figTail')).toContainText(t);
   });
 });
 
 test.describe('Level 20 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-20/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     await page.focus('#estIn');
     await page.keyboard.type('100');
     await page.keyboard.press('Enter');

@@ -23,7 +23,7 @@ export const LEVELS = [
   { id: 17, title: 'News feed', line: 'Fast feeds, even when a star posts or everyone posts at once.', minutes: 21, load: () => import('./level-17.js') },
   { id: 18, title: 'Chat system', line: 'Real-time messages, delivery to offline friends, and online status.', minutes: 23, load: () => import('./level-18.js') },
   { id: 19, title: 'Search autocomplete', line: 'Suggestions in under 100 ms as people type, including what\'s trending.', minutes: 22, load: () => import('./level-19.js') },
-  { id: 20, title: 'Video platform', line: 'Take uploads in, transcode every video, and keep the CDN bill down.', load: () => import('./level-20.js') },
+  { id: 20, title: 'Video platform', line: 'Take uploads in, transcode every video, and keep the CDN bill down.', minutes: 21, load: () => import('./level-20.js') },
   { id: 21, title: 'Cloud file sync', line: 'Send less data, tell every device, and keep the storage bill down.', load: () => import('./level-21.js') },
 ];
 
