@@ -12,6 +12,7 @@ import { LB_PUBLIC_IP, WEB_PRIVATE_IPS, WEB_PRIVATE_IP_RANGE } from './shared/ad
 import { fmt, count, percent, ms, rate } from '../js/format.js';
 import { SIZES, COMPONENTS } from '../js/engine/catalog.js';
 import { STEPS } from './mock-steps.js';
+import { panel } from './shared/figures.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 /** Size of the web server the level starts with: Level 1's launch-day server. */
@@ -541,11 +542,6 @@ export default {
     const { $, svgEl, figNode, figArrow, figSvg, figLabel } = f;
     /** A component drawn as down (crashed or failed its health check). */
     const downNode = (svg, type, x, y, name, sub) => figNode(svgEl('g', { class: 'fig-down' }, svg), type, x, y, name, sub);
-    /** A dashed frame with its label, for one panel of a before-and-after picture. */
-    const panel = (svg, y, height, label) => {
-      svgEl('rect', { x: 10, y, width: 620, height, rx: 12, class: 'tier-box' }, svg);
-      figLabel(svg, 24, y + 20, label, 'start', 'tier-label');
-    };
 
     // DNS gives out the load balancer's public IP; the web servers sit behind it on private IPs.
     const f1 = figSvg($('figLb'), 400);
@@ -564,13 +560,13 @@ export default {
 
     // Before: three servers each take a third. After: one fails its health check and the other two take half each.
     const f2 = figSvg($('figCrash'), 428);
-    panel(f2, 10, 196, 'Before: all three healthy');
+    panel(f, f2, 10, 196, 'Before: all three healthy');
     figNode(f2, 'lb', 320, 66, 'Load balancer', 'Health checks');
     for (const [i, x] of [110, 320, 530].entries()) {
       figNode(f2, 'web', x, 166, `Web server ${i + 1}`, 'A third');
       figArrow(f2, 320, 96, x, 136, '', null, 0, 0);
     }
-    panel(f2, 222, 196, 'After: server 2 crashed');
+    panel(f, f2, 222, 196, 'After: server 2 crashed');
     figNode(f2, 'lb', 320, 278, 'Load balancer', 'Skips server 2');
     figNode(f2, 'web', 110, 378, 'Web server 1', 'Half');
     downNode(f2, 'web', 320, 378, 'Web server 2', 'Failed check');
@@ -580,14 +576,14 @@ export default {
 
     // Before: heartbeats pass between the pair and traffic goes to the active one. After: the standby has the address.
     const f3 = figSvg($('figPair'), 436);
-    panel(f3, 10, 200, 'Before: heartbeats arrive');
+    panel(f, f3, 10, 200, 'Before: heartbeats arrive');
     figNode(f3, 'users', 320, 66, 'Users', `To ${LB_PUBLIC_IP}`);
     figNode(f3, 'lb', 150, 166, 'Load balancer', 'Active');
     figNode(f3, 'lb', 490, 166, 'Load balancer', 'Standby');
     figArrow(f3, 280, 96, 190, 136, 'requests', null, 250, 122);
     figArrow(f3, 244, 156, 396, 156, 'heartbeat', null, 320, 148, 'middle');
     figArrow(f3, 396, 176, 244, 176, '', null, 0, 0);
-    panel(f3, 226, 200, 'After: no heartbeat');
+    panel(f, f3, 226, 200, 'After: no heartbeat');
     figNode(f3, 'users', 320, 282, 'Users', `To ${LB_PUBLIC_IP}`);
     downNode(f3, 'lb', 150, 382, 'Load balancer', 'Crashed');
     figNode(f3, 'lb', 490, 382, 'Load balancer', 'Has the public IP');

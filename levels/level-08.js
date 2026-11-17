@@ -12,6 +12,7 @@ import { lbText, levelComplete } from './shared/text.js';
 import { failText, passText } from './shared/quiz.js';
 import { dayTraffic } from './shared/workload.js';
 import { STEPS } from './mock-steps.js';
+import { panel } from './shared/figures.js';
 
 const targets = { latencyMs: 150, servedPct: 99 };
 /** Monthly budget of every mission, in dollars. */
@@ -533,11 +534,6 @@ export default {
   // Lesson diagrams. `f` provides the engine's drawing helpers. Each figure sets its own viewBox.
   drawFigures(f) {
     const { $, svgEl, figNode, figArrow, figSvg, figLabel, figDash } = f;
-    /** A dashed frame with its label, for one panel of a before-and-after picture. */
-    const panel = (svg, y, height, label) => {
-      svgEl('rect', { x: 10, y, width: 620, height, rx: 12, class: 'tier-box' }, svg);
-      figLabel(svg, 24, y + 20, label, 'start', 'tier-label');
-    };
 
     // The producer publishes (1) and answers the creator at once (2); a free consumer takes the job (3).
     const f1 = figSvg($('figQueue'), 346);
@@ -559,7 +555,7 @@ export default {
       { y: 222, label: 'Workers back: oldest job first', queueSub: 'Emptying', monitorSub: 'Queue shrinking' },
     ];
     for (const { y, label, queueSub, monitorSub } of panels) {
-      panel(f2, y, 196, label);
+      panel(f, f2, y, 196, label);
       figNode(f2, 'web', 160, y + 56, 'Web servers', 'Keep publishing');
       figNode(f2, 'queue', 480, y + 56, 'Message queue', queueSub);
       figNode(f2, 'monitor', 160, y + 156, 'Monitoring', monitorSub);
