@@ -298,7 +298,7 @@ function drawTrie(f, svg) {
     if (list) figLabel(svg, x, y + 34, list, 'middle', 'ch-t');
   };
   node(320, 34, 'root');
-  node(320, 102, 'c', 'car 40 · cow 35 · cart 31');
+  node(320, 102, 'c', 'car 40 · cow 35 · cart 31 · cat 22 · cod 9');
   node(160, 200, 'ca', 'car 40 · cart 31 · cat 22');
   node(480, 200, 'co', 'cow 35 · cod 9');
   node(70, 310, 'cat 22');
