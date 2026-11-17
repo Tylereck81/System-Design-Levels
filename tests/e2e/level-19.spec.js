@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures.js';
-import { registerCommonTests } from '../shared-checks.js';
+import { registerCommonTests, registerPageLessonTests } from '../shared-checks.js';
 import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, openMission, selectNode, setProps, pressEnterOn } from '../helpers.js';
 
 // Level 19: Search autocomplete.
@@ -18,8 +18,10 @@ const breakIt = async (page, id) => { await page.click(`#exp-${id}`); await fast
 test.describe('Level 19 · playthrough', () => {
   test('all three missions can be completed', async ({ page }) => {
     const errors = trackErrors(page);
-    await freshPage(page, '#level-19/build');
+    await freshPage(page, '#level-19/lesson');
     await expect(page.locator('#lvlChip')).toHaveText('Level 19 / 21');
+    // Each mission opens from its card in the lesson, and a finished one leads back there.
+    await page.getByRole('button', { name: 'Start Mission 1' }).click();
 
     // Mission 1: estimate 27,800, top 5 per node and browser caching; a big match.
     await page.fill('#estIn', '27800');
@@ -38,7 +40,10 @@ test.describe('Level 19 · playthrough', () => {
     await pause(page);
 
     // Mission 2: 6 API servers and a shard map; election night.
-    await page.click('#mission .complete button');
+    await page.click('#doneBanner [data-act="debrief"]');
+    await expect(page.locator('#lp-m0')).toBeFocused();
+    await page.getByRole('button', { name: 'Start Mission 2' }).click();
+    await expect(page.locator('#view-build')).toBeVisible();
     await selectNode(page, 'a');
     await click(page, 'count-6');
     await selectNode(page, 't');
@@ -52,7 +57,10 @@ test.describe('Level 19 · playthrough', () => {
     await pause(page);
 
     // Mission 3: rebuild hourly; a new search trends.
-    await page.click('#mission .complete button');
+    await page.click('#doneBanner [data-act="debrief"]');
+    await expect(page.locator('#lp-m1')).toBeFocused();
+    await page.getByRole('button', { name: 'Start Mission 3' }).click();
+    await expect(page.locator('#view-build')).toBeVisible();
     await selectNode(page, 't');
     await click(page, 'rebuild-hourly');
     await page.click('#playBtn');
@@ -180,6 +188,7 @@ test.describe('Level 19 · teaching feedback', () => {
 
   test('the estimate accepts about 27,800 and gives specific hints', async ({ page }) => {
     await freshPage(page, '#level-19/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     for (const [v, hint] of [['1111', 'That counts searches'], ['55600', 'That is the peak']]) {
       await page.fill('#estIn', v);
       await page.click('#estBtn');
@@ -189,16 +198,29 @@ test.describe('Level 19 · teaching feedback', () => {
     await page.click('#estBtn');
     expect(await state(page, () => window.__sdl.S.est)).toBe(true);
   });
+});
 
-  test('the lesson diagram is drawn', async ({ page }) => {
+test.describe('Level 19 · one-page lesson', () => {
+  registerPageLessonTests({ level: 19 });
+
+  test('the pictures: the finished design; a trie with stored top searches; shards by letter and by map', async ({ page }) => {
     await freshPage(page, '#level-19/lesson');
-    await expect(page.locator('#figTrie')).toContainText('car, cat, cart, care, cab');
+    // The finished design: the query path on the left, the rebuild path on the right.
+    for (const t of ['Users', 'Browser caches', 'API servers', 'Filter layer', 'Trie cache', 'Search logs', 'Aggregators', 'Workers', 'new trie']) await expect(page.locator('#figBuilt')).toContainText(t);
+    // Each prefix node keeps its top searches; the path to "ca" is drawn thick and its answer shaded.
+    for (const t of ['root', 'car 40 · cart 31 · cat 22', 'cow 35 · cod 9', 'cart 31', 'answer for "ca"']) await expect(page.locator('#figTrie')).toContainText(t);
+    await expect(page.locator('#figTrie .d-arc')).toHaveCount(2);
+    // 60,000 lookups a second: equal letter ranges put 45% (27,000) on s–z, over 25,000; a shard map gives each 20,000.
+    await expect(page.locator('#figShards .ch-cap')).toHaveCount(1);
+    await expect(page.locator('#figShards .ch-area')).toHaveCount(5);
+    for (const t of ['Equal letter ranges', 'Shard map from past traffic', 's–z', 'over the limit', '25,000 lookups/s limit']) await expect(page.locator('#figShards')).toContainText(t);
   });
 });
 
 test.describe('Level 19 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-19/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     await page.focus('#estIn');
     await page.keyboard.type('27800');
     await page.keyboard.press('Enter');
