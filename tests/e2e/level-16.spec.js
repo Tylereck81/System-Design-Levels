@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures.js';
-import { registerCommonTests } from '../shared-checks.js';
+import { registerCommonTests, registerPageLessonTests } from '../shared-checks.js';
 import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, openMission, selectNode, setProps, pressEnterOn } from '../helpers.js';
 
 // Level 16: Notification system.
@@ -18,8 +18,10 @@ const breakIt = async (page, id) => { await page.click(`#exp-${id}`); await fast
 test.describe('Level 16 · playthrough', () => {
   test('all three missions can be completed', async ({ page }) => {
     const errors = trackErrors(page);
-    await freshPage(page, '#level-16/build');
+    await freshPage(page, '#level-16/lesson');
     await expect(page.locator('#lvlChip')).toHaveText('Level 16 / 21');
+    // Each mission opens from its card in the lesson, and a finished one leads back there.
+    await page.getByRole('button', { name: 'Start Mission 1' }).click();
 
     // Mission 1: estimate 231, 5 workers, a queue per channel, then the SMS provider goes down.
     await page.fill('#estIn', '231');
@@ -38,7 +40,10 @@ test.describe('Level 16 · playthrough', () => {
     await pause(page);
 
     // Mission 2: check opt-outs and limit each user; marketing sends a blast.
-    await page.click('#mission .complete button');
+    await page.click('#doneBanner [data-act="debrief"]');
+    await expect(page.locator('#lp-m0')).toBeFocused();
+    await page.getByRole('button', { name: 'Start Mission 2' }).click();
+    await expect(page.locator('#view-build')).toBeVisible();
     await selectNode(page, 'n');
     await click(page, 'check-on');
     await click(page, 'limit-on');
@@ -51,7 +56,10 @@ test.describe('Level 16 · playthrough', () => {
     await pause(page);
 
     // Mission 3: a notification log and a duplicate check; workers crash.
-    await page.click('#mission .complete button');
+    await page.click('#doneBanner [data-act="debrief"]');
+    await expect(page.locator('#lp-m1')).toBeFocused();
+    await page.getByRole('button', { name: 'Start Mission 3' }).click();
+    await expect(page.locator('#view-build')).toBeVisible();
     await selectNode(page, 'w');
     await click(page, 'log-on');
     await click(page, 'dedupe-on');
@@ -185,6 +193,7 @@ test.describe('Level 16 · teaching feedback', () => {
 
   test('the estimate accepts 231 and gives specific hints', async ({ page }) => {
     await freshPage(page, '#level-16/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     for (const [v, hint] of [['463', 'That is the peak'], ['139', 'That is push only']]) {
       await page.fill('#estIn', v);
       await page.click('#estBtn');
@@ -195,15 +204,27 @@ test.describe('Level 16 · teaching feedback', () => {
     expect(await state(page, () => window.__sdl.S.est)).toBe(true);
   });
 
-  test('the lesson diagram is drawn', async ({ page }) => {
+});
+
+test.describe('Level 16 · one-page lesson', () => {
+  registerPageLessonTests({ level: 16 });
+
+  test('the pictures: the finished design; one notification in six steps; one shared queue against a queue per channel', async ({ page }) => {
     await freshPage(page, '#level-16/lesson');
-    await expect(page.locator('#figNotify')).toContainText('SMS queue');
+    // The finished design: a queue per channel, and a log beside the workers.
+    for (const t of ['Push queue', 'SMS queue', 'Email queue', 'Notification log', 'log first']) await expect(page.locator('#figBuilt')).toContainText(t);
+    for (const t of ['calls the API', 'Tokens, settings', 'Push service', 'shows it']) await expect(page.locator('#figPath')).toContainText(t);
+    await expect(page.locator('#figPath .d-step-t')).toHaveText(['1', '2', '3', '4', '5', '6']);
+    // The SMS provider is down in both panels; only the shared queue holds up push and email.
+    for (const t of ['push and email wait behind SMS', 'only SMS waits']) await expect(page.locator('#figQueues')).toContainText(t);
+    await expect(page.locator('#figQueues .fig-down')).toHaveCount(2);
   });
 });
 
 test.describe('Level 16 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-16/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     await page.focus('#estIn');
     await page.keyboard.type('231');
     await page.keyboard.press('Enter');

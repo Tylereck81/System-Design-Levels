@@ -8,6 +8,7 @@ import { DNS_MS, SLOW_DNS_MS, DNS_MISS, DUP_SHARE, PAGE_KB, POLITE, TOP_HOST, FL
 import { COMPONENTS } from '../js/engine/catalog.js';
 import { lbText, levelComplete } from './shared/text.js';
 import { failText, passText } from './shared/quiz.js';
+import { panel, queueCells } from './shared/figures.js';
 import { STEPS } from './mock-steps.js';
 
 const targets = { latencyMs: 1000, servedPct: 99 };
@@ -264,34 +265,6 @@ const lesson = {
 
 // ---------------- Lesson pictures ----------------
 /**
- * A dashed frame with its label, for one panel of a two-panel picture.
- * @param {Record<string, Function>} f the drawing helpers `drawFigures` is given
- * @param {SVGSVGElement} svg
- * @param {number} y
- * @param {number} height
- * @param {string} label
- */
-function panel(f, svg, y, height, label) {
-  f.svgEl('rect', { x: 10, y, width: 620, height, rx: 12, class: 'tier-box' }, svg);
-  f.figLabel(svg, 24, y + 20, label, 'start', 'tier-label');
-}
-
-/**
- * A queue drawn as a row of URL cells, tail on the left and head on the right; each cell names its site.
- * @param {Record<string, Function>} f the drawing helpers `drawFigures` is given
- * @param {SVGSVGElement} svg
- * @param {number} x left edge
- * @param {number} y centre line
- * @param {string[]} sites one per cell, tail first
- */
-function queue(f, svg, x, y, sites) {
-  sites.forEach((site, i) => {
-    f.svgEl('rect', { x: x + 40 * i, y: y - 14, width: 40, height: 28, rx: 5, class: 'node-box' }, svg);
-    f.figLabel(svg, x + 40 * i + 20, y + 4, site);
-  });
-}
-
-/**
  * The crawl loop in six numbered steps: the frontier hands a URL to the downloader, which fetches the page for the
  * parser; "content seen?" sends new content to storage and the page's links to the link checks, which send new URLs
  * back to the frontier.
@@ -325,7 +298,7 @@ function drawHosts(f, svg) {
   const { figNode, figArrow, figLabel, figSvg } = f;
   figSvg(svg, 426);
   panel(f, svg, 10, 160, 'One shared queue: a run of URLs from one site');
-  queue(f, svg, 40, 76, ['wiki', 'shop', 'news', 'news', 'news', 'news']);
+  queueCells(f, svg, 40, 76, ['wiki', 'shop', 'news', 'news', 'news', 'news']);
   figNode(svg, 'web', 530, 90, 'news.example', 'Overloaded');
   for (const y of [66, 82, 98, 114]) figArrow(svg, 286, 76, 432, y, '', null, 0, 0);
   figLabel(svg, 360, 150, 'four threads at once');
@@ -334,7 +307,7 @@ function drawHosts(f, svg) {
   ['news', 'shop', 'wiki'].forEach((site, i) => {
     const y = 236 + 70 * i;
     figArrow(svg, 204, 306, 236, y, '', null, 0, 0);
-    queue(f, svg, 240, y, [site, site, site, site]);
+    queueCells(f, svg, 240, y, [site, site, site, site]);
     figArrow(svg, 404, y, 436, y, `one thread, ${POLITE} a second`, null, 446, y + 4);
   });
 }

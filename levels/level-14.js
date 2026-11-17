@@ -8,6 +8,7 @@ import { dns, lb, NO_DB_NOTE, autoscaleSubOf, scalingChoices, db, cache } from '
 import { dnsLookup, usersToLb, lbToWeb, webToDb, lbBad, replicaBad, cacheBad } from './shared/connections.js';
 import { lbText, levelComplete } from './shared/text.js';
 import { failText, passText } from './shared/quiz.js';
+import { panel } from './shared/figures.js';
 import { dayTraffic } from './shared/workload.js';
 import { STEPS } from './mock-steps.js';
 
@@ -268,19 +269,6 @@ const lesson = {
 };
 
 // ---------------- Lesson pictures ----------------
-/**
- * A dashed frame with its label, for one panel of a two-panel picture.
- * @param {Record<string, Function>} f the drawing helpers `drawFigures` is given
- * @param {SVGSVGElement} svg
- * @param {number} y
- * @param {number} height
- * @param {string} label
- */
-function panel(f, svg, y, height, label) {
-  f.svgEl('rect', { x: 10, y, width: 620, height, rx: 12, class: 'tier-box' }, svg);
-  f.figLabel(svg, 24, y + 20, label, 'start', 'tier-label');
-}
-
 /**
  * A 302 sends every click through the link service on to the long page; after a 301 the browser's second click goes
  * straight to the long page and the link service is not asked.
