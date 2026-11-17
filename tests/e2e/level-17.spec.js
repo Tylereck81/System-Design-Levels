@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures.js';
-import { registerCommonTests } from '../shared-checks.js';
+import { registerCommonTests, registerPageLessonTests } from '../shared-checks.js';
 import { freshPage, fastForward, playFor, state, logText, reloadGame, trackErrors, openMission, selectNode, setProps, pressEnterOn } from '../helpers.js';
 
 // Level 17: News feed.
@@ -18,8 +18,10 @@ const breakIt = async (page, id) => { await page.click(`#exp-${id}`); await fast
 test.describe('Level 17 · playthrough', () => {
   test('all three missions can be completed', async ({ page }) => {
     const errors = trackErrors(page);
-    await freshPage(page, '#level-17/build');
+    await freshPage(page, '#level-17/lesson');
     await expect(page.locator('#lvlChip')).toHaveText('Level 17 / 21');
+    // Each mission opens from its card in the lesson, and a finished one leads back there.
+    await page.getByRole('button', { name: 'Start Mission 1' }).click();
 
     // Mission 1: estimate 120 GB, fanout on write with 4 workers, IDs in the cache, then the dinner rush.
     await page.fill('#estIn', '120');
@@ -39,7 +41,10 @@ test.describe('Level 17 · playthrough', () => {
     await pause(page);
 
     // Mission 2: the hybrid; a star posts.
-    await page.click('#mission .complete button');
+    await page.click('#doneBanner [data-act="debrief"]');
+    await expect(page.locator('#lp-m0')).toBeFocused();
+    await page.getByRole('button', { name: 'Start Mission 2' }).click();
+    await expect(page.locator('#view-build')).toBeVisible();
     await selectNode(page, 'f');
     await click(page, 'fanout-hybrid');
     await page.click('#playBtn');
@@ -50,7 +55,10 @@ test.describe('Level 17 · playthrough', () => {
     await pause(page);
 
     // Mission 3: skip inactive users; midnight.
-    await page.click('#mission .complete button');
+    await page.click('#doneBanner [data-act="debrief"]');
+    await expect(page.locator('#lp-m1')).toBeFocused();
+    await page.getByRole('button', { name: 'Start Mission 3' }).click();
+    await expect(page.locator('#view-build')).toBeVisible();
     await selectNode(page, 'f');
     await click(page, 'inactive-skip');
     await expect(page.locator('[data-node="f"] .node-sub')).toHaveText('hybrid · 4 workers · skips inactive');
@@ -176,6 +184,7 @@ test.describe('Level 17 · teaching feedback', () => {
 
   test('the estimate accepts 120 and gives specific hints', async ({ page }) => {
     await freshPage(page, '#level-17/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     for (const [v, hint] of [['7500', 'That is whole posts'], ['12', 'powers of ten']]) {
       await page.fill('#estIn', v);
       await page.click('#estBtn');
@@ -185,17 +194,26 @@ test.describe('Level 17 · teaching feedback', () => {
     await page.click('#estBtn');
     expect(await state(page, () => window.__sdl.S.est)).toBe(true);
   });
+});
 
-  test('the lesson diagram is drawn', async ({ page }) => {
+test.describe('Level 17 · one-page lesson', () => {
+  registerPageLessonTests({ level: 17 });
+
+  test('the pictures: the finished design; push against pull; filling in a feed of IDs', async ({ page }) => {
     await freshPage(page, '#level-17/lesson');
-    await expect(page.locator('#figFanout')).toContainText('300 writes');
-    await expect(page.locator('#figFanout')).toContainText('300 lookups');
+    // The finished design: fanout workers write IDs into the feed cache; reads are filled in from two caches.
+    for (const t of ['Graph database', 'Fanout workers', 'Feed cache', 'Post cache', 'User cache', 'CDN', 'read IDs']) await expect(page.locator('#figBuilt')).toContainText(t);
+    // Push writes into three friends' feeds; pull gathers three friends' lists.
+    for (const t of ['Push: the work happens when Ana posts', 'Pull: the work happens when Ben opens his feed', 'Ben\'s read: one list', 'gathers, then sorts']) await expect(page.locator('#figFanout')).toContainText(t);
+    await expect(page.locator('#figFanout .tier-box')).toHaveCount(2);
+    for (const t of ['Post 81 by user 7', 'user 7', 'post 81', 'Full feed, JSON', 'photos']) await expect(page.locator('#figHydrate')).toContainText(t);
   });
 });
 
 test.describe('Level 17 · layout and accessibility', () => {
   test('keyboard only: finish Mission 1', async ({ page }) => {
     await freshPage(page, '#level-17/build');
+    await openMission(page, 0); // a one-page lesson opens each mission from its card
     await page.focus('#estIn');
     await page.keyboard.type('120');
     await page.keyboard.press('Enter');
